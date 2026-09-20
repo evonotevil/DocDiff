@@ -1,0 +1,147 @@
+{
+  "name": "docdiff",
+  "productName": "DocDiff",
+  "version": "1.4.1",
+  "description": "DocDiff — 本地离线文档比对（Word / PDF / TXT）",
+  "main": "electron/main.cjs",
+  "private": true,
+  "scripts": {
+    "start": "vite build && electron .",
+    "dev": "vite build && electron .",
+    "build": "vite build",
+    "dist": "vite build && electron-builder --mac --arm64 --x64",
+    "dist:arm64": "vite build && electron-builder --mac --arm64",
+    "dist:x64": "vite build && electron-builder --mac --x64",
+    "dist:win": "vite build && electron-builder --win"
+  },
+  "devDependencies": {
+    "@fontsource/noto-sans-sc": "^5.3.0",
+    "@fontsource/nunito": "^5.3.0",
+    "@vitejs/plugin-react": "^4.7.0",
+    "diff": "^7.0.0",
+    "docx": "^9.7.1",
+    "docx-preview": "^0.4.0",
+    "electron": "^37.10.3",
+    "electron-builder": "^26.15.3",
+    "jszip": "^3.10.2",
+    "pdfjs-dist": "^4.10.38",
+    "pixelmatch": "^5.3.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "vite": "^6.4.3"
+  },
+  "dependencies": {
+    "@tesseract.js-data/chi_sim": "^1.0.0",
+    "@tesseract.js-data/eng": "^1.0.0",
+    "tesseract.js": "^5.1.1"
+  },
+  "author": "DocDiff",
+  "engines": {
+    "node": ">=18"
+  },
+  "build": {
+    "appId": "com.docdiff.app",
+    "productName": "DocDiff",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**",
+      "electron/**",
+      "package.json",
+      "!node_modules/@tesseract.js-data/*/4.0.0/**"
+    ],
+    "asarUnpack": [
+      "node_modules/tesseract.js/**",
+      "node_modules/tesseract.js-core/**",
+      "node_modules/@tesseract.js-data/**"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        "dmg"
+      ],
+      "identity": null,
+      "icon": "build/icon.png",
+      "extendInfo": {
+        "CFBundleDevelopmentRegion": "zh_CN",
+        "LSMinimumSystemVersion": "11.0",
+        "CFBundleDocumentTypes": [
+          {
+            "CFBundleTypeName": "Word Document",
+            "CFBundleTypeRole": "Viewer",
+            "LSHandlerRank": "Alternate",
+            "LSItemContentTypes": [
+              "org.openxmlformats.wordprocessingml.document"
+            ]
+          },
+          {
+            "CFBundleTypeName": "PDF Document",
+            "CFBundleTypeRole": "Viewer",
+            "LSHandlerRank": "Alternate",
+            "LSItemContentTypes": [
+              "com.adobe.pdf"
+            ]
+          },
+          {
+            "CFBundleTypeName": "Plain Text",
+            "CFBundleTypeRole": "Viewer",
+            "LSHandlerRank": "Alternate",
+            "LSItemContentTypes": [
+              "public.plain-text"
+            ]
+          }
+        ],
+        "CFBundleDisplayName": "DocDiff",
+        "LSApplicationCategoryType": "public.app-category.productivity"
+      },
+      "artifactName": "DocDiff-${version}-mac-${arch}.${ext}"
+    },
+    "dmg": {
+      "title": "DocDiff"
+    },
+    "linux": {
+      "target": [
+        "dir"
+      ],
+      "icon": "build/icon-win.png"
+    },
+    "electronLanguages": [
+      "zh_CN",
+      "zh_TW",
+      "en",
+      "en_GB"
+    ],
+    "copyright": "© 2026 DocDiff",
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon-win.png",
+      "artifactName": "DocDiff-${version}-win-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "DocDiff",
+      "artifactName": "DocDiff-Setup-${version}.${ext}",
+      "language": "2052",
+      "uninstallDisplayName": "DocDiff"
+    },
+    "publish": null
+  }
+}
