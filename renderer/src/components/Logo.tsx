@@ -12,7 +12,7 @@ export function Wordmark({ size = 34, sub }: { size?: number; sub?: string }) {
   return (
     <span className="wordmark">
       <LogoMark size={size} />
-      <span className="wm-text">docdiff</span>
+      <span className="wm-text">DocDiff</span>
       {sub && <small>{sub}</small>}
     </span>
   );

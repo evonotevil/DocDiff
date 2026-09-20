@@ -1,4 +1,6 @@
-# DocDiff：本地文档比对（macOS，已为 Windows 预留适配）
+# DocDiff：本地文档比对（macOS / Windows）
+
+**v1.3（正式版）**：应用正式命名为 DocDiff；提供 macOS 安装镜像（.dmg）和 Windows 安装程序（.exe）；Mac 图标改为满版设计，macOS 26 不再给图标套灰色边框；新增 5 张商店宣传图。
 
 **v1.2**：新 Logo 和应用图标；深色模式下文档纸张改为深色；富文本里鼠标悬停会框出这一行和另一侧对应的行，点击即可把两侧对齐到这一行（Esc 撤销）；能识别“一段被拆成几段 / 几段合成一段”，PDF 与 Word 互比时不再误报。
 
@@ -23,9 +25,10 @@ DocDiff 用来比较 **DOCX、PDF、TXT** 文档，任意两种格式都能互�
 
 | 系统 | 文件 | 安装方法 |
 |---|---|---|
-| Mac（Apple 芯片 M1–M4） | `DocDiff-macOS-AppleSilicon.zip` | 解压，把 DocDiff.app 拖进"应用程序" |
-| Mac（Intel 芯片） | `DocDiff-macOS-Intel.zip` | 同上 |
-| Windows | 暂未发布（v1.0 的 Windows 安装包仍可用，新版见 `docs/WINDOWS.md`） | — |
+| Mac（Apple 芯片 M1–M4） | `DocDiff-1.3.0-mac-arm64.dmg` | 双击打开，把 DocDiff 拖到右边的"应用程序" |
+| Mac（Intel 芯片） | `DocDiff-1.3.0-mac-x64.dmg` | 同上 |
+| Windows 10 / 11（64 位） | `DocDiff-Setup-1.3.0.exe` | 双击安装，可选择安装位置，会创建桌面和开始菜单快捷方式 |
+| Windows 免安装版 | `DocDiff-1.3.0-win-x64.zip` | 解压后运行 `DocDiff.exe` |
 
 不确定 Mac 是哪种芯片？点屏幕左上角的苹果菜单，选"关于本机"，查看"芯片"一栏。
 
@@ -34,6 +37,9 @@ DocDiff 用来比较 **DOCX、PDF、TXT** 文档，任意两种格式都能互�
 - 打开"系统设置 → 隐私与安全性"，拉到底部，点 **"仍要打开"**
 - 或在"终端"执行：`xattr -dr com.apple.quarantine /Applications/DocDiff.app`
 
+**Windows 第一次运行安装程序时**，SmartScreen 可能提示"Windows 已保护你的电脑"（安装程序没有代码签名证书）。点 **"更多信息 → 仍要运行"** 即可。
+
+**关于图标**：Mac 图标是满版的正方形，由系统自动裁成圆角，所以 macOS 26 不会再加灰色边框。在 macOS 15 及更早的系统上，Dock 里的图标会显示为直角方形。
 
 ---
 

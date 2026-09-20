@@ -50,7 +50,7 @@ function createWindow() {
     show: false,
     title: 'DocDiff',
     ...PLATFORM.windowChrome(nativeTheme.shouldUseDarkColors),
-    icon: path.join(__dirname, '..', 'build', 'icon.png'),
+    icon: path.join(__dirname, '..', 'build', isMac ? 'icon.png' : 'icon-win.png'),
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#131f24' : '#ffffff',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -101,9 +101,7 @@ function buildMenu() {
         { label: '下一处差异（J）', accelerator: 'F7', click: () => send('menu', 'next') },
         { label: '上一处差异（K）', accelerator: 'Shift+F7', click: () => send('menu', 'prev') },
         { type: 'separator' },
-        { role: 'reload', label: '重新加载' },
-        { role: 'toggleDevTools', label: '开发者工具' },
-        { type: 'separator' },
+        ...(app.isPackaged ? [] : [{ role: 'reload', label: '重新加载' }, { role: 'toggleDevTools', label: '开发者工具' }, { type: 'separator' }]),
         { role: 'resetZoom', label: '实际大小' },
         { role: 'zoomIn', label: '放大' },
         { role: 'zoomOut', label: '缩小' },
@@ -328,6 +326,14 @@ app.on('second-instance', (_e, argv) => {
   if (mainWin.isMinimized()) mainWin.restore();
   mainWin.focus();
   argv.slice(1).filter((a) => !a.startsWith('-') && fs.existsSync(a) && EXT_OK.includes(path.extname(a).slice(1).toLowerCase())).forEach((p) => mainWin.webContents.send('open-path', p));
+});
+
+app.setName('DocDiff');
+app.setAboutPanelOptions({
+  applicationName: 'DocDiff',
+  applicationVersion: app.getVersion(),
+  copyright: '© 2026 DocDiff',
+  credits: '本地离线文档比对：Word / PDF / TXT',
 });
 
 app.whenReady().then(() => {

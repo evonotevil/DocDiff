@@ -1,8 +1,8 @@
 {
   "name": "docdiff",
   "productName": "DocDiff",
-  "version": "1.2.0",
-  "description": "本地文档比对（DOCX / PDF / TXT）",
+  "version": "1.3.0",
+  "description": "DocDiff — 本地离线文档比对（Word / PDF / TXT）",
   "main": "electron/main.cjs",
   "private": true,
   "scripts": {
@@ -39,7 +39,7 @@
     "node": ">=18"
   },
   "build": {
-    "appId": "local.docdiff.app",
+    "appId": "com.docdiff.app",
     "productName": "DocDiff",
     "directories": {
       "output": "release"
@@ -90,8 +90,11 @@
               "public.plain-text"
             ]
           }
-        ]
-      }
+        ],
+        "CFBundleDisplayName": "DocDiff",
+        "LSApplicationCategoryType": "public.app-category.productivity"
+      },
+      "artifactName": "DocDiff-${version}-mac-${arch}.${ext}"
     },
     "dmg": {
       "title": "DocDiff"
@@ -99,7 +102,8 @@
     "linux": {
       "target": [
         "dir"
-      ]
+      ],
+      "icon": "build/icon-win.png"
     },
     "electronLanguages": [
       "zh_CN",
@@ -107,7 +111,7 @@
       "en",
       "en_GB"
     ],
-    "copyright": "DocDiff",
+    "copyright": "© 2026 DocDiff",
     "win": {
       "target": [
         {
@@ -123,7 +127,8 @@
           ]
         }
       ],
-      "icon": "build/icon.png"
+      "icon": "build/icon-win.png",
+      "artifactName": "DocDiff-${version}-win-${arch}.${ext}"
     },
     "nsis": {
       "oneClick": false,
@@ -132,8 +137,9 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "DocDiff",
-      "artifactName": "DocDiff-Setup-${version}-${arch}.${ext}",
-      "language": "2052"
+      "artifactName": "DocDiff-Setup-${version}.${ext}",
+      "language": "2052",
+      "uninstallDisplayName": "DocDiff"
     },
     "publish": null
   }
