@@ -4,6 +4,8 @@
 
 界面语言支持中文和 English，支持 macOS（Apple 芯片 / Intel）和 Windows。
 
+**产品主页：<https://evonotevil.github.io/DocDiff/site/Main.dc.html>**
+
 ![DocDiff 界面](screenshots/DocDiff-商店图-1.png)
 
 ![界面 2](screenshots/DocDiff-商店图-2.png)
