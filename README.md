@@ -4,7 +4,7 @@
 
 界面语言支持中文和 English，支持 macOS（Apple 芯片 / Intel）和 Windows。
 
-**产品主页：<https://evonotevil.github.io/DocDiff/Main.dc.html>**
+**产品主页：<https://evonotevil.github.io/DocDiff/>**
 
 ![DocDiff 界面](screenshots/DocDiff-商店图-1.png)
 
@@ -132,6 +132,11 @@ renderer/
     lib/pages.ts  图像比较（pixelmatch + 差异区域聚类）
     lib/exportDocx.ts  导出 Word 修订稿 / 最终稿
     views/        富文本 / 纯文本 / 修订 / 图像 / 文件详情 各视图
+docs/
+  index.html     GitHub Pages 落地页入口（旧 Main.dc.html 自动跳转到这里）
+  assets/        落地页界面截图与图标
+project-docs/   落地页维护说明与历史开发笔记，不参与 Pages 发布
+screenshots/    商店与社交媒体宣传图
 ```
 
 ## 已知限制
