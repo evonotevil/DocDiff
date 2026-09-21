@@ -6,15 +6,13 @@
 
 ![DocDiff 界面](screenshots/DocDiff-商店图-1.png)
 
-<details>
-<summary>更多界面截图</summary>
-
 ![界面 2](screenshots/DocDiff-商店图-2.png)
-![界面 3](screenshots/DocDiff-商店图-3.png)
-![界面 4](screenshots/DocDiff-商店图-4.png)
-![界面 5](screenshots/DocDiff-商店图-5.png)
 
-</details>
+![界面 3](screenshots/DocDiff-商店图-3.png)
+
+![界面 4](screenshots/DocDiff-商店图-4.png)
+
+![界面 5](screenshots/DocDiff-商店图-5.png)
 
 ## 比较模式
 
