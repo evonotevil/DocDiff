@@ -53,7 +53,7 @@ DocDiff 用来比较 **DOCX、PDF、TXT** 文档，任意两种格式都能互�
 | Mac（Apple 芯片 M1–M4） | [DocDiff-1.4.2-mac-arm64.dmg](https://github.com/evonotevil/DocDiff/releases/download/v1.4.2/DocDiff-1.4.2-mac-arm64.dmg) | 双击打开，把 DocDiff 拖到右边的"应用程序" |
 | Mac（Intel 芯片） | [DocDiff-1.4.2-mac-x64.dmg](https://github.com/evonotevil/DocDiff/releases/download/v1.4.2/DocDiff-1.4.2-mac-x64.dmg) | 同上 |
 | Windows 10 / 11（64 位） | [DocDiff-Setup-1.4.2.exe](https://github.com/evonotevil/DocDiff/releases/download/v1.4.2/DocDiff-Setup-1.4.2.exe) | 双击安装，可选择安装位置，会创建桌面和开始菜单快捷方式 |
-| Windows 免安装版 | [DocDiff-1.4.2-win-x64-免安装版.zip](https://github.com/evonotevil/DocDiff/releases/download/v1.4.2/DocDiff-1.4.2-win-x64-%E5%85%8D%E5%AE%89%E8%A3%85%E7%89%88.zip) | 解压后运行 `DocDiff.exe` |
+| Windows 免安装版 | [DocDiff-1.4.2-win-x64.zip](https://github.com/evonotevil/DocDiff/releases/download/v1.4.2/DocDiff-1.4.2-win-x64.zip) | 解压后运行 `DocDiff.exe` |
 
 每个版本附带 `SHA256SUMS.txt`，可以用 `shasum -a 256 <文件>` 校验下载是否完整。
 
