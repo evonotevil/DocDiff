@@ -57,6 +57,8 @@ DocDiff 用来比较 **DOCX、PDF、TXT** 文档，任意两种格式都能互�
 
 每个版本附带 `SHA256SUMS.txt`，可以用 `shasum -a 256 <文件>` 校验下载是否完整。
 
+遇到问题？先看[已知限制与常见问题](https://github.com/evonotevil/DocDiff/issues/1)，或在 [Issues](https://github.com/evonotevil/DocDiff/issues) 里反馈。
+
 不确定 Mac 是哪种芯片？点屏幕左上角的苹果菜单，选"关于本机"，查看"芯片"一栏。
 
 **Mac 第一次打开时**，系统会提示"无法验证开发者"，因为应用没有 Apple 开发者证书。按下面任一方法处理（只需一次）：
