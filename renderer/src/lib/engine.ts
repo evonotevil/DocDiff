@@ -1,6 +1,7 @@
 import { diffArrays } from 'diff';
 import type { Block, Run } from './model';
 import { sameStyle } from './docx';
+import { t, isEn } from './i18n';
 
 export interface DiffOptions {
   ignoreCase: boolean;
@@ -16,7 +17,7 @@ export interface DiffOptions {
 export interface Tok { t: string; st: Run; c: number; key: string; ws: boolean; sep?: boolean; psep?: boolean; blk?: number }
 export interface MTok { op: 0 | -1 | 1; a?: Tok; b?: Tok; cid?: number; fmt?: string; move?: boolean }
 export type RowKind = 'equal' | 'modified' | 'removed' | 'added' | 'format' | 'moved-from' | 'moved-to';
-export interface Row { kind: RowKind; ai?: number; bi?: number; aList?: number[]; bList?: number[]; merged: MTok[]; cids: number[]; moveRow?: number; blockNote?: string; blockCid?: number }
+export interface Row { kind: RowKind; ai?: number; bi?: number; aList?: number[]; bList?: number[]; merged: MTok[]; cids: number[]; moveRow?: number; blockNote?: string; blockTag?: string; blockCid?: number }
 export type ChangeKind = 'del' | 'ins' | 'mod' | 'fmt' | 'move';
 export interface Change { id: number; kind: ChangeKind; row: number; before: string; after: string; note?: string; row2?: number }
 export interface DiffResult { rows: Row[]; changes: Change[]; stats: Record<ChangeKind, number> }
@@ -88,19 +89,19 @@ function similarity(a: Tok[], b: Tok[]): number {
   return (2 * common) / (na + nb);
 }
 
-const KIND_LABEL = (b: Block) => b.kind === 'h' ? `标题 ${b.level}` : b.kind === 'li' ? '列表项' : b.kind === 'tr' ? '表格行' : '正文';
+const KIND_LABEL = (b: Block) => b.kind === 'h' ? t('标题 {n}', { n: b.level! }) : b.kind === 'li' ? t('列表项') : b.kind === 'tr' ? t('表格行') : t('正文');
 
 export function describeStyle(a: Run, b: Run): string {
   const d: string[] = [];
-  if (!!a.b !== !!b.b) d.push(b.b ? '加粗' : '取消加粗');
-  if (!!a.i !== !!b.i) d.push(b.i ? '倾斜' : '取消倾斜');
-  if (!!a.u !== !!b.u) d.push(b.u ? '下划线' : '取消下划线');
-  if (!!a.s !== !!b.s) d.push(b.s ? '删除线' : '取消删除线');
-  if ((a.sz || 0) !== (b.sz || 0)) d.push(`字号 ${a.sz ?? '默认'} → ${b.sz ?? '默认'}`);
-  if ((a.color || '') !== (b.color || '')) d.push(`颜色 ${a.color || '默认'} → ${b.color || '默认'}`);
-  if ((a.hl || '') !== (b.hl || '')) d.push(b.hl ? `突出显示 ${b.hl}` : '取消突出显示');
-  if ((a.font || '') !== (b.font || '')) d.push(`字体 ${a.font || '默认'} → ${b.font || '默认'}`);
-  return d.join('，');
+  if (!!a.b !== !!b.b) d.push(t(b.b ? '加粗' : '取消加粗'));
+  if (!!a.i !== !!b.i) d.push(t(b.i ? '倾斜' : '取消倾斜'));
+  if (!!a.u !== !!b.u) d.push(t(b.u ? '下划线' : '取消下划线'));
+  if (!!a.s !== !!b.s) d.push(t(b.s ? '删除线' : '取消删除线'));
+  if ((a.sz || 0) !== (b.sz || 0)) d.push(t('字号 {a} → {b}', { a: a.sz ?? t('默认'), b: b.sz ?? t('默认') }));
+  if ((a.color || '') !== (b.color || '')) d.push(t('颜色 {a} → {b}', { a: a.color || t('默认'), b: b.color || t('默认') }));
+  if ((a.hl || '') !== (b.hl || '')) d.push(b.hl ? t('突出显示 {c}', { c: b.hl }) : t('取消突出显示'));
+  if ((a.font || '') !== (b.font || '')) d.push(t('字体 {a} → {b}', { a: a.font || t('默认'), b: b.font || t('默认') }));
+  return d.join(isEn() ? ', ' : '，');
 }
 
 function tokDiff(A: Tok[], B: Tok[], o: DiffOptions): MTok[] {
@@ -282,7 +283,7 @@ export function diffDocs(blocksA: Block[], blocksB: Block[], o: DiffOptions): Di
         const row: Row = { kind: 'modified', ai: g.a[0], bi: g.b[0], merged, cids: [] };
         if (g.a.length > 1) row.aList = g.a;
         if (g.b.length > 1) row.bList = g.b;
-        if ((g.a.length > 1 || g.b.length > 1) && o.formatting) row.blockNote = `段落${g.a.length > 1 ? '合并' : '拆分'}：${g.a.length} 段 → ${g.b.length} 段`;
+        if ((g.a.length > 1 || g.b.length > 1) && o.formatting) { row.blockTag = t(g.a.length > 1 ? '段落合并' : '段落拆分'); row.blockNote = t(g.a.length > 1 ? '段落合并：{a} 段 → {b} 段' : '段落拆分：{a} 段 → {b} 段', { a: g.a.length, b: g.b.length }); }
         rows.push(row);
       } else if (g.a.length) rows.push({ kind: 'removed', ai: g.a[0], merged: tokA[g.a[0]].map((t) => ({ op: -1, a: t })), cids: [] });
       else if (g.b.length) rows.push({ kind: 'added', bi: g.b[0], merged: tokB[g.b[0]].map((t) => ({ op: 1, b: t })), cids: [] });
@@ -305,8 +306,8 @@ export function diffDocs(blocksA: Block[], blocksB: Block[], o: DiffOptions): Di
         const row: Row = { kind: 'equal', ai: a, bi: b, merged, cids: [] };
         if (o.formatting) {
           const ba = blocksA[a], bb = blocksB[b];
-          if (ba.kind !== bb.kind || (ba.kind === 'h' && ba.level !== bb.level)) row.blockNote = `段落样式：${KIND_LABEL(ba)} → ${KIND_LABEL(bb)}`;
-          else if ((ba.align || 'left') !== (bb.align || 'left') && ba.kind !== 'tr') row.blockNote = `对齐：${alignLabel(ba.align)} → ${alignLabel(bb.align)}`;
+          if (ba.kind !== bb.kind || (ba.kind === 'h' && ba.level !== bb.level)) { row.blockNote = t('段落样式：{a} → {b}', { a: KIND_LABEL(ba), b: KIND_LABEL(bb) }); row.blockTag = t('样式变化'); }
+          else if ((ba.align || 'left') !== (bb.align || 'left') && ba.kind !== 'tr') { row.blockNote = t('对齐：{a} → {b}', { a: alignLabel(ba.align), b: alignLabel(bb.align) }); row.blockTag = t('样式变化'); }
         }
         if (row.blockNote || merged.some((m) => m.fmt)) row.kind = 'format';
         rows.push(row);
@@ -348,9 +349,9 @@ export function diffDocs(blocksA: Block[], blocksB: Block[], o: DiffOptions): Di
     if (r.kind === 'equal') return;
     if (r.kind === 'moved-to') return; // 与 moved-from 共用编号
     if (r.kind === 'moved-from') {
-      const id = add({ kind: 'move', row: ri, row2: r.moveRow, before: txt(r.merged, 'a'), after: '', note: `移动到第 ${rows[r.moveRow!].bi! + 1} 段附近` });
+      const id = add({ kind: 'move', row: ri, row2: r.moveRow, before: txt(r.merged, 'a'), after: '', note: t('移动到第 {n} 段附近', { n: rows[r.moveRow!].bi! + 1 }) });
       r.merged.forEach((m) => (m.cid = id)); r.cids.push(id);
-      const t = rows[r.moveRow!]; t.merged.forEach((m) => (m.cid = id)); t.cids.push(id);
+      const dst = rows[r.moveRow!]; dst.merged.forEach((m) => (m.cid = id)); dst.cids.push(id);
       return;
     }
     if (r.kind === 'removed' || r.kind === 'added') {
@@ -394,7 +395,7 @@ export function diffDocs(blocksA: Block[], blocksB: Block[], o: DiffOptions): Di
   return { rows, changes, stats };
 }
 
-function alignLabel(a?: string) { return a === 'center' ? '居中' : a === 'right' ? '右对齐' : a === 'justify' ? '两端对齐' : '左对齐'; }
+function alignLabel(a?: string) { return t(a === 'center' ? '居中' : a === 'right' ? '右对齐' : a === 'justify' ? '两端对齐' : '左对齐'); }
 
 /** 纯文本模式：每行一个块，不带样式 */
 export function linesToBlocks(text: string): Block[] {

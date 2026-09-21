@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { Change } from '../lib/engine';
+import { t } from '../lib/i18n';
 
 const COLOR: Record<string, string> = { del: '#ff4b4b', ins: '#58cc02', mod: '#ffc800', fmt: '#ff9600', move: '#ce82ff' };
 
@@ -47,7 +48,7 @@ export function ChangeMap({ changes, selCid, onSel, dep, bottom = 6 }: { changes
   };
   if (!changes.length) return null;
   return (
-    <div className="changemap" ref={ref} onClick={jump} title="差异地图：点击跳转" style={{ bottom }}>
+    <div className="changemap" ref={ref} onClick={jump} title={t('差异地图：点击跳转')} style={{ bottom }}>
       <div className="cm-view" style={{ top: `${view.top}%`, height: `${Math.max(3, view.h)}%` }} />
       {ticks.map((t) => (
         <div key={t.id} className={`cm-tick ${t.id === selCid ? 'on' : ''}`} style={{ top: `${t.top}%`, height: `max(3px, ${t.h}%)`, background: COLOR[t.kind] }} />

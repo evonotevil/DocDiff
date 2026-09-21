@@ -1,7 +1,7 @@
 {
   "name": "docdiff",
   "productName": "DocDiff",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "DocDiff — 本地离线文档比对（Word / PDF / TXT）",
   "main": "electron/main.cjs",
   "private": true,

@@ -14,6 +14,18 @@ protocol.registerSchemesAsPrivileged([
 
 let mainWin = null;
 
+// ---------- 界面语言（菜单、对话框） ----------
+let LANG = 'zh';
+const MENU_EN = {
+  文件: 'File', '打开原始文档…': 'Open original…', '打开修改后文档…': 'Open revised…', 交换左右: 'Swap sides',
+  新建比较: 'New comparison', 关闭窗口: 'Close window', 退出: 'Quit', 编辑: 'Edit', 视图: 'View',
+  富文本: 'Rich text', 纯文本: 'Plain text', 修订审阅: 'Review changes', 图像: 'Image', 'OCR 文本': 'OCR text', 文件详情: 'File details',
+  '下一处差异（J）': 'Next difference (J)', '上一处差异（K）': 'Previous difference (K)',
+  重新加载: 'Reload', 开发者工具: 'Developer tools', 实际大小: 'Actual size', 放大: 'Zoom in', 缩小: 'Zoom out',
+  全屏: 'Full screen', 窗口: 'Window', 文档: 'Documents', 所有文件: 'All files',
+};
+const L = (zh) => (LANG === 'en' ? (MENU_EN[zh] || zh) : zh);
+
 // ---------- 平台差异集中在这里（Windows 适配预埋） ----------
 const PLATFORM = {
   isMac,
@@ -79,37 +91,37 @@ function buildMenu() {
   const template = [
     ...(isMac ? [{ role: 'appMenu' }] : []),
     {
-      label: '文件',
+      label: L('文件'),
       submenu: [
-        { label: '打开原始文档…', accelerator: 'CmdOrCtrl+O', click: () => send('menu', 'open-left') },
-        { label: '打开修改后文档…', accelerator: 'CmdOrCtrl+Shift+O', click: () => send('menu', 'open-right') },
+        { label: L('打开原始文档…'), accelerator: 'CmdOrCtrl+O', click: () => send('menu', 'open-left') },
+        { label: L('打开修改后文档…'), accelerator: 'CmdOrCtrl+Shift+O', click: () => send('menu', 'open-right') },
         { type: 'separator' },
-        { label: '交换左右', accelerator: 'CmdOrCtrl+Shift+S', click: () => send('menu', 'swap') },
-        { label: '新建比较', accelerator: 'CmdOrCtrl+N', click: () => send('menu', 'clear') },
+        { label: L('交换左右'), accelerator: 'CmdOrCtrl+Shift+S', click: () => send('menu', 'swap') },
+        { label: L('新建比较'), accelerator: 'CmdOrCtrl+N', click: () => send('menu', 'clear') },
         { type: 'separator' },
-        isMac ? { role: 'close', label: '关闭窗口' } : { role: 'quit', label: '退出' },
+        isMac ? { role: 'close', label: L('关闭窗口') } : { role: 'quit', label: L('退出') },
       ],
     },
-    { role: 'editMenu', label: '编辑' },
+    { role: 'editMenu', label: L('编辑') },
     {
-      label: '视图',
+      label: L('视图'),
       submenu: [
         ...['富文本', '纯文本', '修订审阅', '图像', 'OCR 文本', '文件详情'].map((l, i) => ({
-          label: l, accelerator: `CmdOrCtrl+${i + 1}`, click: () => send('menu', 'tab', i),
+          label: L(l), accelerator: `CmdOrCtrl+${i + 1}`, click: () => send('menu', 'tab', i),
         })),
         { type: 'separator' },
-        { label: '下一处差异（J）', accelerator: 'F7', click: () => send('menu', 'next') },
-        { label: '上一处差异（K）', accelerator: 'Shift+F7', click: () => send('menu', 'prev') },
+        { label: L('下一处差异（J）'), accelerator: 'F7', click: () => send('menu', 'next') },
+        { label: L('上一处差异（K）'), accelerator: 'Shift+F7', click: () => send('menu', 'prev') },
         { type: 'separator' },
-        ...(app.isPackaged ? [] : [{ role: 'reload', label: '重新加载' }, { role: 'toggleDevTools', label: '开发者工具' }, { type: 'separator' }]),
-        { role: 'resetZoom', label: '实际大小' },
-        { role: 'zoomIn', label: '放大' },
-        { role: 'zoomOut', label: '缩小' },
+        ...(app.isPackaged ? [] : [{ role: 'reload', label: L('重新加载') }, { role: 'toggleDevTools', label: L('开发者工具') }, { type: 'separator' }]),
+        { role: 'resetZoom', label: L('实际大小') },
+        { role: 'zoomIn', label: L('放大') },
+        { role: 'zoomOut', label: L('缩小') },
         { type: 'separator' },
-        { role: 'togglefullscreen', label: '全屏' },
+        { role: 'togglefullscreen', label: L('全屏') },
       ],
     },
-    { role: 'windowMenu', label: '窗口' },
+    { role: 'windowMenu', label: L('窗口') },
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
@@ -134,8 +146,8 @@ ipcMain.handle('open-dialog', async () => {
   const r = await dialog.showOpenDialog(mainWin, {
     properties: ['openFile'],
     filters: [
-      { name: '文档', extensions: ['docx', 'pdf', 'txt', 'md'] },
-      { name: '所有文件', extensions: ['*'] },
+      { name: L('文档'), extensions: ['docx', 'pdf', 'txt', 'md'] },
+      { name: L('所有文件'), extensions: ['*'] },
     ],
   });
   if (r.canceled || !r.filePaths[0]) return null;
@@ -143,6 +155,8 @@ ipcMain.handle('open-dialog', async () => {
 });
 
 ipcMain.handle('read-path', async (_e, p) => readDoc(p));
+
+ipcMain.handle('set-lang', (_e, l) => { if (l === 'en' || l === 'zh') { LANG = l; buildMenu(); } });
 
 ipcMain.handle('save-file', async (_e, { defaultName, data, filters }) => {
   const r = await dialog.showSaveDialog(mainWin, { defaultPath: defaultName, filters });

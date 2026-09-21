@@ -1,6 +1,7 @@
 import React from 'react';
 import type { Block, Run } from '../lib/model';
 import type { Tok } from '../lib/engine';
+import { t } from '../lib/i18n';
 
 export interface RTok { tok: Tok; cls?: string; cid?: number; title?: string; style?: Run; mi?: number }
 
@@ -18,15 +19,15 @@ export function runStyle(st: Run, withHl = true): React.CSSProperties {
 }
 
 function TokSpan({ r, selCid }: { r: RTok; selCid?: number | null }) {
-  const t = r.tok;
-  if (t.sep || t.psep) return null;
-  const st = r.style || t.st;
+  const tk = r.tok;
+  if (tk.sep || tk.psep) return null;
+  const st = r.style || tk.st;
   const hasC = !!(st.color && st.color !== '#000000'), hasH = !r.cls && !!st.hl;
   const cls = [r.cls, hasC ? 'rc' : '', hasH ? 'rh' : '', r.cid !== undefined && r.cid === selCid ? 'sel-cid' : ''].filter(Boolean).join(' ') || undefined;
   if (st.img) {
-    return <span className={['img-tok', cls].filter(Boolean).join(' ')} data-cid={r.cid} data-mi={r.mi} title={r.title || `图片 ${st.img}`}>🖼 图片</span>;
+    return <span className={['img-tok', cls].filter(Boolean).join(' ')} data-cid={r.cid} data-mi={r.mi} title={r.title || `${t('图片')} ${st.img}`}>🖼 {t('图片')}</span>;
   }
-  return <span className={cls} style={runStyle(st, !r.cls)} data-cid={r.cid} data-mi={r.mi} title={r.title}>{t.t}</span>;
+  return <span className={cls} style={runStyle(st, !r.cls)} data-cid={r.cid} data-mi={r.mi} title={r.title}>{tk.t}</span>;
 }
 
 export function BlockView({ block, toks, selCid, className, extra }: { block: Block; toks: RTok[]; selCid?: number | null; className?: string; extra?: React.ReactNode }) {

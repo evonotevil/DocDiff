@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import type { Block } from '../lib/model';
 import type { DiffResult, Row } from '../lib/engine';
 import { useScrollToChange } from './RichView';
+import { t } from '../lib/i18n';
 
 function toks(r: Row, side: 'a' | 'b', selCid: number | null, highlight: boolean) {
   return r.merged.map((m, k) => {
@@ -49,7 +50,7 @@ export function PlainView({ A, B, res, selCid, onSel, layout, wrap, hideUnchange
       <div className={`code selectable ${layout === 'unified' ? 'unified' : ''} ${wrap ? '' : 'nowrap'}`}>
         {visible.map((v, vi) => {
           if (typeof v !== 'number') {
-            return <div className="crow" key={'f' + vi}><div className="fold" onClick={() => setExpanded((st) => { const x = new Set(st); v.fold.forEach((i) => x.add(i)); return x; })}>⋯ 显示 {v.fold.length} 行未变化内容</div></div>;
+            return <div className="crow" key={'f' + vi}><div className="fold" onClick={() => setExpanded((st) => { const x = new Set(st); v.fold.forEach((i) => x.add(i)); return x; })}>{t('⋯ 显示 {n} 行未变化内容', { n: v.fold.length })}</div></div>;
           }
           const r = rows[v];
           const la = r.ai !== undefined ? r.ai + 1 : '';

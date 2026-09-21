@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('api', {
   pathForFile: (f) => { try { return webUtils.getPathForFile(f); } catch { return ''; } },
   saveFile: (opts) => ipcRenderer.invoke('save-file', opts),
   setTheme: (t) => ipcRenderer.send('theme', t),
+  setLang: (l) => ipcRenderer.invoke('set-lang', l),
   recentGet: () => ipcRenderer.invoke('recent-get'),
   recentAdd: (e) => ipcRenderer.invoke('recent-add', e),
   recentRemove: (i) => ipcRenderer.invoke('recent-remove', i),

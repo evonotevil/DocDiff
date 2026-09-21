@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from
 import type { DocModel } from '../lib/model';
 import type { DiffResult, Row } from '../lib/engine';
 import { BlockGroup, RTok } from '../components/DocBlock';
+import { t } from '../lib/i18n';
 
 function sideToks(r: Row, side: 'a' | 'b'): RTok[] {
   const out: RTok[] = [];
@@ -222,8 +223,8 @@ export function RichView({ A, B, res, selCid, onSel, hideUnchanged }: { A: DocMo
               const expand = () => setExpanded((st) => { const x = new Set(st); v.fold.forEach((i) => x.add(i)); return x; });
               return (
                 <React.Fragment key={'f' + vi}>
-                  <div className={`cell fold-cell${edge}`}><button className="btn sm plain block" onClick={expand}>⋯ {v.fold.length} 个未变化的段落</button></div>
-                  <div className={`cell fold-cell${edge}`}><button className="btn sm plain block" onClick={expand}>⋯ {v.fold.length} 个未变化的段落</button></div>
+                  <div className={`cell fold-cell${edge}`}><button className="btn sm plain block" onClick={expand}>{t('⋯ {n} 个未变化的段落', { n: v.fold.length })}</button></div>
+                  <div className={`cell fold-cell${edge}`}><button className="btn sm plain block" onClick={expand}>{t('⋯ {n} 个未变化的段落', { n: v.fold.length })}</button></div>
                 </React.Fragment>
               );
             }
@@ -235,8 +236,8 @@ export function RichView({ A, B, res, selCid, onSel, hideUnchanged }: { A: DocMo
             const sc = whole ? null : selCid;
             const spacer = (s: Side) => align && align.row === v && align.side === s ? <div className="align-spacer" style={{ height: align.px }} /> : null;
             const moveTag = (side: Side) => {
-              if (r.kind === 'moved-from' && side === 'a') return <span className="movetag" onClick={(e) => { e.stopPropagation(); jump(r.moveRow!); }}>已移动 {r.moveRow! > v ? '↓' : '↑'}</span>;
-              if (r.kind === 'moved-to' && side === 'b') return <span className="movetag" onClick={(e) => { e.stopPropagation(); jump(r.moveRow!); }}>从{r.moveRow! < v ? '上方' : '下方'}移来 {r.moveRow! < v ? '↑' : '↓'}</span>;
+              if (r.kind === 'moved-from' && side === 'a') return <span className="movetag" onClick={(e) => { e.stopPropagation(); jump(r.moveRow!); }}>{t('已移动')} {r.moveRow! > v ? '↓' : '↑'}</span>;
+              if (r.kind === 'moved-to' && side === 'b') return <span className="movetag" onClick={(e) => { e.stopPropagation(); jump(r.moveRow!); }}>{t(r.moveRow! < v ? '从上方移来' : '从下方移来')} {r.moveRow! < v ? '↑' : '↓'}</span>;
               return null;
             };
             return (
@@ -250,7 +251,7 @@ export function RichView({ A, B, res, selCid, onSel, hideUnchanged }: { A: DocMo
                   {spacer('b')}
                   {lb ? <BlockGroup blocks={lb} toks={sideToks(r, 'b')} selCid={sc} className={r.blockNote ? 'bnote' : ''} /> : <div className="phline" />}
                   {moveTag('b')}
-                  {r.blockNote && <span className="movetag fmt" data-cid={r.blockCid} title={r.blockNote}>{r.blockNote.startsWith('段落') ? r.blockNote.split('：')[0] : '样式变化'}</span>}
+                  {r.blockNote && <span className="movetag fmt" data-cid={r.blockCid} title={r.blockNote}>{r.blockTag || t('样式变化')}</span>}
                 </div>
               </React.Fragment>
             );
@@ -263,8 +264,8 @@ export function RichView({ A, B, res, selCid, onSel, hideUnchanged }: { A: DocMo
       </div>
       {(align || pinned) && (
         <div className="align-chip">
-          {pinned && !pinned.ok ? '另一侧没有可对应的内容，已标记所选行' : align ? '已把两侧对齐到所选行' : '这一行两侧已经对齐'}
-          <button className="btn sm plain" onClick={() => { setAlign(null); setPinned(null); }}>{align ? '撤销对齐' : '取消标记'}</button>
+          {t(pinned && !pinned.ok ? '另一侧没有可对应的内容，已标记所选行' : align ? '已把两侧对齐到所选行' : '这一行两侧已经对齐')}
+          <button className="btn sm plain" onClick={() => { setAlign(null); setPinned(null); }}>{t(align ? '撤销对齐' : '取消标记')}</button>
         </div>
       )}
     </>

@@ -73,3 +73,7 @@ export const IconGear = () => <S d={<><circle cx="8" cy="8" r="2.2" /><path d="M
 export const IconClock = () => <S d={<><circle cx="8" cy="8" r="6" /><path d="M8 4.5V8l2.5 1.5" /></>} />;
 export const IconRefresh = () => <S d={<><path d="M13 8a5 5 0 1 1-1.5-3.5" /><path d="M13 2.5v3h-3" /></>} />;
 export const IconKeyboard = () => <S d={<><rect x="1.8" y="4" width="12.4" height="8" rx="1.6" /><path d="M4.5 7h.01M7 7h.01M9.5 7h.01M12 7h.01M5 9.5h6" /></>} />;
+export const IconChevronLeft = () => <S d={<path d="M10 3L5 8l5 5" />} />;
+export const IconChevronRight = () => <S d={<path d="M6 3l5 5-5 5" />} />;
+export const IconPanelLeft = () => <S d={<><rect x="1.8" y="2.8" width="12.4" height="10.4" rx="1.6" /><path d="M6 2.8v10.4" /></>} />;
+export const IconPanelRight = () => <S d={<><rect x="1.8" y="2.8" width="12.4" height="10.4" rx="1.6" /><path d="M10 2.8v10.4" /></>} />;

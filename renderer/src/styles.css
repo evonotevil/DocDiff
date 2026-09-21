@@ -521,3 +521,26 @@ select.sel { height: 34px; border-radius: 10px; border: 2px solid var(--border);
 .align-chip { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 8; display: flex; align-items: center; gap: 8px; padding: 4px 4px 4px 14px; border-radius: 12px; background: var(--surface); border: 2px solid var(--border); border-bottom-width: 4px; font-weight: 800; color: var(--title); font-size: 13px; box-shadow: 0 6px 18px #0000001f; white-space: nowrap; }
 .fold-cell { padding: 6px 44px !important; }
 .movetag.fmt { color: #b37400; box-shadow: 0 0 0 1.5px #e39a0066; }
+
+/* ---------- 侧边栏折叠 ---------- */
+.shell { transition: grid-template-columns .18s ease; }
+.shell.nav-mini { grid-template-columns: 68px minmax(0, 1fr) 340px; }
+.shell.aside-off { grid-template-columns: 236px minmax(0, 1fr); }
+.shell.nav-mini.aside-off, .shell.nav-mini.no-aside { grid-template-columns: 68px minmax(0, 1fr); }
+.nav-mini .nav { padding-left: 8px; padding-right: 8px; align-items: stretch; }
+.nav-mini .nav-item { justify-content: center; padding: 0; gap: 0; position: relative; }
+.nav-mini .nav-item > span:not(.count) { display: none; }
+.nav-mini .nav-item .count { position: absolute; top: 4px; right: 6px; margin: 0; font-size: 11px; }
+.nav-mini .nav-brand .wm-text, .nav-mini .nav-brand small { display: none; }
+.nav-mini .nav-brand { padding: 4px 0 16px; display: flex; justify-content: center; }
+.nav-item.collapse { color: var(--text-3); height: 42px; }
+.panel-toggle { margin-left: auto; color: var(--text-3); }
+.panel-toggle.on { color: var(--macaw); }
+
+/* ---------- 设置弹窗 ---------- */
+.settings-modal h3 { display: flex; align-items: center; gap: 8px; }
+.settings-modal .set-sect { margin-top: 14px; padding-top: 12px; border-top: 2px solid var(--border); }
+.settings-modal .set-sect:first-of-type { border-top: 0; padding-top: 0; }
+.settings-modal .set-title { display: flex; align-items: center; gap: 8px; font-weight: 900; margin-bottom: 10px; color: var(--text-2); }
+.settings-modal .set-about { margin-top: 16px; font-size: 13px; font-weight: 700; color: var(--text-3); text-align: center; }
+.settings-modal { max-height: 86vh; overflow: auto; }
