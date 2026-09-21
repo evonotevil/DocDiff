@@ -69,7 +69,7 @@ export const FileGlyph = ({ type, size = 44 }: { type: string; size?: number }) 
 };
 export const IconPaste = () => <S d={<><rect x="3.5" y="2.8" width="9" height="11.4" rx="1.6" /><path d="M6 2.8h4v2H6z M6 8h4 M6 10.5h3" /></>} />;
 export const IconCopy = () => <S d={<><rect x="5" y="5" width="8.5" height="9" rx="1.6" /><path d="M3 11V3.5c0-.8.7-1.5 1.5-1.5H10" /></>} />;
-export const IconGear = () => <S d={<><circle cx="8" cy="8" r="2.2" /><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4" /></>} />;
+export const IconGear = () => <S d={<><path d="M6.6 1.9h2.8l.35 1.72 1.25.72 1.64-.6 1.4 2.42-1.3 1.13v1.44l1.3 1.13-1.4 2.42-1.64-.6-1.25.72-.35 1.72H6.6l-.35-1.72-1.25-.72-1.64.6-1.4-2.42 1.3-1.13V7.28l-1.3-1.13 1.4-2.42 1.64.6 1.25-.72z" /><circle cx="8" cy="8" r="2.3" /></>} />;
 export const IconClock = () => <S d={<><circle cx="8" cy="8" r="6" /><path d="M8 4.5V8l2.5 1.5" /></>} />;
 export const IconRefresh = () => <S d={<><path d="M13 8a5 5 0 1 1-1.5-3.5" /><path d="M13 2.5v3h-3" /></>} />;
 export const IconKeyboard = () => <S d={<><rect x="1.8" y="4" width="12.4" height="8" rx="1.6" /><path d="M4.5 7h.01M7 7h.01M9.5 7h.01M12 7h.01M5 9.5h6" /></>} />;

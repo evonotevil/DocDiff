@@ -62,8 +62,8 @@
 
   --radius: 16px;
   --radius-sm: 12px;
-  --round: "Nunito", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
-  --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Cascadia Mono", "PingFang SC", "Microsoft YaHei UI", monospace;
+  --round: "Nunito", "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Cascadia Mono", "Noto Sans SC", "PingFang SC", "Microsoft YaHei UI", monospace;
   color-scheme: light;
 }
 :root[data-theme='dark'] {
@@ -401,7 +401,7 @@ select.sel { height: 34px; border-radius: 10px; border: 2px solid var(--border);
 
 .doc { font-family: "Times New Roman", "Songti SC", "SimSun", "宋体", "Noto Serif CJK SC", Georgia, serif; font-size: 15px; line-height: 1.6; color: var(--paper-text); font-weight: 400; }
 .doc .blk { margin: 0 0 8px; white-space: pre-wrap; word-break: break-word; }
-.doc .blk.h { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; font-weight: 700; margin-top: 14px; }
+.doc .blk.h { font-family: -apple-system, "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif; font-weight: 700; margin-top: 14px; }
 .doc .blk.h1 { font-size: 24px; } .doc .blk.h2 { font-size: 20px; } .doc .blk.h3 { font-size: 17px; }
 .doc .blk.h4, .doc .blk.h5, .doc .blk.h6 { font-size: 15px; }
 .doc .blk.li { display: flex; gap: 8px; }
@@ -524,9 +524,9 @@ select.sel { height: 34px; border-radius: 10px; border: 2px solid var(--border);
 
 /* ---------- 侧边栏折叠 ---------- */
 .shell { transition: grid-template-columns .18s ease; }
-.shell.nav-mini { grid-template-columns: 68px minmax(0, 1fr) 340px; }
+.shell.nav-mini { grid-template-columns: 84px minmax(0, 1fr) 340px; }
 .shell.aside-off { grid-template-columns: 236px minmax(0, 1fr); }
-.shell.nav-mini.aside-off, .shell.nav-mini.no-aside { grid-template-columns: 68px minmax(0, 1fr); }
+.shell.nav-mini.aside-off, .shell.nav-mini.no-aside { grid-template-columns: 84px minmax(0, 1fr); }
 .nav-mini .nav { padding-left: 8px; padding-right: 8px; align-items: stretch; }
 .nav-mini .nav-item { justify-content: center; padding: 0; gap: 0; position: relative; }
 .nav-mini .nav-item > span:not(.count) { display: none; }
@@ -544,3 +544,39 @@ select.sel { height: 34px; border-radius: 10px; border: 2px solid var(--border);
 .settings-modal .set-title { display: flex; align-items: center; gap: 8px; font-weight: 900; margin-bottom: 10px; color: var(--text-2); }
 .settings-modal .set-about { margin-top: 16px; font-size: 13px; font-weight: 700; color: var(--text-3); text-align: center; }
 .settings-modal { max-height: 86vh; overflow: auto; }
+
+/* ---------- 快捷键表 ---------- */
+.keys-table { display: flex; flex-direction: column; }
+.keys-group { font-size: 12px; font-weight: 900; letter-spacing: 1.5px; color: var(--text-3); text-transform: uppercase; margin: 16px 0 2px; }
+.keys-group:first-child { margin-top: 2px; }
+.keys-row { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 10px 2px; border-top: 2px solid var(--border); }
+.keys-group + .keys-row { border-top: 0; }
+.keys-row .kl { font-weight: 800; color: var(--text); }
+.keys-row .kk { min-width: 132px; text-align: right; white-space: nowrap; }
+.keys-row .kbd { min-width: 46px; display: inline-block; text-align: center; }
+
+/* ---------- 边缘折叠把手 ---------- */
+.edge-handle { position: absolute; top: 50%; z-index: 30; width: 34px; height: 34px; margin-top: -17px; border-radius: 50%;
+  border: 2px solid var(--border); border-bottom-width: 3px; background: var(--surface); color: var(--text-3);
+  display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.08); transition: color .15s, transform .15s; }
+.edge-handle:hover { color: var(--macaw); border-color: var(--macaw-border); }
+.edge-handle:active { transform: translateY(1px); border-bottom-width: 2px; }
+.edge-handle.left { left: 219px; }
+.edge-handle.right { right: 323px; }
+.nav-mini .edge-handle.left { left: 67px; }
+.aside-off .edge-handle.right, .no-aside .edge-handle.right { right: -17px; }
+.shell { position: relative; }
+
+/* 折叠后：角标挂在图标右上角外侧，不压住图标本身 */
+.nav-mini .nav-item { height: 58px; }
+.nav-mini .nav-item .count { position: absolute; top: 4px; right: 6px; margin: 0; min-width: 19px; height: 19px; padding: 0 5px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 10px; background: var(--text-3); border: 2px solid var(--bg); color: #fff;
+  font-size: 10.5px; font-weight: 900; letter-spacing: 0; }
+.nav-mini .nav-item.on .count { background: var(--macaw); border-color: var(--bg); color: #fff; }
+.nav-mini .nav-item svg { transform: translate(-4px, 3px); }
+
+/* 最近比较：删除按钮常显 */
+.recent-item .x { opacity: .55; }
+.recent-item:hover .x { opacity: 1; }
+.recent h2 .grow { flex: 1; }

@@ -1,5 +1,10 @@
 // English strings, keyed by the Chinese source text.
 export const EN_DICT: Record<string, string> = {
+  // v1.4.1
+  '通用': 'General', '接受 / 拒绝': 'Accept / reject', '撤销当前决定': 'Undo decision',
+  '上一处 / 下一处': 'Previous / next', '清空': 'Clear',
+  '收起左侧栏': 'Collapse left panel', '展开左侧栏': 'Expand left panel',
+  '收起右侧栏': 'Collapse right panel', '展开右侧栏': 'Expand right panel',
   // 通用 / general
   '设置': 'Settings', '完成': 'Done', '取消': 'Cancel', '打开': 'Open', '导出': 'Export',
   '外观': 'Appearance', '浅色': 'Light', '深色': 'Dark', '浅色模式': 'Light mode', '深色模式': 'Dark mode',

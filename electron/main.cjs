@@ -180,6 +180,7 @@ ipcMain.handle('recent-add', (_e, entry) => {
   for (const f of [entry.a, entry.b]) if (f.path && fs.existsSync(f.path)) app.addRecentDocument(f.path);
   return list;
 });
+ipcMain.handle('recent-clear', () => { store.write('recent.json', []); try { app.clearRecentDocuments(); } catch {} return []; });
 ipcMain.handle('recent-remove', (_e, idx) => { const l = store.read('recent.json', []); l.splice(idx, 1); store.write('recent.json', l); return l; });
 ipcMain.handle('exists', (_e, p) => !!p && fs.existsSync(p));
 

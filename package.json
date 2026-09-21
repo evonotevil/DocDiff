@@ -1,7 +1,7 @@
 {
   "name": "docdiff",
   "productName": "DocDiff",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "DocDiff — 本地离线文档比对（Word / PDF / TXT）",
   "main": "electron/main.cjs",
   "private": true,
@@ -15,6 +15,7 @@
     "dist:win": "vite build && electron-builder --win"
   },
   "devDependencies": {
+    "@fontsource/noto-sans-sc": "^5.3.0",
     "@fontsource/nunito": "^5.3.0",
     "@vitejs/plugin-react": "^4.7.0",
     "diff": "^7.0.0",

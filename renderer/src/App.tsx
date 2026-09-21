@@ -21,7 +21,7 @@ import { ImageView, ImgMode, useImagePages } from './views/ImageView';
 import { DetailsView } from './views/DetailsView';
 
 const api = (window as any).api;
-const APP_VERSION = 'v1.4';
+const APP_VERSION = 'v1.4.1';
 type Side = 0 | 1;
 const sideLabel = (s: Side) => t(s ? '修改后文档' : '原始文档');
 const MODES = [
@@ -179,15 +179,25 @@ function PasteModal({ side, onOk, onCancel }: { side: Side; onOk: (t: string) =>
 }
 
 function ShortcutRows() {
-  const rows: [string, string][] = [
-    [kbd('mod+O'), t('打开原始文档')], [kbd('mod+shift+O'), t('打开修改后文档')], [kbd('mod+N'), t('新建比较')],
-    [`${kbd('mod+1')} … ${kbd('mod+6')}`, t('切换模式')], ['J / K', t('下一处 / 上一处差异')],
-    ['A / R', t('（修订审阅）接受 / 拒绝')], ['U', t('（修订审阅）撤销当前决定')], [kbd('mod+shift+S'), t('交换左右文档')],
-    ['Enter', t('（首页）开始比较')],
+  const groups: [string, [string, string][]][] = [
+    [t('通用'), [
+      [t('打开原始文档'), kbd('mod+O')], [t('打开修改后文档'), kbd('mod+shift+O')],
+      [t('新建比较'), kbd('mod+N')], [t('交换左右文档'), kbd('mod+shift+S')],
+      [t('开始比较'), 'Enter'], [t('切换模式'), `${kbd('mod+1')} … ${kbd('mod+6')}`],
+      [t('下一处 / 上一处差异'), 'J / K'],
+    ]],
+    [t('修订审阅'), [
+      [t('接受 / 拒绝'), 'A / R'], [t('撤销当前决定'), 'U'], [t('上一处 / 下一处'), '← / →'],
+    ]],
   ];
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      {rows.map(([k, l]) => <div key={l} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontWeight: 700 }}><span>{l}</span><Kbd>{k}</Kbd></div>)}
+    <div className="keys-table">
+      {groups.map(([g, rows]) => (
+        <React.Fragment key={g}>
+          <div className="keys-group">{g}</div>
+          {rows.map(([l, k]) => <div className="keys-row" key={l}><span className="kl">{l}</span><span className="kk"><Kbd>{k}</Kbd></span></div>)}
+        </React.Fragment>
+      ))}
     </div>
   );
 }
@@ -532,14 +542,16 @@ export default function App() {
             </div>
             {recent.length > 0 && (
               <div className="recent">
-                <h2><I.IconClock />{t('最近比较')}</h2>
+                <h2><I.IconClock />{t('最近比较')}<span className="grow" />
+                  <button className="btn sm plain" onClick={async () => { await api.recentClear?.(); setRecent([]); }}>{t('清空')}</button>
+                </h2>
                 <div className="recent-grid">
                   {recent.map((r, i) => (
                     <div key={i} className="recent-item" role="button" tabIndex={0} onClick={() => openRecent(r)} onKeyDown={(e) => e.key === 'Enter' && openRecent(r)}>
                       <div className="row"><span className={`badge ${r.a.ext}`}>{r.a.ext.toUpperCase()}</span><span>{r.a.name}</span></div>
                       <div className="row"><span className={`badge ${r.b.ext}`}>{r.b.ext.toUpperCase()}</span><span>{r.b.name}</span></div>
                       <div className="time">{timeAgo(r.time)}</div>
-                      <button className="btn sm plain icon x" title={t('从列表移除')} onClick={(e) => { e.stopPropagation(); api.recentRemove(i).then(setRecent); }}><I.IconX /></button>
+                      <button className="btn sm icon x" title={t('从列表移除')} onClick={(e) => { e.stopPropagation(); api.recentRemove(i).then(setRecent); }}><I.IconX /></button>
                     </div>
                   ))}
                 </div>
@@ -740,9 +752,11 @@ export default function App() {
           <button className="nav-item" onClick={clearAll} title={t('新建比较')}><I.IconPlusDoc /><span>{t('新建比较')}</span></button>
           <button className="nav-item" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} title={t(theme === 'dark' ? '浅色模式' : '深色模式')}>{theme === 'dark' ? <I.IconSun /> : <I.IconMoon />}<span>{t(theme === 'dark' ? '浅色模式' : '深色模式')}</span></button>
           <button className="nav-item" onClick={() => setShowSettings(true)} title={t('设置')}><I.IconGear /><span>{t('设置')}</span></button>
-          <button className="nav-item collapse" onClick={() => set('navOpen')(!navOpen)} title={t(navOpen ? '收起侧边栏' : '展开侧边栏')}>{navOpen ? <I.IconChevronLeft /> : <I.IconChevronRight />}<span>{t('收起侧边栏')}</span></button>
         </div>
       </nav>
+
+      <button className="edge-handle left" onClick={() => set('navOpen')(!navOpen)} title={t(navOpen ? '收起左侧栏' : '展开左侧栏')} aria-label={t(navOpen ? '收起左侧栏' : '展开左侧栏')}>{navOpen ? <I.IconChevronLeft /> : <I.IconChevronRight />}</button>
+      {aside && <button className="edge-handle right" onClick={() => set('asideOpen')(!asideOpen)} title={t(asideOpen ? '收起右侧栏' : '展开右侧栏')} aria-label={t(asideOpen ? '收起右侧栏' : '展开右侧栏')}>{asideOpen ? <I.IconChevronRight /> : <I.IconChevronLeft />}</button>}
 
       <div className="center">
         <div className="center-head drag">
@@ -750,7 +764,6 @@ export default function App() {
           <button className="vs-chip" title={t('交换左右（{k}）', { k: kbd('mod+shift+S') })} onClick={swap}><I.IconSwap /></button>
           <FilePill side={1} doc={B} onOpen={() => open(1)} onFiles={(f) => onFiles(1, f)} changed={changedSides.includes(1)} />
           {(busy[0] || busy[1]) && <div className="spinner" style={{ width: 22, height: 22, borderWidth: 3 }} />}
-          {aside && <button className={`btn plain icon panel-toggle ${asideOpen ? 'on' : ''}`} onClick={() => set('asideOpen')(!asideOpen)} title={t(asideOpen ? '收起右侧面板' : '展开右侧面板')}><I.IconPanelRight /></button>}
         </div>
         {changedSides.length > 0 && (
           <div className="banner">
