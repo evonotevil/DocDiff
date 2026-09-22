@@ -18,6 +18,33 @@ export function runStyle(st: Run, withHl = true): React.CSSProperties {
   return s;
 }
 
+/**
+ * 把相邻的、没有差异且样式相同的 token 合并成一个 span。
+ * 长文档里 99% 的 token 都是"没变化"的，逐词一个 span 会让 DOM 膨胀到几十万节点，
+ * 侧栏折叠时的一次重排能卡住主线程好几秒。合并后 DOM 约降 90%。
+ * 有差异（cls / cid / title）、图片、分隔符、跨单元格或跨段落的 token 一律不合并，
+ * 悬停对齐用的 data-mi 保留在合并块的第一个 token 上（对齐本来就按行工作）。
+ */
+const styleKey = (st: Run) =>
+  `${st.b ? 1 : 0}${st.i ? 1 : 0}${st.u ? 1 : 0}${st.s ? 1 : 0}|${st.sz || ''}|${st.color || ''}|${st.hl || ''}|${st.img || ''}`;
+
+const plainTok = (r: RTok) => !r.cls && r.cid === undefined && !r.title && !r.tok.sep && !r.tok.psep && !(r.style || r.tok.st).img;
+
+export function coalesce(toks: RTok[]): RTok[] {
+  const out: RTok[] = [];
+  for (const r of toks) {
+    const prev = out[out.length - 1];
+    if (prev && plainTok(r) && plainTok(prev)
+      && prev.tok.c === r.tok.c && (prev.tok.blk || 0) === (r.tok.blk || 0)
+      && styleKey(prev.style || prev.tok.st) === styleKey(r.style || r.tok.st)) {
+      out[out.length - 1] = { ...prev, tok: { ...prev.tok, t: prev.tok.t + r.tok.t } };
+      continue;
+    }
+    out.push(r);
+  }
+  return out;
+}
+
 function TokSpan({ r, selCid }: { r: RTok; selCid?: number | null }) {
   const tk = r.tok;
   if (tk.sep || tk.psep) return null;
@@ -35,7 +62,7 @@ export function BlockView({ block, toks, selCid, className, extra }: { block: Bl
   if (block.kind === 'tr') {
     const n = Math.max(1, block.cells?.length || 1);
     const cells: RTok[][] = Array.from({ length: n }, () => []);
-    for (const r of toks) if (!r.tok.sep) (cells[Math.min(n - 1, r.tok.c)] ||= []).push(r);
+    for (const r of coalesce(toks)) if (!r.tok.sep) (cells[Math.min(n - 1, r.tok.c)] ||= []).push(r);
     return (
       <div className={`blk tr ${className || ''}`} style={{ gridTemplateColumns: `repeat(${n}, minmax(0, 1fr))` }}>
         {cells.map((c, i) => <div className="td" key={i}>{c.map((r, k) => <TokSpan key={k} r={r} selCid={selCid} />)}</div>)}
@@ -43,7 +70,7 @@ export function BlockView({ block, toks, selCid, className, extra }: { block: Bl
       </div>
     );
   }
-  const body = toks.map((r, k) => <TokSpan key={k} r={r} selCid={selCid} />);
+  const body = coalesce(toks).map((r, k) => <TokSpan key={k} r={r} selCid={selCid} />);
   if (block.kind === 'li') {
     return (
       <div className={`blk li${al} ${className || ''}`} style={{ paddingLeft: (block.level || 0) * 22 }}>

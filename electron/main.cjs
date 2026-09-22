@@ -27,13 +27,22 @@ const MENU_EN = {
 const L = (zh) => (LANG === 'en' ? (MENU_EN[zh] || zh) : zh);
 
 // ---------- 平台差异集中在这里（Windows 适配预埋） ----------
+// Windows 10 不支持自定义标题栏覆盖层的颜色（会露出系统默认的灰条），
+// 所以 Win10 回落到系统标准标题栏，Win11（build ≥ 22000）及 Linux 继续用覆盖层。
+const winBuild = () => { const m = /^\d+\.\d+\.(\d+)/.exec(os.release() || ''); return m ? Number(m[1]) : 0; };
+const isWin = process.platform === 'win32';
+const useOverlay = !isMac && (!isWin || winBuild() >= 22000);
+
 const PLATFORM = {
   isMac,
-  isWin: process.platform === 'win32',
-  // macOS 用隐藏标题栏 + 红绿灯；Windows/Linux 用隐藏标题栏 + 系统按钮覆盖层
+  isWin,
+  useOverlay,
+  // macOS 用隐藏标题栏 + 红绿灯；Win11 / Linux 用隐藏标题栏 + 系统按钮覆盖层；Win10 用系统标题栏
   windowChrome: (dark) => isMac
     ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 18, y: 18 } }
-    : { titleBarStyle: 'hidden', titleBarOverlay: overlayFor(dark) },
+    : useOverlay
+      ? { titleBarStyle: 'hidden', titleBarOverlay: overlayFor(dark) }
+      : {},
 };
 
 // ---------- 持久化：窗口位置 / 最近比较 ----------
@@ -156,6 +165,8 @@ ipcMain.handle('open-dialog', async () => {
 
 ipcMain.handle('read-path', async (_e, p) => readDoc(p));
 
+ipcMain.handle('chrome-info', () => ({ chrome: useOverlay ? 'overlay' : 'system', winBuild: isWin ? winBuild() : 0 }));
+
 ipcMain.handle('set-lang', (_e, l) => { if (l === 'en' || l === 'zh') { LANG = l; buildMenu(); } });
 
 ipcMain.handle('save-file', async (_e, { defaultName, data, filters }) => {
@@ -167,7 +178,7 @@ ipcMain.handle('save-file', async (_e, { defaultName, data, filters }) => {
 
 ipcMain.on('theme', (_e, t) => {
   nativeTheme.themeSource = t;
-  if (!isMac && mainWin) { try { mainWin.setTitleBarOverlay(overlayFor(t === 'dark')); } catch {} }
+  if (useOverlay && mainWin) { try { mainWin.setTitleBarOverlay(overlayFor(t === 'dark')); } catch {} }
 });
 
 // 最近比较
@@ -360,6 +371,12 @@ app.whenReady().then(() => {
     return net.fetch(pathToFileURL(file).toString());
   });
   buildMenu();
+  try {
+    const g = app.getGPUFeatureStatus() || {};
+    console.log('[DocDiff] platform=%s release=%s titlebar=%s gpu_compositing=%s canvas=%s rasterization=%s',
+      process.platform, os.release(), useOverlay ? 'overlay' : 'system',
+      g.gpu_compositing, g['2d_canvas'], g.rasterization);
+  } catch {}
   // 开发模式（npm start）下 Dock 也显示 DocDiff 图标；打包后由 icon.icns 提供
   if (isMac && !app.isPackaged) { try { app.dock.setIcon(path.join(__dirname, '..', 'build', 'icon.png')); } catch {} }
   createWindow();

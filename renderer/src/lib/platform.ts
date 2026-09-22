@@ -3,6 +3,8 @@ const api = (window as any).api || {};
 export const platform: string = api.platform || 'darwin';
 export const isMac = platform === 'darwin';
 export const isWin = platform === 'win32';
+/** 'mac' | 'overlay'（隐藏标题栏 + 系统按钮覆盖层）| 'system'（Win10 的系统标题栏） */
+export const chrome: string = api.chrome || (isMac ? 'mac' : 'overlay');
 
 /** 'mod+shift+O' → macOS "⇧⌘O"，Windows "Ctrl+Shift+O" */
 export function kbd(combo: string): string {
@@ -22,4 +24,5 @@ export const modPressed = (e: KeyboardEvent | React.KeyboardEvent) => (isMac ? e
 
 export function applyPlatformClass() {
   document.documentElement.dataset.platform = isMac ? 'mac' : isWin ? 'win' : 'linux';
+  document.documentElement.dataset.chrome = chrome;
 }

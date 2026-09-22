@@ -21,7 +21,7 @@ import { ImageView, ImgMode, useImagePages } from './views/ImageView';
 import { DetailsView } from './views/DetailsView';
 
 const api = (window as any).api;
-const APP_VERSION = 'v1.4.2';
+const APP_VERSION = 'v1.4.3';
 type Side = 0 | 1;
 const sideLabel = (s: Side) => t(s ? '修改后文档' : '原始文档');
 const MODES = [
@@ -93,6 +93,17 @@ function textFile(text: string, side: Side): FileInfo {
   return { path: '', name: t(side ? '粘贴的文字（修改后）.txt' : '粘贴的文字（原始）.txt'), ext: 'txt', size: data.length, mtime: now, birthtime: now, data };
 }
 const docStat = (d: DocModel) => `${d.type.toUpperCase()} · ${fmtBytes(d.file.size)}${d.pageCount ? ` · ${t('{n} 页', { n: d.pageCount })}` : ''}`;
+
+/** 长文件名从中间省略，保留扩展名（法务文件名的版本信息常在尾部） */
+function midEllipsis(name: string, max = 34) {
+  if (name.length <= max) return name;
+  const dot = name.lastIndexOf('.');
+  const ext = dot > 0 && name.length - dot <= 6 ? name.slice(dot) : '';
+  const stem = ext ? name.slice(0, dot) : name;
+  const keep = max - ext.length - 1;
+  const head = Math.ceil(keep * 0.6), tail = Math.floor(keep * 0.4);
+  return `${stem.slice(0, head)}…${stem.slice(stem.length - tail)}${ext}`;
+}
 
 function timeAgo(ts: number) {
   const s = (Date.now() - ts) / 1000;
@@ -562,8 +573,8 @@ export default function App() {
                 <div className="recent-grid">
                   {recent.map((r, i) => (
                     <div key={i} className="recent-item" role="button" tabIndex={0} onClick={() => openRecent(r)} onKeyDown={(e) => e.key === 'Enter' && openRecent(r)}>
-                      <div className="row"><span className={`badge ${r.a.ext}`}>{r.a.ext.toUpperCase()}</span><span>{r.a.name}</span></div>
-                      <div className="row"><span className={`badge ${r.b.ext}`}>{r.b.ext.toUpperCase()}</span><span>{r.b.name}</span></div>
+                      <div className="row"><span className={`badge ${r.a.ext}`}>{r.a.ext.toUpperCase()}</span><span className="name" title={r.a.name}>{midEllipsis(r.a.name)}</span></div>
+                      <div className="row"><span className={`badge ${r.b.ext}`}>{r.b.ext.toUpperCase()}</span><span className="name" title={r.b.name}>{midEllipsis(r.b.name)}</span></div>
                       <div className="time">{timeAgo(r.time)}</div>
                       <button className="btn sm icon x" title={t('从列表移除')} onClick={(e) => { e.stopPropagation(); api.recentRemove(i).then(setRecent); }}><I.IconX /></button>
                     </div>
@@ -749,7 +760,7 @@ export default function App() {
 
   const navOpen = prefs.navOpen, asideOpen = prefs.asideOpen && !!aside;
   return (
-    <div className={`app shell ${aside ? '' : 'no-aside'} ${navOpen ? '' : 'nav-mini'} ${asideOpen ? '' : 'aside-off'}`}>
+    <div className={`app shell ${aside ? '' : 'no-aside'} ${navOpen ? '' : 'nav-mini'} ${asideOpen ? '' : 'aside-off'} ${showMap ? 'has-map' : ''}`}>
       <nav className="nav">
         <div className="nav-drag drag" />
         <div className="nav-brand drag"><Wordmark size={34} /></div>

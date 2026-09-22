@@ -27,12 +27,18 @@ export function ChangeMap({ changes, selCid, onSel, dep, bottom = 6 }: { changes
       setView({ top: (sc.scrollTop / H) * 100, h: (sc.clientHeight / H) * 100 });
     };
     const onScroll = () => { const H = sc.scrollHeight || 1; setView({ top: (sc.scrollTop / H) * 100, h: (sc.clientHeight / H) * 100 }); };
+    // 一次 measure 要对全部差异取 getBoundingClientRect（大文档约 20ms），做节流避免连续重排
+    let pending = 0, timer: any = 0;
+    const schedule = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => { cancelAnimationFrame(pending); pending = requestAnimationFrame(measure); }, 120);
+    };
     const t1 = setTimeout(measure, 60), t2 = setTimeout(measure, 600);
-    const ro = new ResizeObserver(() => measure());
+    const ro = new ResizeObserver(schedule);
     ro.observe(sc);
     if (sc.firstElementChild) ro.observe(sc.firstElementChild);
     sc.addEventListener('scroll', onScroll, { passive: true });
-    return () => { clearTimeout(t1); clearTimeout(t2); ro.disconnect(); sc.removeEventListener('scroll', onScroll); };
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(timer); cancelAnimationFrame(pending); ro.disconnect(); sc.removeEventListener('scroll', onScroll); };
   }, [changes, dep]);
   const jump = (e: React.MouseEvent) => {
     const host = ref.current?.parentElement;

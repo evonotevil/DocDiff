@@ -16,6 +16,11 @@
 
 ![界面 5](screenshots/DocDiff-商店图-5.png)
 
+## v1.4.3 更新
+
+- 修复差异地图遮挡正文和折叠把手、最近比较中的长文件名挤压格式角标，以及 Windows 10 标题栏出现灰块的问题。
+- 优化大文档渲染：合并相邻且无差异的文字节点，减少侧栏折叠时的重排，并降低差异地图的测量频率。
+
 ## 比较模式
 
 | 模式 | 作用 |
@@ -33,10 +38,10 @@
 
 | 系统 | 下载 | 安装方法 |
 |---|---|---|
-| Mac（Apple 芯片 M1–M4） | [DocDiff-1.4.2-mac-arm64.dmg](https://github.com/evonotevil/DocDiff/releases/download/v1.4.2/DocDiff-1.4.2-mac-arm64.dmg) | 双击打开，把 DocDiff 拖到"应用程序" |
-| Mac（Intel 芯片） | [DocDiff-1.4.2-mac-x64.dmg](https://github.com/evonotevil/DocDiff/releases/download/v1.4.2/DocDiff-1.4.2-mac-x64.dmg) | 同上 |
-| Windows 10 / 11（64 位） | [DocDiff-Setup-1.4.2.exe](https://github.com/evonotevil/DocDiff/releases/download/v1.4.2/DocDiff-Setup-1.4.2.exe) | 双击安装，可选择安装位置 |
-| Windows 免安装版 | [DocDiff-1.4.2-win-x64.zip](https://github.com/evonotevil/DocDiff/releases/download/v1.4.2/DocDiff-1.4.2-win-x64.zip) | 解压后运行 `DocDiff.exe` |
+| Mac（Apple 芯片 M1–M4） | [DocDiff-1.4.3-mac-arm64.dmg](https://github.com/evonotevil/DocDiff/releases/download/v1.4.3/DocDiff-1.4.3-mac-arm64.dmg) | 双击打开，把 DocDiff 拖到"应用程序" |
+| Mac（Intel 芯片） | [DocDiff-1.4.3-mac-x64.dmg](https://github.com/evonotevil/DocDiff/releases/download/v1.4.3/DocDiff-1.4.3-mac-x64.dmg) | 同上 |
+| Windows 10 / 11（64 位） | [DocDiff-Setup-1.4.3.exe](https://github.com/evonotevil/DocDiff/releases/download/v1.4.3/DocDiff-Setup-1.4.3.exe) | 双击安装，可选择安装位置 |
+| Windows 免安装版 | [DocDiff-1.4.3-win-x64.zip](https://github.com/evonotevil/DocDiff/releases/download/v1.4.3/DocDiff-1.4.3-win-x64.zip) | 解压后运行 `DocDiff.exe` |
 
 不确定 Mac 是哪种芯片？点屏幕左上角的苹果菜单，选"关于本机"，查看"芯片"一栏。
 

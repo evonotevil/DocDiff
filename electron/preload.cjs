@@ -1,7 +1,13 @@
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
+const os = require('os');
+const winBuild = () => { const m = /^\d+\.\d+\.(\d+)/.exec(os.release() || ''); return m ? Number(m[1]) : 0; };
+// Win10 用系统标题栏，Win11 / Linux 用按钮覆盖层（与主进程保持一致）
+const CHROME = process.platform === 'darwin' ? 'mac' : (process.platform === 'win32' && winBuild() < 22000) ? 'system' : 'overlay';
 
 contextBridge.exposeInMainWorld('api', {
   platform: process.platform,
+  chrome: CHROME,
+  chromeInfo: () => ipcRenderer.invoke('chrome-info'),
   openDialog: () => ipcRenderer.invoke('open-dialog'),
   readPath: (p) => ipcRenderer.invoke('read-path', p),
   pathForFile: (f) => { try { return webUtils.getPathForFile(f); } catch { return ''; } },
