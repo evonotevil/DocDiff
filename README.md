@@ -7,9 +7,18 @@
 > **首次运行提醒：目前的 macOS 和 Windows 安装包尚未签名。** 请从本仓库的 Releases 下载，并按需核对随版本提供的 `SHA256SUMS.txt`。
 >
 > - **macOS：** 如果首次打开时提示“无法验证开发者”或“Apple 无法检查 App 是否包含恶意软件”，先尝试打开一次，再到 **系统设置 → 隐私与安全性**，在底部找到 DocDiff，点 **仍要打开**，随后确认 **打开**。[Apple 官方说明](https://support.apple.com/zh-cn/102445)
+> - **macOS 补充方法：** 如果仍无法打开，确认应用已拖入“应用程序”且下载文件来自本项目 Release 后，也可以在“终端”运行 `xattr -cr /Applications/DocDiff.app`，然后重试。
 > - **Windows：** 如果运行安装包时出现“Windows 已保护你的电脑”，确认文件来自上方的 Release 页面后，点 **更多信息 → 仍要运行**。如果没有继续选项，请在 [Issues](https://github.com/evonotevil/DocDiff/issues) 反馈，不必关闭系统的安全保护。
 
-![DocDiff 差异总览界面](docs/assets/hero-overview.jpg)
+![DocDiff 界面](screenshots/DocDiff-商店图-1.png)
+
+![界面 2](screenshots/DocDiff-商店图-2.png)
+
+![界面 3](screenshots/DocDiff-商店图-3.png)
+
+![界面 4](screenshots/DocDiff-商店图-4.png)
+
+![界面 5](screenshots/DocDiff-商店图-5.png)
 
 ## 下载与安装
 
