@@ -1,160 +1,64 @@
 # DocDiff
 
-本地离线文档比对工具：比较 **DOCX、PDF、TXT**，任意两种格式互相比较。所有处理都在本机完成，不联网，也不上传文件。
+**每一处不同，一眼看清。** DocDiff 可以比较 DOCX、PDF、TXT 文档，格式不同的两份文件也能互比。文档处理在你的电脑上完成，无需上传文件或注册账号。支持中文和 English 界面。
 
-界面语言支持中文和 English，支持 macOS（Apple 芯片 / Intel）和 Windows。
+[下载最新版](https://github.com/evonotevil/DocDiff/releases/latest) · [产品主页](https://evonotevil.github.io/DocDiff/) · [更新记录](CHANGELOG.md)
 
-**产品主页：<https://evonotevil.github.io/DocDiff/>**
+> **首次运行提醒：目前的 macOS 和 Windows 安装包尚未签名。** 请从本仓库的 Releases 下载，并按需核对随版本提供的 `SHA256SUMS.txt`。
+>
+> - **macOS：** 如果首次打开时提示“无法验证开发者”或“Apple 无法检查 App 是否包含恶意软件”，先尝试打开一次，再到 **系统设置 → 隐私与安全性**，在底部找到 DocDiff，点 **仍要打开**，随后确认 **打开**。[Apple 官方说明](https://support.apple.com/zh-cn/102445)
+> - **Windows：** 如果运行安装包时出现“Windows 已保护你的电脑”，确认文件来自上方的 Release 页面后，点 **更多信息 → 仍要运行**。如果没有继续选项，请在 [Issues](https://github.com/evonotevil/DocDiff/issues) 反馈，不必关闭系统的安全保护。
 
-![DocDiff 界面](screenshots/DocDiff-商店图-1.png)
+![DocDiff 差异总览界面](docs/assets/hero-overview.jpg)
 
-![界面 2](screenshots/DocDiff-商店图-2.png)
+## 下载与安装
 
-![界面 3](screenshots/DocDiff-商店图-3.png)
+当前版本：**v1.4.3**。支持 macOS 11 及以上、Windows 10 / 11（64 位）。
 
-![界面 4](screenshots/DocDiff-商店图-4.png)
-
-![界面 5](screenshots/DocDiff-商店图-5.png)
-
-## v1.4.3 更新
-
-- 修复差异地图遮挡正文和折叠把手、最近比较中的长文件名挤压格式角标，以及 Windows 10 标题栏出现灰块的问题。
-- 优化大文档渲染：合并相邻且无差异的文字节点，减少侧栏折叠时的重排，并降低差异地图的测量频率。
-
-## 比较模式
-
-| 模式 | 作用 |
-|---|---|
-| **富文本** | 两份文档并排显示，保留标题、列表、表格、加粗/斜体/字号/颜色。删除标红，新增标绿，格式变化用橙色下划线，移动的段落用紫框标出。 |
-| **纯文本** | 只比较文字，逐行对齐，带行号。可以切换"并排 / 合并"布局，也可以隐藏未变化的行。 |
-| **修订** | 把两份文档合并成一份修订稿：删除显示为删除线，新增显示为下划线。每处修改可以**接受或拒绝**，结果可以导出为 **PDF**、**Word 修订稿**（保留标记）或 **Word 最终稿**。 |
-| **图像** | 把两份文档渲染成页面图片，逐像素比较，并框出差异区域。有 4 种视图：并排、差异、淡化、滑块。可以发现版面、页边距、图片、分页上的变化。 |
-| **OCR 文本** | 先识别页面上的文字，再做文本比较。适合扫描件和图片型 PDF。内置**中文和英文**离线识别模型。 |
-| **文件详情** | 比较文件本身的信息：大小、时间、SHA-256、页数、字数，以及作者、标题、修订号等文档属性。 |
-
-## 下载安装
-
-安装包在 **[Releases 页面](https://github.com/evonotevil/DocDiff/releases/latest)** 下载：
-
-| 系统 | 下载 | 安装方法 |
+| 你的电脑 | 下载文件 | 安装方式 |
 |---|---|---|
-| Mac（Apple 芯片 M1–M4） | [DocDiff-1.4.3-mac-arm64.dmg](https://github.com/evonotevil/DocDiff/releases/download/v1.4.3/DocDiff-1.4.3-mac-arm64.dmg) | 双击打开，把 DocDiff 拖到"应用程序" |
-| Mac（Intel 芯片） | [DocDiff-1.4.3-mac-x64.dmg](https://github.com/evonotevil/DocDiff/releases/download/v1.4.3/DocDiff-1.4.3-mac-x64.dmg) | 同上 |
-| Windows 10 / 11（64 位） | [DocDiff-Setup-1.4.3.exe](https://github.com/evonotevil/DocDiff/releases/download/v1.4.3/DocDiff-Setup-1.4.3.exe) | 双击安装，可选择安装位置 |
+| Mac，Apple 芯片 | [mac-arm64.dmg](https://github.com/evonotevil/DocDiff/releases/download/v1.4.3/DocDiff-1.4.3-mac-arm64.dmg) | 打开镜像，将 DocDiff 拖入“应用程序” |
+| Mac，Intel 芯片 | [mac-x64.dmg](https://github.com/evonotevil/DocDiff/releases/download/v1.4.3/DocDiff-1.4.3-mac-x64.dmg) | 同上 |
+| Windows 安装版 | [DocDiff-Setup-1.4.3.exe](https://github.com/evonotevil/DocDiff/releases/download/v1.4.3/DocDiff-Setup-1.4.3.exe) | 双击安装，可选择安装位置 |
 | Windows 免安装版 | [DocDiff-1.4.3-win-x64.zip](https://github.com/evonotevil/DocDiff/releases/download/v1.4.3/DocDiff-1.4.3-win-x64.zip) | 解压后运行 `DocDiff.exe` |
 
-不确定 Mac 是哪种芯片？点屏幕左上角的苹果菜单，选"关于本机"，查看"芯片"一栏。
+不确定 Mac 的芯片类型？点屏幕左上角苹果菜单，选择“关于本机”查看。下载文件无法打开或提示损坏时，先从 [Release 页面](https://github.com/evonotevil/DocDiff/releases/tag/v1.4.3)重新下载，并用该版本的 `SHA256SUMS.txt` 核对文件。
 
-每个版本附带 `SHA256SUMS.txt`，可以用 `shasum -a 256 <文件>` 校验下载是否完整。
+## 三步开始比较
 
-**Mac 第一次打开时**，系统会提示"无法验证开发者"，因为应用没有 Apple 开发者证书。按下面任一方法处理（只需一次）：
+1. 将两份文档拖入“原始文档”和“修改后文档”，或点击“选择文件”。
+2. 点击 **查找差异**。删除、新增和修改会以不同颜色标出；右侧变更列表和文档边缘的差异地图可以快速跳到对应位置。
+3. 按需要切换对比模式。要逐条决定是否保留修改，进入“修订审阅”，完成后导出结果。
 
-- 打开"系统设置 → 隐私与安全性"，拉到底部，点 **"仍要打开"**
-- 或在"终端"执行：`xattr -dr com.apple.quarantine /Applications/DocDiff.app`
+## 能比较什么
 
-**Windows 第一次运行安装程序时**，SmartScreen 可能提示"Windows 已保护你的电脑"（安装程序没有代码签名证书）。点 **"更多信息 → 仍要运行"** 即可。
-
-## 使用方法
-
-1. 把两个文件分别拖到"原始文档"和"修改后文档"。也可以点"选择文件"，或者一次拖入两个文件。
-2. 点 **查找差异**。
-3. 在「富文本」里把鼠标移到任意一行，会框出这一行和另一侧对应的行；点一下，两侧就对齐到这一行（再按 Esc 或点「撤销对齐」恢复）。
-4. 用左侧导航切换模式。右侧的变更列表可以点击，页面会跳到对应位置；文档右边的彩色细条是"差异地图"，也可以点击跳转。
-5. 在「修订审阅」里按 A 接受、R 拒绝，逐条处理；全部处理完会出现完成页，可以直接导出。
-6. 比较过程中，如果在 Word 里修改并保存了文档，顶部会提示"已更新"，点「重新比较」即可。
-7. 右侧「复制摘要」会把所有差异整理成 Markdown，可以直接粘贴到邮件、飞书或文档里。
-8. 左右两侧边栏都可以折叠，给对比区腾出空间；设置里可以切换语言（中文 / English）、浅色 / 深色、提示音，并查看全部快捷键。
-
-**快捷键**
-
-| 快捷键 | 作用 |
+| 模式 | 适合的场景 |
 |---|---|
-| ⌘O / ⇧⌘O（Windows：Ctrl+O / Ctrl+Shift+O） | 打开原始 / 修改后文档 |
-| ⌘1 … ⌘6（Windows：Ctrl+1 … Ctrl+6） | 切换 6 种模式 |
-| J / K（或 F7 / ⇧F7） | 下一处 / 上一处差异 |
-| A / R / U | 修订审阅：接受 / 拒绝 / 撤销 |
-| Enter | 首页：开始比较 |
-| ⇧⌘S | 交换左右文档 |
-| ⌘N | 新建比较 |
+| 富文本 | 查看合同、报告中的文字和格式变化，保留标题、列表、表格等结构；点击对应行可让两侧对齐。 |
+| 纯文本 | 专注逐行文字差异，可切换并排或合并视图，并隐藏未变化内容。 |
+| 修订审阅 | 逐条接受、拒绝或撤销修改，导出 PDF、Word 修订稿或最终稿。 |
+| 图像 | 按页面查看排版、图片、分页等视觉变化，支持并排、差异、淡化和滑块视图。 |
+| OCR 文本 | 先离线识别扫描件或图片型 PDF 中的中文、英文，再比较文字。 |
+| 文件详情 | 比较文件大小、时间、SHA-256，以及可读取的文档属性。 |
 
-**选项说明**
+DOCX、PDF、TXT 可以任意组合。比较时可设置忽略空白、忽略全角与半角标点，并选择按词或按字符高亮。
 
-- **忽略空白差异**（默认开启）：多一个空格、换行符不同，都不算作差异。
-- **按词 / 按字符**：高亮的粒度。中文始终按单个汉字比较。
-- **检测格式变化**：两份文档格式相同（都是 DOCX 或都是 PDF）时默认开启。DOCX 和 PDF 的字体信息来源不同，互相比较时默认关闭。
-- **忽略全角 / 半角标点**：把「，」和「,」、「（」和「(」视为相同，适合中英文混排的合同。
-- **检测移动的段落**：如果一整段只是换了位置，会标为"移动"，不再显示为一处删除加一处新增。
+## 日常使用
 
-还可以用命令行直接打开两个文件：`npx electron . a.docx b.pdf`
+- **定位变化：** 点击右侧变更列表或差异地图，跳到对应内容；在富文本里点击一行，还能对齐两侧文档。
+- **处理修订：** 按 `A` 接受、`R` 拒绝、`U` 撤销最近一次决定。全部处理后可导出文档。
+- **继续工作：** Word 文件修改并保存后，点击应用内的“重新比较”；“最近比较”可重新打开之前的文件组合。
+- **分享结果：** 点击“复制摘要”，将变更整理成 Markdown，粘贴到邮件、聊天或文档中。
+- **调整界面：** 左右侧边栏可以折叠；在“设置”中切换中文 / English、浅色 / 深色界面，并查看全部快捷键。
 
-`samples/` 目录里有几组示例文件，可以先用来试用。
+## 常见问题
 
-## 从源码运行
+**文件会上传吗？** 不会。文档比对和 OCR 都在本机完成。下载应用和访问 GitHub 页面需要网络，使用已安装的应用比较文档不需要。
 
-需要 Node.js 18 或更高版本：
+**支持旧版 `.doc` 吗？** 暂不支持。请先在 Word 中另存为 `.docx`。
 
-```bash
-git clone https://github.com/evonotevil/DocDiff.git
-cd DocDiff
-npm install     # 第一次运行需要，会下载 Electron（约 100MB）
-npm start       # 构建界面并启动应用
-```
+**为什么 PDF 和 Word 的段落或分页有时对不上？** PDF 不包含可靠的段落结构，DocDiff 会根据版面推断；复杂多栏文档可能不够准确。DOCX 的图像模式由本机排版，分页也可能与 Word 略有不同。
 
-> **国内网络下载慢？** 可以在 `npm install` 之前先执行：
->
-> ```bash
-> npm config set registry https://registry.npmmirror.com
-> export ELECTRON_MIRROR="https://npmmirror.com/mirrors/electron/"
-> ```
+**哪些内容暂不参与比较？** 页眉、页脚和批注暂不参与；导出的 Word 文件会以 `[图片]` 占位表示图片。
 
-自己打包：
-
-```bash
-npm run dist:arm64    # macOS Apple 芯片（M1–M4）
-npm run dist:x64      # macOS Intel 芯片
-npm run dist:win      # Windows 安装包（在 Windows 上执行；在 Mac/Linux 上需要安装 Wine）
-```
-
-打包结果在 `release/` 目录。应用没有做开发者签名，如果把安装包拷到其他电脑后系统提示"无法打开"或"已损坏"，在 Finder 里右键点应用选"打开"，或在终端执行 `xattr -cr /Applications/DocDiff.app`。
-
-## 技术栈
-
-Electron 37 · React 18 · Vite 6 · pdf.js · docx-preview · jsdiff · pixelmatch · tesseract.js 5（语言包随应用离线打包）· docx
-
-```
-electron/
-  main.cjs        主进程：窗口、菜单、文件读写、DOCX/TXT 排版转 PDF、OCR、导出
-  preload.cjs     安全桥接（contextIsolation）
-renderer/
-  index.html      主界面
-  render.html     隐藏窗口，用来把 DOCX/TXT 排版成页面（图像 / OCR 模式使用）
-  src/
-    App.tsx       界面与状态
-    lib/docx.ts   解析 DOCX（样式、标题、列表编号、表格、图片、文档属性）
-    lib/pdf.ts    解析 PDF（行→段落、标题/列表/表格推断、字体粗斜体）+ 页面渲染
-    lib/txt.ts    解析 TXT（自动识别 UTF-8 / GBK / Big5 / UTF-16 编码）
-    lib/engine.ts 比较引擎：段落对齐 → 相似段落配对 → 词/字级比较 → 格式比较 → 移动检测
-    lib/pages.ts  图像比较（pixelmatch + 差异区域聚类）
-    lib/exportDocx.ts  导出 Word 修订稿 / 最终稿
-    views/        富文本 / 纯文本 / 修订 / 图像 / 文件详情 各视图
-docs/
-  index.html     GitHub Pages 落地页入口（旧 Main.dc.html 自动跳转到这里）
-  assets/        落地页界面截图与图标
-project-docs/   落地页维护说明与历史开发笔记，不参与 Pages 发布
-screenshots/    商店与社交媒体宣传图
-```
-
-## 已知限制
-
-- 不支持旧版 `.doc` 格式，请先在 Word 里另存为 `.docx`。
-- DOCX 在"图像"模式下由本机排版渲染，分页可能与 Word 略有不同。PDF 的排版则是原样呈现。
-- PDF 本身没有段落和标题结构。DocDiff 根据字号、行距和缩进推断这些结构，复杂的多栏排版可能不够准确。
-- 页眉、页脚、批注暂时不参与比较。
-- 导出的 Word 文件里，图片用"[图片]"占位。
-- OCR 识别每页大约需要 3–5 秒。第一次使用时会把语言包解压到用户数据目录（Mac：`~/Library/Application Support/DocDiff/tesscache`；Windows：`%APPDATA%\DocDiff\tesscache`）。
-
-## 反馈与许可
-
-遇到问题？先看[常见问题](https://github.com/evonotevil/DocDiff/issues/1)，或在 [Issues](https://github.com/evonotevil/DocDiff/issues) 里反馈。
-
-[MIT License](LICENSE)
+遇到其他问题，请到 [Issues](https://github.com/evonotevil/DocDiff/issues) 反馈。项目采用 [MIT License](LICENSE)。
