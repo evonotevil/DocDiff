@@ -1,0 +1,11 @@
+{
+  "version": "1.4.3",
+  "pubDate": "2026-09-22",
+  "notes": "修复差异地图遮挡正文、最近比较长文件名显示和 Windows 10 标题栏问题；优化大文档显示性能。",
+  "downloads": {
+    "mac-arm64": "https://github.com/evonotevil/DocDiff/releases/download/v1.4.3/DocDiff-1.4.3-mac-arm64.dmg",
+    "mac-x64": "https://github.com/evonotevil/DocDiff/releases/download/v1.4.3/DocDiff-1.4.3-mac-x64.dmg",
+    "win-exe": "https://github.com/evonotevil/DocDiff/releases/download/v1.4.3/DocDiff-Setup-1.4.3.exe",
+    "page": "https://github.com/evonotevil/DocDiff/releases/latest"
+  }
+}
