@@ -21,9 +21,10 @@ import { ImageView, ImgMode, useImagePages } from './views/ImageView';
 import { DetailsView } from './views/DetailsView';
 import { noteText } from './lib/describe';
 import { useDiff } from './lib/useDiff';
+import { version as appVersion } from '../../package.json';
 
 const api = (window as any).api;
-const APP_VERSION = 'v1.4.3';
+const APP_VERSION = `v${appVersion}`;
 type Side = 0 | 1;
 const sideLabel = (s: Side) => t(s ? '修改后文档' : '原始文档');
 const MODES = [

@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 const executable = process.argv[2];
+const expectedVersion = JSON.parse(fs.readFileSync('package.json')).version;
 assert.ok(executable, 'Pass the packaged executable path');
 const out = path.resolve('release/smoke');
 fs.mkdirSync(out, { recursive: true });
@@ -60,14 +61,18 @@ try {
   await delay(600);
   const text = await evaluate('document.body.innerText');
   assert.ok(text.includes('关于与更新') || text.includes('About'), 'Settings/update UI missing');
+  const displayedVersion = await evaluate('document.querySelector(".upd-ver b")?.innerText');
+  assert.equal(displayedVersion, `DocDiff v${expectedVersion}`, 'Displayed version must match packaged version');
+  await evaluate('document.querySelector(".upd-ver").scrollIntoView({ block: "center" })');
+  await delay(300);
   const settings = await call('Page.captureScreenshot', { format: 'png' });
   fs.writeFileSync(path.join(out, 'settings.png'), Buffer.from(settings.data, 'base64'));
   const update = await evaluate('window.api.checkUpdate()');
-  assert.equal(update.current, JSON.parse(fs.readFileSync('package.json')).version);
+  assert.equal(update.current, expectedVersion);
   assert.ok(['latest', 'new'].includes(update.status), JSON.stringify(update));
   assert.ok(update.url.startsWith('https://github.com/evonotevil/DocDiff/releases/'), JSON.stringify(update));
   assert.ok(!/remote_font_face_source.*NOTREACHED|NOTREACHED.*remote_font_face_source/i.test(log), 'Native font assertion: ' + log);
-  fs.writeFileSync(path.join(out, 'result.json'), JSON.stringify({ platform: process.platform, fonts, update }, null, 2));
+  fs.writeFileSync(path.join(out, 'result.json'), JSON.stringify({ platform: process.platform, displayedVersion, fonts, update }, null, 2));
   console.log('Packaged UI, fonts, settings and live update feed passed:', process.platform);
 } finally {
   socket?.close(); child.kill();
