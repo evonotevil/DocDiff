@@ -15,13 +15,36 @@ export function ChangeMap({ changes, selCid, onSel, dep, bottom = 6 }: { changes
     if (!sc) return;
     const measure = () => {
       const H = sc.scrollHeight || 1;
-      const base = sc.getBoundingClientRect().top - sc.scrollTop;
+      const rowEls = Array.from(sc.querySelectorAll('[data-row]')) as HTMLElement[];
+      const idxOf = new Map<number, number>();
+      rowEls.forEach((el, i) => idxOf.set(Number(el.dataset.row), i));
+
+      // 纯文本 / 修订审阅的行上有 content-visibility: auto。对这类元素取矩形会"逐行"单独触发布局：
+      // 实测 1200 行、516 处差异要 6.5 秒，地图画不出来（刻度数为 0），还把帧拖到 6 秒以上。
+      // 所以差异多的时候改成按行号等距估算 —— 这些视图行高本来就基本一致，而 content-visibility
+      // 估算滚动高度用的也是同一个假设，minimap 的精度完全够。判据只看样式，不做运行时计时：
+      // 第一次测量本身就会把布局烤热，之后再计时恒为 0，探不出来。
+      const sample = rowEls[Math.floor(rowEls.length / 2)];
+      const skipped = !!sample && getComputedStyle(sample).contentVisibility === 'auto';
+      const exact = !skipped || changes.length <= 60;
+
       const out: { id: number; kind: string; top: number; h: number }[] = [];
-      for (const c of changes) {
-        const el = (sc.querySelector(`[data-cid="${c.id}"]`) || sc.querySelector(`[data-row="${c.row}"]`)) as HTMLElement | null;
-        if (!el) continue;
-        const r = el.getBoundingClientRect();
-        out.push({ id: c.id, kind: c.kind, top: ((r.top - base) / H) * 100, h: Math.max(0.4, (r.height / H) * 100) });
+      if (exact) {
+        const base = sc.getBoundingClientRect().top - sc.scrollTop;
+        for (const c of changes) {
+          const el = (sc.querySelector(`[data-cid="${c.id}"]`) || sc.querySelector(`[data-row="${c.row}"]`)) as HTMLElement | null;
+          if (!el) continue;
+          const r = el.getBoundingClientRect();
+          out.push({ id: c.id, kind: c.kind, top: ((r.top - base) / H) * 100, h: Math.max(0.4, (r.height / H) * 100) });
+        }
+      } else {
+        const n = rowEls.length || 1;
+        const h = Math.max(0.4, 100 / n);
+        for (const c of changes) {
+          const i = idxOf.get(c.row);
+          if (i === undefined) continue;                 // 被折叠起来的行不画
+          out.push({ id: c.id, kind: c.kind, top: (i / n) * 100, h });
+        }
       }
       setTicks(out);
       setView({ top: (sc.scrollTop / H) * 100, h: (sc.clientHeight / H) * 100 });

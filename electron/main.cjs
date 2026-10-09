@@ -167,6 +167,72 @@ ipcMain.handle('read-path', async (_e, p) => readDoc(p));
 
 ipcMain.handle('chrome-info', () => ({ chrome: useOverlay ? 'overlay' : 'system', winBuild: isWin ? winBuild() : 0 }));
 
+// ---------- 检查更新（阶段 0：只检查，不下载安装） ----------
+// 为什么不做自动下载安装：electron-builder 官方明确要求 "macOS application must be signed in
+// order for auto updating to work"，而本应用目前未签名；Windows 侧未签名的 exe 也会被企业防火墙
+// 和 SmartScreen 拦在下载那一步。所以这里只做"发现新版本 + 打开下载页"，等证书到位后再接
+// electron-updater（配置方式见 docs/UPDATE.md）。
+const UPDATE_FEED = process.env.DOCDIFF_UPDATE_FEED
+  || (() => { try { return fs.readFileSync(path.join(app.getPath('userData'), 'update-feed.txt'), 'utf8').trim(); } catch { return ''; } })()
+  || 'https://evonotevil.github.io/DocDiff/updates/latest.json';
+
+/** 1.5.0 > 1.4.10：按段比较数字，不做字符串比较 */
+function cmpVer(a, b) {
+  const pa = String(a).split('-')[0].split('.').map((x) => parseInt(x, 10) || 0);
+  const pb = String(b).split('-')[0].split('.').map((x) => parseInt(x, 10) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] || 0) - (pb[i] || 0);
+    if (d) return d > 0 ? 1 : -1;
+  }
+  return 0;
+}
+
+/** 把底层网络错误翻成人话；原始信息留在 raw 里只写日志，不往界面上甩 */
+function netMsg(e) {
+  const m = String((e && (e.cause && e.cause.code)) || (e && e.message) || e);
+  if (e && e.name === 'AbortError') return '连接超时';
+  if (/ENOTFOUND|EAI_AGAIN|getaddrinfo/i.test(m)) return '找不到更新服务器';
+  if (/ECONNREFUSED|ECONNRESET|EPIPE|fetch failed|socket hang up/i.test(m)) return '连不上更新服务器';
+  if (/CERT|SSL|TLS/i.test(m)) return '证书校验没通过';
+  if (/^HTTP 4/.test(m)) return '更新地址不存在';
+  if (/^HTTP 5/.test(m)) return '更新服务器出错了';
+  return '网络不可用';
+}
+
+ipcMain.handle('check-update', async () => {
+  const current = app.getVersion();
+  if (!UPDATE_FEED) return { status: 'off', current };
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), 8000);
+  try {
+    // 只是一个普通的静态 JSON GET，不携带任何文档信息
+    const r = await fetch(UPDATE_FEED, { signal: ac.signal, cache: 'no-store', headers: { Accept: 'application/json' } });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const j = await r.json();
+    const latest = String(j.version || '').trim();
+    if (!latest) throw new Error('feed 里没有 version 字段');
+    const key = isMac ? (process.arch === 'arm64' ? 'mac-arm64' : 'mac-x64') : isWin ? 'win-exe' : 'linux';
+    const url = (j.downloads && (j.downloads[key] || j.downloads.page)) || j.page || '';
+    return {
+      status: cmpVer(latest, current) > 0 ? 'new' : 'latest',
+      current, latest, url,
+      notes: typeof j.notes === 'string' ? j.notes.slice(0, 4000) : '',
+      pubDate: j.pubDate || '',
+      minSupported: j.minSupported || '',
+    };
+  } catch (e) {
+    return { status: 'error', current, error: netMsg(e) };
+  } finally {
+    clearTimeout(timer);
+  }
+});
+
+ipcMain.handle('open-url', (_e, u) => {
+  // 只允许 https，免得这个口子被当成任意协议的跳板
+  if (typeof u === 'string' && /^https:\/\//i.test(u)) { shell.openExternal(u); return true; }
+  return false;
+});
+
 ipcMain.handle('set-lang', (_e, l) => { if (l === 'en' || l === 'zh') { LANG = l; buildMenu(); } });
 
 ipcMain.handle('save-file', async (_e, { defaultName, data, filters }) => {

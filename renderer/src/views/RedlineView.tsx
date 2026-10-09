@@ -4,6 +4,7 @@ import type { DiffResult } from '../lib/engine';
 import { redlinePieces, Decision } from '../lib/exportDocx';
 import { BlockGroup, RTok } from '../components/DocBlock';
 import { useScrollToChange } from './RichView';
+import { fmtText } from '../lib/describe';
 
 const CLS: Record<string, string> = { del: 'r-del', ins: 'r-ins', mdel: 'r-mdel', mins: 'r-mins' };
 
@@ -31,7 +32,7 @@ export function RedlineView({ A, B, res, selCid, onSel, decisions, innerRef }: {
             const toks: RTok[] = rp.pieces.map((p) => {
               let cls = p.mark ? CLS[p.mark] : undefined;
               if (!cls && p.fmt) cls = 'r-fmt';
-              return { tok: { t: p.t, st: p.st, c: p.cell, key: '', ws: false, sep: p.sep, blk: p.blk }, cls, cid: cls ? p.cid : undefined, title: cls === 'r-fmt' ? p.fmt : undefined, style: p.st };
+              return { tok: { t: p.t, st: p.st, c: p.cell, key: '', ws: false, sep: p.sep, blk: p.blk }, cls, cid: cls ? p.cid : undefined, title: cls === 'r-fmt' ? fmtText(p.fmt) : undefined, style: p.st };
             });
             const pend = r.cids.length && dec(r.cids[0]) === undefined;
             const bcls = pend && (r.kind === 'removed') ? 'bdel' : pend && r.kind === 'added' ? 'bins' : pend && r.kind.startsWith('moved') ? 'bmove' : '';

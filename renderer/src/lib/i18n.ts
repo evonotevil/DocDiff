@@ -5,6 +5,7 @@ export type Lang = 'zh' | 'en';
 let LANG: Lang = 'zh';
 export const lang = () => LANG;
 export const isEn = () => LANG === 'en';
+
 export function setLang(l: Lang) {
   LANG = l;
   try { localStorage.setItem('lang', l); } catch {}

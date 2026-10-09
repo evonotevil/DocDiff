@@ -3,6 +3,7 @@ import type { DocModel } from '../lib/model';
 import type { DiffResult, Row } from '../lib/engine';
 import { BlockGroup, RTok } from '../components/DocBlock';
 import { t } from '../lib/i18n';
+import { fmtText, blockTagText, blockNoteText } from '../lib/describe';
 
 function sideToks(r: Row, side: 'a' | 'b'): RTok[] {
   const out: RTok[] = [];
@@ -14,7 +15,7 @@ function sideToks(r: Row, side: 'a' | 'b'): RTok[] {
     if (r.kind === 'modified' || r.kind === 'format' || r.kind === 'equal') {
       if (m.op === -1 && !(m as any).wsOnly) cls = 't-del';
       else if (m.op === 1 && !(m as any).wsOnly) cls = 't-ins';
-      else if (m.fmt) { cls = 't-fmt'; title = m.fmt; }
+      else if (m.fmt) { cls = 't-fmt'; title = fmtText(m.fmt); }
     }
     out.push({ tok: t, cls, cid: m.cid, title, mi });
   });
@@ -244,14 +245,14 @@ export function RichView({ A, B, res, selCid, onSel, hideUnchanged }: { A: DocMo
               <React.Fragment key={v}>
                 <div className={`cell k-${r.kind}${edge}${la ? selRow : ' ph'}`} data-row={v} data-side="a">
                   {spacer('a')}
-                  {la ? <BlockGroup blocks={la} toks={sideToks(r, 'a')} selCid={sc} className={r.blockNote ? 'bnote' : ''} /> : <div className="phline" />}
+                  {la ? <BlockGroup blocks={la} toks={sideToks(r, 'a')} selCid={sc} className={r.blockDesc ? 'bnote' : ''} /> : <div className="phline" />}
                   {moveTag('a')}
                 </div>
                 <div className={`cell k-${r.kind}${edge}${lb ? selRow : ' ph'}`} data-row={v} data-side="b">
                   {spacer('b')}
-                  {lb ? <BlockGroup blocks={lb} toks={sideToks(r, 'b')} selCid={sc} className={r.blockNote ? 'bnote' : ''} /> : <div className="phline" />}
+                  {lb ? <BlockGroup blocks={lb} toks={sideToks(r, 'b')} selCid={sc} className={r.blockDesc ? 'bnote' : ''} /> : <div className="phline" />}
                   {moveTag('b')}
-                  {r.blockNote && <span className="movetag fmt" data-cid={r.blockCid} title={r.blockNote}>{r.blockTag || t('样式变化')}</span>}
+                  {r.blockDesc && <span className="movetag fmt" data-cid={r.blockCid} title={blockNoteText(r.blockDesc)}>{blockTagText(r.blockDesc)}</span>}
                 </div>
               </React.Fragment>
             );

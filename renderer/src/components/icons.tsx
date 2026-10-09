@@ -77,3 +77,5 @@ export const IconChevronLeft = () => <S d={<path d="M10 3L5 8l5 5" />} />;
 export const IconChevronRight = () => <S d={<path d="M6 3l5 5-5 5" />} />;
 export const IconPanelLeft = () => <S d={<><rect x="1.8" y="2.8" width="12.4" height="10.4" rx="1.6" /><path d="M6 2.8v10.4" /></>} />;
 export const IconPanelRight = () => <S d={<><rect x="1.8" y="2.8" width="12.4" height="10.4" rx="1.6" /><path d="M10 2.8v10.4" /></>} />;
+export const IconWarn = () => <S d={<><path d="M8 2.2 1.4 13.8h13.2L8 2.2Z" /><path d="M8 6.4v3.1" /><path d="M8 11.6h.01" /></>} />;
+export const IconDownload = () => <S d={<><path d="M8 2.2v7.3" /><path d="M5 6.8 8 9.8l3-3" /><path d="M2.6 11.4v1.2a1.2 1.2 0 0 0 1.2 1.2h8.4a1.2 1.2 0 0 0 1.2-1.2v-1.2" /></>} />;

@@ -1,0 +1,23 @@
+{
+  "_说明": "阶段 1（应用内下载安装）要往 package.json 的 build 里填的配置。证书到手后把 mac / publish 两段搬过去，细节见 docs/UPDATE.md。放在这里是因为 electron-builder 会校验 build 字段的 schema，多余的键会直接让构建失败。",
+  "mac": {
+    "target": [
+      "dmg",
+      "zip"
+    ],
+    "identity": "Developer ID Application: <NAME> (<TEAMID>)",
+    "hardenedRuntime": true,
+    "gatekeeperAssess": false,
+    "entitlements": "build/entitlements.mac.plist",
+    "notarize": {
+      "teamId": "<TEAMID>"
+    }
+  },
+  "publish": [
+    {
+      "provider": "generic",
+      "url": "https://<你的域名>/updates/${channel}"
+    }
+  ],
+  "_注意": "mac 必须同时产出 zip，否则不会生成 latest-mac.yml，Squirrel.Mac 无法更新。"
+}

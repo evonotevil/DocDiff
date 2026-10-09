@@ -1,7 +1,6 @@
 import { diffArrays } from 'diff';
 import type { Block, Run } from './model';
 import { sameStyle } from './docx';
-import { t, isEn } from './i18n';
 
 export interface DiffOptions {
   ignoreCase: boolean;
@@ -15,12 +14,23 @@ export interface DiffOptions {
 }
 
 export interface Tok { t: string; st: Run; c: number; key: string; ws: boolean; sep?: boolean; psep?: boolean; blk?: number }
-export interface MTok { op: 0 | -1 | 1; a?: Tok; b?: Tok; cid?: number; fmt?: string; move?: boolean }
+/** 与语言无关的样式差异签名，形如 'b+;sz:10>12'，由 describe.ts 翻译成文案 */
+export type FmtSig = string;
+/** 与语言无关的块级差异描述 */
+export type BlockDesc =
+  | { k: 'split'; a: number; b: number }
+  | { k: 'merge'; a: number; b: number }
+  | { k: 'kind'; a: string; b: string }
+  | { k: 'align'; a: string; b: string };
+/** 变更条目的附注描述 */
+export type NoteDesc = BlockDesc | { k: 'move'; n: number } | { k: 'fmt'; sig: FmtSig };
+export interface MTok { op: 0 | -1 | 1; a?: Tok; b?: Tok; cid?: number; fmt?: FmtSig; move?: boolean }
 export type RowKind = 'equal' | 'modified' | 'removed' | 'added' | 'format' | 'moved-from' | 'moved-to';
-export interface Row { kind: RowKind; ai?: number; bi?: number; aList?: number[]; bList?: number[]; merged: MTok[]; cids: number[]; moveRow?: number; blockNote?: string; blockTag?: string; blockCid?: number }
+export interface Row { kind: RowKind; ai?: number; bi?: number; aList?: number[]; bList?: number[]; merged: MTok[]; cids: number[]; moveRow?: number; blockDesc?: BlockDesc; blockCid?: number }
 export type ChangeKind = 'del' | 'ins' | 'mod' | 'fmt' | 'move';
-export interface Change { id: number; kind: ChangeKind; row: number; before: string; after: string; note?: string; row2?: number }
-export interface DiffResult { rows: Row[]; changes: Change[]; stats: Record<ChangeKind, number> }
+export interface Change { id: number; kind: ChangeKind; row: number; before: string; after: string; desc?: NoteDesc; row2?: number }
+export interface Degraded { pairFallback: boolean; mergeOff: boolean; maxRegion: number }
+export interface DiffResult { rows: Row[]; changes: Change[]; stats: Record<ChangeKind, number>; degraded?: Degraded }
 
 const CJK_CHAR = '[\\u2e80-\\u2fff\\u3040-\\u30ff\\u3400-\\u4dbf\\u4e00-\\u9fff\\uf900-\\ufaff\\uac00-\\ud7af\\u3000-\\u303f\\uff00-\\uffef]';
 const WORD_RE = new RegExp(`${CJK_CHAR}|[\\p{L}\\p{N}_]+(?:['’][\\p{L}]+)*|\\s+|[^\\s]`, 'gu');
@@ -89,19 +99,19 @@ function similarity(a: Tok[], b: Tok[]): number {
   return (2 * common) / (na + nb);
 }
 
-const KIND_LABEL = (b: Block) => b.kind === 'h' ? t('标题 {n}', { n: b.level! }) : b.kind === 'li' ? t('列表项') : b.kind === 'tr' ? t('表格行') : t('正文');
+const kindId = (b: Block) => (b.kind === 'h' ? `h${b.level ?? 1}` : b.kind);
 
-export function describeStyle(a: Run, b: Run): string {
+export function styleDiffSig(a: Run, b: Run): FmtSig {
   const d: string[] = [];
-  if (!!a.b !== !!b.b) d.push(t(b.b ? '加粗' : '取消加粗'));
-  if (!!a.i !== !!b.i) d.push(t(b.i ? '倾斜' : '取消倾斜'));
-  if (!!a.u !== !!b.u) d.push(t(b.u ? '下划线' : '取消下划线'));
-  if (!!a.s !== !!b.s) d.push(t(b.s ? '删除线' : '取消删除线'));
-  if ((a.sz || 0) !== (b.sz || 0)) d.push(t('字号 {a} → {b}', { a: a.sz ?? t('默认'), b: b.sz ?? t('默认') }));
-  if ((a.color || '') !== (b.color || '')) d.push(t('颜色 {a} → {b}', { a: a.color || t('默认'), b: b.color || t('默认') }));
-  if ((a.hl || '') !== (b.hl || '')) d.push(b.hl ? t('突出显示 {c}', { c: b.hl }) : t('取消突出显示'));
-  if ((a.font || '') !== (b.font || '')) d.push(t('字体 {a} → {b}', { a: a.font || t('默认'), b: b.font || t('默认') }));
-  return d.join(isEn() ? ', ' : '，');
+  if (!!a.b !== !!b.b) d.push(b.b ? 'b+' : 'b-');
+  if (!!a.i !== !!b.i) d.push(b.i ? 'i+' : 'i-');
+  if (!!a.u !== !!b.u) d.push(b.u ? 'u+' : 'u-');
+  if (!!a.s !== !!b.s) d.push(b.s ? 's+' : 's-');
+  if ((a.sz || 0) !== (b.sz || 0)) d.push(`sz:${a.sz ?? ''}>${b.sz ?? ''}`);
+  if ((a.color || '') !== (b.color || '')) d.push(`color:${a.color || ''}>${b.color || ''}`);
+  if ((a.hl || '') !== (b.hl || '')) d.push(b.hl ? `hl+${b.hl}` : 'hl-');
+  if ((a.font || '') !== (b.font || '')) d.push(`font:${a.font || ''}>${b.font || ''}`);
+  return d.join(';');
 }
 
 function tokDiff(A: Tok[], B: Tok[], o: DiffOptions): MTok[] {
@@ -168,7 +178,7 @@ function fmtEqual(m: MTok[], o: DiffOptions) {
   if (!o.formatting) return;
   for (const x of m) {
     if (x.op === 0 && x.a && x.b && !x.a.sep && !x.a.ws && !sameStyle(x.a.st, x.b.st)) {
-      const d = describeStyle(x.a.st, x.b.st);
+      const d = styleDiffSig(x.a.st, x.b.st);
       if (d) x.fmt = d;
     }
   }
@@ -191,10 +201,15 @@ interface Group { a: number[]; b: number[] }
  * 在一组连续的删除块与新增块之间做保序配对（序列比对 DP）。
  * 除了一段对一段，还允许“一段 ↔ 连续 2~4 段”（段落被拆分或合并，PDF 与 Word 互比时很常见）。
  */
-function pairBlocks(R: number[], Aa: number[], tokA: Tok[][], tokB: Tok[][], merge: boolean): Group[] {
+function pairBlocks(R: number[], Aa: number[], tokA: Tok[][], tokB: Tok[][], merge: boolean, diag?: Degraded): Group[] {
   const n = R.length, m = Aa.length;
   const res: Group[] = [];
+  if (diag && n * m > diag.maxRegion) diag.maxRegion = n * m;
+  // 一段换一段：无条件配对，哪怕相似度很低。整段重写、整段改大小写都该左右对照着看，
+  // 而不是拆成"整段删除 + 整段新增"两行。
+  if (n === 1 && m === 1) return [{ a: [R[0]], b: [Aa[0]] }];
   if (n * m > 40000) {
+    if (diag) diag.pairFallback = true;
     for (let i = 0; i < Math.max(n, m); i++) {
       const a = R[i], b = Aa[i];
       if (a !== undefined && b !== undefined && similarity(tokA[a], tokB[b]) >= 0.3) res.push({ a: [a], b: [b] });
@@ -203,6 +218,7 @@ function pairBlocks(R: number[], Aa: number[], tokA: Tok[][], tokB: Tok[][], mer
     return res;
   }
   const allowMerge = merge && n * m <= 12000;
+  if (diag && merge && !allowMerge) diag.mergeOff = true;
   const K = 4;
   const S: number[][] = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
   const C: (null | [number, number])[][] = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(null));
@@ -253,16 +269,26 @@ function pairBlocks(R: number[], Aa: number[], tokA: Tok[][], tokB: Tok[][], mer
     i -= p; j -= q;
   }
   out.reverse();
-  // 未配对的单独块保持“先删后增”的顺序，便于阅读
+  // 未配对的单独块按“先删后增”输出，便于阅读：把连续的未配对段落里，
+  // 只有左侧的排在只有右侧的前面（原先这里的循环两个分支相同，等于没做排序）
   const merged: Group[] = [];
+  let run: Group[] = [];
+  const flushRun = () => {
+    if (!run.length) return;
+    for (const g of run) if (g.a.length) merged.push(g);
+    for (const g of run) if (!g.a.length) merged.push(g);
+    run = [];
+  };
   for (const g of out) {
-    if (g.a.length && g.b.length) { merged.push(g); continue; }
-    merged.push(g);
+    if (g.a.length && g.b.length) { flushRun(); merged.push(g); }
+    else run.push(g);
   }
+  flushRun();
   return merged;
 }
 
 export function diffDocs(blocksA: Block[], blocksB: Block[], o: DiffOptions): DiffResult {
+  const diag: Degraded = { pairFallback: false, mergeOff: false, maxRegion: 0 };
   const tokA = blocksA.map((b) => tokenize(b, o));
   const tokB = blocksB.map((b) => tokenize(b, o));
   const idxA = blocksA.map((_, i) => i).filter((i) => o.keepEmpty || !isEmptyBlock(tokA[i]));
@@ -276,14 +302,14 @@ export function diffDocs(blocksA: Block[], blocksB: Block[], o: DiffOptions): Di
   let pendR: number[] = [], pendA: number[] = [];
   const flush = () => {
     if (!pendR.length && !pendA.length) return;
-    for (const g of pairBlocks(pendR, pendA, tokA, tokB, !!o.mergeParas)) {
+    for (const g of pairBlocks(pendR, pendA, tokA, tokB, !!o.mergeParas, diag)) {
       if (g.a.length && g.b.length) {
         const merged = tokDiff(joinToks(g.a, tokA), joinToks(g.b, tokB), o);
         fmtEqual(merged, o);
         const row: Row = { kind: 'modified', ai: g.a[0], bi: g.b[0], merged, cids: [] };
         if (g.a.length > 1) row.aList = g.a;
         if (g.b.length > 1) row.bList = g.b;
-        if ((g.a.length > 1 || g.b.length > 1) && o.formatting) { row.blockTag = t(g.a.length > 1 ? '段落合并' : '段落拆分'); row.blockNote = t(g.a.length > 1 ? '段落合并：{a} 段 → {b} 段' : '段落拆分：{a} 段 → {b} 段', { a: g.a.length, b: g.b.length }); }
+        if ((g.a.length > 1 || g.b.length > 1) && o.formatting) row.blockDesc = { k: g.a.length > 1 ? 'merge' : 'split', a: g.a.length, b: g.b.length };
         rows.push(row);
       } else if (g.a.length) rows.push({ kind: 'removed', ai: g.a[0], merged: tokA[g.a[0]].map((t) => ({ op: -1, a: t })), cids: [] });
       else if (g.b.length) rows.push({ kind: 'added', bi: g.b[0], merged: tokB[g.b[0]].map((t) => ({ op: 1, b: t })), cids: [] });
@@ -306,10 +332,10 @@ export function diffDocs(blocksA: Block[], blocksB: Block[], o: DiffOptions): Di
         const row: Row = { kind: 'equal', ai: a, bi: b, merged, cids: [] };
         if (o.formatting) {
           const ba = blocksA[a], bb = blocksB[b];
-          if (ba.kind !== bb.kind || (ba.kind === 'h' && ba.level !== bb.level)) { row.blockNote = t('段落样式：{a} → {b}', { a: KIND_LABEL(ba), b: KIND_LABEL(bb) }); row.blockTag = t('样式变化'); }
-          else if ((ba.align || 'left') !== (bb.align || 'left') && ba.kind !== 'tr') { row.blockNote = t('对齐：{a} → {b}', { a: alignLabel(ba.align), b: alignLabel(bb.align) }); row.blockTag = t('样式变化'); }
+          if (ba.kind !== bb.kind || (ba.kind === 'h' && ba.level !== bb.level)) row.blockDesc = { k: 'kind', a: kindId(ba), b: kindId(bb) };
+          else if ((ba.align || 'left') !== (bb.align || 'left') && ba.kind !== 'tr') row.blockDesc = { k: 'align', a: ba.align || 'left', b: bb.align || 'left' };
         }
-        if (row.blockNote || merged.some((m) => m.fmt)) row.kind = 'format';
+        if (row.blockDesc || merged.some((m) => m.fmt)) row.kind = 'format';
         rows.push(row);
       }
     }
@@ -349,7 +375,7 @@ export function diffDocs(blocksA: Block[], blocksB: Block[], o: DiffOptions): Di
     if (r.kind === 'equal') return;
     if (r.kind === 'moved-to') return; // 与 moved-from 共用编号
     if (r.kind === 'moved-from') {
-      const id = add({ kind: 'move', row: ri, row2: r.moveRow, before: txt(r.merged, 'a'), after: '', note: t('移动到第 {n} 段附近', { n: rows[r.moveRow!].bi! + 1 }) });
+      const id = add({ kind: 'move', row: ri, row2: r.moveRow, before: txt(r.merged, 'a'), after: '', desc: { k: 'move', n: rows[r.moveRow!].bi! + 1 } });
       r.merged.forEach((m) => (m.cid = id)); r.cids.push(id);
       const dst = rows[r.moveRow!]; dst.merged.forEach((m) => (m.cid = id)); dst.cids.push(id);
       return;
@@ -359,8 +385,8 @@ export function diffDocs(blocksA: Block[], blocksB: Block[], o: DiffOptions): Di
       r.merged.forEach((m) => (m.cid = id)); r.cids.push(id);
       return;
     }
-    if (r.blockNote) {
-      const id = add({ kind: 'fmt', row: ri, before: txt(r.merged, 'a').slice(0, 80), after: '', note: r.blockNote });
+    if (r.blockDesc) {
+      const id = add({ kind: 'fmt', row: ri, before: txt(r.merged, 'a').slice(0, 80), after: '', desc: r.blockDesc });
       r.blockCid = id; r.cids.push(id);
     }
     // modified / format：把相邻的非相等 token 聚成一处变更（中间只隔空白也算同一处）
@@ -378,11 +404,11 @@ export function diffDocs(blocksA: Block[], blocksB: Block[], o: DiffOptions): Di
         seg.forEach((m) => (m.cid = id)); r.cids.push(id);
         i = last + 1;
       } else if (ms[i].fmt) {
-        const note = ms[i].fmt!;
+        const sig = ms[i].fmt!;
         let j = i;
-        while (j < ms.length && ms[j].op === 0 && (ms[j].fmt === note || ((ms[j].a?.ws) && ms[j + 1]?.fmt === note))) j++;
+        while (j < ms.length && ms[j].op === 0 && (ms[j].fmt === sig || ((ms[j].a?.ws) && ms[j + 1]?.fmt === sig))) j++;
         const seg = ms.slice(i, j);
-        const id = add({ kind: 'fmt', row: ri, before: txt(seg, 'b'), after: '', note });
+        const id = add({ kind: 'fmt', row: ri, before: txt(seg, 'b'), after: '', desc: { k: 'fmt', sig } });
         seg.forEach((m) => { if (m.fmt || m.a?.ws) m.cid = id; });
         r.cids.push(id);
         i = j;
@@ -390,12 +416,12 @@ export function diffDocs(blocksA: Block[], blocksB: Block[], o: DiffOptions): Di
     }
     if (r.kind === 'format' && !r.cids.length) r.kind = 'equal';
     if (r.kind === 'modified' && !r.cids.length) r.kind = 'equal';
-    if (r.kind === 'modified' && r.blockNote && r.cids.length === 1 && r.blockCid === r.cids[0]) r.kind = 'format';
+    if (r.kind === 'modified' && r.blockDesc && r.cids.length === 1 && r.blockCid === r.cids[0]) r.kind = 'format';
   });
-  return { rows, changes, stats };
+  const res: DiffResult = { rows, changes, stats };
+  if (diag.pairFallback || diag.mergeOff) res.degraded = diag;
+  return res;
 }
-
-function alignLabel(a?: string) { return t(a === 'center' ? '居中' : a === 'right' ? '右对齐' : a === 'justify' ? '两端对齐' : '左对齐'); }
 
 /** 纯文本模式：每行一个块，不带样式 */
 export function linesToBlocks(text: string): Block[] {

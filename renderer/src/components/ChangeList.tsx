@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import type { Change } from '../lib/engine';
 import { t } from '../lib/i18n';
+import { noteText } from '../lib/describe';
 
 const KINDS: Record<string, string> = { del: '删除', ins: '新增', mod: '修改', fmt: '格式', move: '移动' };
 export const KIND_LABEL = new Proxy({} as Record<string, string>, { get: (_, k: string) => t(KINDS[k] || k) });
@@ -23,7 +24,7 @@ export function ChangeList({ changes, sel, onSel, decisions }: { changes: Change
               {decisions?.[c.id] && <span className={`dec ${decisions[c.id]}`}>{decisions[c.id] === 'a' ? `✓ ${t('已接受')}` : `✕ ${t('已拒绝')}`}</span>}
             </span>
             <span className="txt">
-              {c.kind === 'fmt' ? (<>{short(c.before) || t('（段落）')}<em>{c.note}</em></>) :
+              {c.kind === 'fmt' ? (<>{short(c.before) || t('（段落）')}<em>{noteText(c)}</em></>) :
                c.kind === 'move' ? (<>{short(c.before)}<em>{t('整段换了位置')}</em></>) :
                c.kind === 'mod' ? (<><del>{short(c.before, 50)}</del><span className="arrow">→</span><ins>{short(c.after, 50)}</ins></>) :
                c.kind === 'del' ? <del>{short(c.before)}</del> : <ins>{short(c.after)}</ins>}
@@ -52,7 +53,7 @@ export function changesMarkdown(changes: Change[], a: string, b: string, stats: 
   ];
   changes.forEach((c, i) => {
     const q = (s: string) => `“${short(s, 200)}”`;
-    const body = c.kind === 'mod' ? `${q(c.before)} → ${q(c.after)}` : c.kind === 'del' ? q(c.before) : c.kind === 'ins' ? q(c.after) : c.kind === 'fmt' ? `${q(c.before)}（${c.note}）` : `${q(c.before)}（${t('整段移动')}）`;
+    const body = c.kind === 'mod' ? `${q(c.before)} → ${q(c.after)}` : c.kind === 'del' ? q(c.before) : c.kind === 'ins' ? q(c.after) : c.kind === 'fmt' ? `${q(c.before)}（${noteText(c)}）` : `${q(c.before)}（${t('整段移动')}）`;
     lines.push(`${i + 1}. **${KIND_LABEL[c.kind]}**：${body}`);
   });
   return lines.join('\n');

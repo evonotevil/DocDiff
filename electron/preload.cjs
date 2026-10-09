@@ -33,6 +33,8 @@ contextBridge.exposeInMainWorld('api', {
   onOcrProgress: (cb) => { const h = (_e, d) => cb(d); ipcRenderer.on('ocr-progress', h); return () => ipcRenderer.removeListener('ocr-progress', h); },
   onMenu: (cb) => { const h = (_e, ...a) => cb(...a); ipcRenderer.on('menu', h); return () => ipcRenderer.removeListener('menu', h); },
   onOpenPath: (cb) => { const h = (_e, p) => cb(p); ipcRenderer.on('open-path', h); return () => ipcRenderer.removeListener('open-path', h); },
+  checkUpdate: () => ipcRenderer.invoke('check-update'),
+  openUrl: (u) => ipcRenderer.invoke('open-url', u),
   // 渲染窗口专用
   onRenderJob: (cb) => ipcRenderer.on('render-job', (_e, job) => cb(job)),
   renderDone: (info) => ipcRenderer.send('render-done', info),

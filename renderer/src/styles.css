@@ -7,6 +7,7 @@
   --feather: #58cc02;       /* 主绿 */
   --feather-dark: #58a700;
   --feather-light: #d7ffb8;
+  --bee-light: #fff4cc;
   --mask: #89e219;
   --macaw: #1cb0f6;         /* 蓝 */
   --macaw-dark: #1899d6;
@@ -80,6 +81,7 @@
   --macaw-light: #1b3440;
   --macaw-border: #3f85a7;
   --feather-light: #26391a;
+  --bee-light: #3a2f12;
   --cardinal-light: #3c2226;
   --fg-ins: #adf0dd;
   --fg-del: #fbd3cb;
@@ -597,3 +599,44 @@ select.sel { height: 34px; border-radius: 10px; border: 2px solid var(--border);
 .recent-item .x { opacity: .55; }
 .recent-item:hover .x { opacity: 1; }
 .recent h2 .grow { flex: 1; }
+
+/* ---- 算法降级提示：告诉用户这次的段落对齐是粗配的 ---- */
+.degraded {
+  display: flex; align-items: flex-start; gap: 10px;
+  margin: 10px 14px 0 14px; padding: 10px 12px;
+  background: var(--bee-light); color: var(--text);
+  border: 2px solid var(--bee); border-radius: var(--radius-sm);
+}
+.degraded > svg { flex: 0 0 auto; margin-top: 2px; color: var(--fox) }
+.degraded > div { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px }
+.degraded b { font-weight: 800; font-size: 13px }
+.degraded span { font-size: 12.5px; color: var(--text-2) }
+.degraded > button { flex: 0 0 auto }
+[data-theme='dark'] .degraded { border-color: #7a6410 }
+
+/* 不知道还要多久的时候，用不停滑动的条，而不是假装有百分比 */
+.progress.indeterminate { overflow: hidden }
+.progress.indeterminate > div {
+  width: 40%; border-radius: inherit;
+  animation: slide 1.1s cubic-bezier(.4, 0, .6, 1) infinite;
+}
+@keyframes slide { 0% { transform: translateX(-110%) } 100% { transform: translateX(260%) } }
+@media (prefers-reduced-motion: reduce) { .progress.indeterminate > div { animation: none; width: 100%; opacity: .5 } }
+
+/* ---- 关于与更新 ---- */
+.upd { display: flex; flex-direction: column; gap: 10px }
+.upd-row { display: flex; align-items: center; gap: 12px }
+.upd-ver { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px }
+.upd-ver b { font: 800 14px var(--round); color: var(--title) }
+.upd-ver span { font-size: 12.5px; color: var(--text-2) }
+.upd-new { border: 2px solid var(--feather); background: var(--feather-light); border-radius: var(--radius-sm); padding: 12px }
+.upd-notes { font-size: 13px; color: var(--text); white-space: pre-wrap; max-height: 140px; overflow: auto; margin-bottom: 10px }
+.upd-acts { display: flex; gap: 8px; flex-wrap: wrap }
+.upd-hint { font-size: 12px; color: var(--text-2); margin-top: 8px }
+/* 有新版本时齿轮上的小红点 */
+.has-dot { position: relative }
+.has-dot::after {
+  content: ''; position: absolute; top: 4px; right: 4px; width: 8px; height: 8px;
+  border-radius: 999px; background: var(--cardinal); box-shadow: 0 0 0 2px var(--bg);
+}
+.nav-item.has-dot::after { top: 8px; right: 8px }

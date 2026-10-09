@@ -1,8 +1,8 @@
 {
   "name": "docdiff",
   "productName": "DocDiff",
-  "version": "1.4.3",
-  "description": "DocDiff — 本地离线文档比对（Word / PDF / TXT）",
+  "version": "1.5.0",
+  "description": "DocDiff \u2014 \u672c\u5730\u79bb\u7ebf\u6587\u6863\u6bd4\u5bf9\uff08Word / PDF / TXT\uff09",
   "main": "electron/main.cjs",
   "private": true,
   "scripts": {
@@ -12,7 +12,8 @@
     "dist": "vite build && electron-builder --mac --arm64 --x64",
     "dist:arm64": "vite build && electron-builder --mac --arm64",
     "dist:x64": "vite build && electron-builder --mac --x64",
-    "dist:win": "vite build && electron-builder --win"
+    "dist:win": "vite build && electron-builder --win",
+    "test": "node scripts/test-engine.mjs"
   },
   "devDependencies": {
     "@fontsource/noto-sans-sc": "^5.3.0",
@@ -36,7 +37,6 @@
     "tesseract.js": "^5.1.1"
   },
   "author": "DocDiff",
-  "license": "MIT",
   "engines": {
     "node": ">=18"
   },
@@ -113,7 +113,7 @@
       "en",
       "en_GB"
     ],
-    "copyright": "© 2026 DocDiff",
+    "copyright": "\u00a9 2026 DocDiff",
     "win": {
       "target": [
         {
@@ -147,5 +147,6 @@
       "runAfterFinish": true
     },
     "publish": null
-  }
+  },
+  "license": "MIT"
 }

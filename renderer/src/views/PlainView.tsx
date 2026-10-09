@@ -4,15 +4,31 @@ import type { DiffResult, Row } from '../lib/engine';
 import { useScrollToChange } from './RichView';
 import { t } from '../lib/i18n';
 
+// 把相邻的「同类」token 合成一个 span。1.4.3 只给富文本视图做了这件事（DocBlock.coalesce），
+// 纯文本 / OCR 视图漏了，1200 行的文档会生成约 15 万个 span，首屏要 30 秒以上。
 function toks(r: Row, side: 'a' | 'b', selCid: number | null, highlight: boolean) {
-  return r.merged.map((m, k) => {
-    const t = m[side];
-    if (!t || t.sep) return t?.sep ? <span key={k}>{'\t'}</span> : null;
+  const out: React.ReactNode[] = [];
+  let buf = '', bufCls: string | undefined, bufCid: number | undefined, key = 0;
+  const flush = () => {
+    if (!buf) return;
+    out.push(<span key={key++} className={bufCls} data-cid={bufCid}>{buf}</span>);
+    buf = '';
+  };
+  for (const m of r.merged) {
+    const tk = m[side];
+    if (!tk) continue;
+    if (tk.sep) { flush(); out.push(<span key={key++}>{'\t'}</span>); continue; }
     let cls = '';
     if (highlight && !(m as any).wsOnly) cls = m.op === -1 ? 't-del' : m.op === 1 ? 't-ins' : '';
     if (m.cid !== undefined && m.cid === selCid && m.op !== 0) cls += ' sel-cid';
-    return <span key={k} className={cls || undefined} data-cid={m.op !== 0 ? m.cid : undefined}>{t.t}</span>;
-  });
+    const cl = cls || undefined;
+    const cid = m.op !== 0 ? m.cid : undefined;
+    if (buf && cl === bufCls && cid === bufCid) { buf += tk.t; continue; }
+    flush();
+    bufCls = cl; bufCid = cid; buf = tk.t;
+  }
+  flush();
+  return out;
 }
 
 export function PlainView({ A, B, res, selCid, onSel, layout, wrap, hideUnchanged, context = 3 }: {
