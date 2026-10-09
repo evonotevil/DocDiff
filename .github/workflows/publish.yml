@@ -1,0 +1,69 @@
+name: Prepare release draft
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Successful Build release run ID
+        required: true
+        type: string
+      tag:
+        description: Existing release tag
+        required: true
+        type: string
+permissions:
+  contents: write
+  actions: read
+jobs:
+  draft:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Validate source and download verified packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.run_id }}
+          TAG: ${{ inputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RUN_ID" =~ ^[0-9]+$ ]]
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          gh run view "$RUN_ID" --json name,conclusion,headSha > run.json
+          node -e 'const r=require("./run.json");if(r.name!=="Build release"||r.conclusion!=="success")process.exit(1)'
+          BUILD_SHA=$(node -p 'require("./run.json").headSha')
+          git rev-parse --verify "refs/tags/$TAG"
+          git diff --name-only "$BUILD_SHA" "$TAG" > changes.txt
+          if grep -Ev '^(README\.md|docs/)' changes.txt; then
+            echo 'Release code differs from tested build'; exit 1
+          fi
+          VERSION=$(git show "$TAG:package.json" | node -e 'let s="";process.stdin.on("data",b=>s+=b);process.stdin.on("end",()=>console.log(JSON.parse(s).version))')
+          [[ "$TAG" == "v$VERSION" ]]
+          gh run download "$RUN_ID" --pattern 'release-*' --dir packages
+          mkdir upload
+          find packages -type f \( -name '*.dmg' -o -name '*.exe' -o -name '*.zip' \) -exec cp {} upload/ \;
+          [[ $(find upload -type f | wc -l) -eq 4 ]]
+          for file in "DocDiff-$VERSION-mac-arm64.dmg" "DocDiff-$VERSION-mac-x64.dmg" "DocDiff-Setup-$VERSION.exe" "DocDiff-$VERSION-win-x64.zip"; do
+            test -s "upload/$file"
+          done
+          (cd upload && sha256sum *.dmg *.exe *.zip > SHA256SUMS.txt)
+      - name: Create release draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git show "$TAG:docs/CHANGELOG-${TAG#v}.md" > notes.md
+          cat >> notes.md <<'NOTES'
+
+          ## 下载与安装
+
+          提供 Apple 芯片 Mac、Intel Mac、Windows 安装版和免安装版，下载后可用 SHA256SUMS.txt 核验。
+          覆盖安装保留设置和最近比较记录。
+
+          Mac 包暂未进行 Developer ID 签名和公证，首次运行可能受 Gatekeeper 拦截，请参阅 README 的首次运行说明。Windows 包也暂未进行代码签名。
+          当前更新功能是检查版本并打开下载页，尚不支持应用内自动安装。
+          NOTES
+          gh release create "$TAG" --verify-tag --draft --title "DocDiff $TAG" --notes-file notes.md upload/*
