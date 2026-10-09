@@ -22,16 +22,16 @@
 
 ## 下载与安装
 
-当前版本：**v1.4.3**。支持 macOS 11 及以上、Windows 10 / 11（64 位）。
+当前版本：**v1.5.0**。支持 macOS 11 及以上、Windows 10 / 11（64 位）。
 
 | 你的电脑 | 下载文件 | 安装方式 |
 |---|---|---|
-| Mac，Apple 芯片 | [mac-arm64.dmg](https://github.com/evonotevil/DocDiff/releases/download/v1.4.3/DocDiff-1.4.3-mac-arm64.dmg) | 打开镜像，将 DocDiff 拖入“应用程序” |
-| Mac，Intel 芯片 | [mac-x64.dmg](https://github.com/evonotevil/DocDiff/releases/download/v1.4.3/DocDiff-1.4.3-mac-x64.dmg) | 同上 |
-| Windows 安装版 | [DocDiff-Setup-1.4.3.exe](https://github.com/evonotevil/DocDiff/releases/download/v1.4.3/DocDiff-Setup-1.4.3.exe) | 双击安装，可选择安装位置 |
-| Windows 免安装版 | [DocDiff-1.4.3-win-x64.zip](https://github.com/evonotevil/DocDiff/releases/download/v1.4.3/DocDiff-1.4.3-win-x64.zip) | 解压后运行 `DocDiff.exe` |
+| Mac，Apple 芯片 | [mac-arm64.dmg](https://github.com/evonotevil/DocDiff/releases/download/v1.5.0/DocDiff-1.5.0-mac-arm64.dmg) | 打开镜像，将 DocDiff 拖入“应用程序” |
+| Mac，Intel 芯片 | [mac-x64.dmg](https://github.com/evonotevil/DocDiff/releases/download/v1.5.0/DocDiff-1.5.0-mac-x64.dmg) | 同上 |
+| Windows 安装版 | [DocDiff-Setup-1.5.0.exe](https://github.com/evonotevil/DocDiff/releases/download/v1.5.0/DocDiff-Setup-1.5.0.exe) | 双击安装，可选择安装位置 |
+| Windows 免安装版 | [DocDiff-1.5.0-win-x64.zip](https://github.com/evonotevil/DocDiff/releases/download/v1.5.0/DocDiff-1.5.0-win-x64.zip) | 解压后运行 `DocDiff.exe` |
 
-不确定 Mac 的芯片类型？点屏幕左上角苹果菜单，选择“关于本机”查看。下载文件无法打开或提示损坏时，先从 [Release 页面](https://github.com/evonotevil/DocDiff/releases/tag/v1.4.3)重新下载，并用该版本的 `SHA256SUMS.txt` 核对文件。
+不确定 Mac 的芯片类型？点屏幕左上角苹果菜单，选择“关于本机”查看。下载文件无法打开或提示损坏时，先从 [Release 页面](https://github.com/evonotevil/DocDiff/releases/tag/v1.5.0)重新下载，并用该版本的 `SHA256SUMS.txt` 核对文件。
 
 ## 三步开始比较
 
@@ -58,11 +58,11 @@ DOCX、PDF、TXT 可以任意组合。比较时可设置忽略空白、忽略全
 - **处理修订：** 按 `A` 接受、`R` 拒绝、`U` 撤销最近一次决定。全部处理后可导出文档。
 - **继续工作：** Word 文件修改并保存后，点击应用内的“重新比较”；“最近比较”可重新打开之前的文件组合。
 - **分享结果：** 点击“复制摘要”，将变更整理成 Markdown，粘贴到邮件、聊天或文档中。
-- **调整界面：** 左右侧边栏可以折叠；在“设置”中切换中文 / English、浅色 / 深色界面，并查看全部快捷键。
+- **调整界面：** 左右侧边栏可以折叠；在“设置”中切换中文 / English、浅色 / 深色界面，并查看全部快捷键。设置中的“关于与更新”可检查新版本、查看更新日志并打开下载页。
 
 ## 常见问题
 
-**文件会上传吗？** 不会。文档比对和 OCR 都在本机完成。下载应用和访问 GitHub 页面需要网络，使用已安装的应用比较文档不需要。
+**文件会上传吗？** 不会。文档比对和 OCR 都在本机完成。下载应用和访问 GitHub 页面需要网络，使用已安装的应用比较文档不需要。启动时默认检查更新，仅请求公开的版本 JSON，不携带文档内容、文件名或路径；可在设置中关闭自动检查。
 
 **支持旧版 `.doc` 吗？** 暂不支持。请先在 Word 中另存为 `.docx`。
 

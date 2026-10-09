@@ -25,14 +25,14 @@ DocDiff 的更新分两个阶段。1.5.0 实现了阶段 0，阶段 1 的前提�
 
 ```json
 {
-  "version": "1.6.0",
-  "pubDate": "2026-11-02",
-  "notes": "· 修复了 Windows 下折叠卡顿\n· 纯文本模式大文档快了 40 倍",
+  "version": "1.5.0",
+  "pubDate": "2026-10-09",
+  "notes": "· 应用内检查更新（设置 ›「关于与更新」）\n· 纯文本 / OCR 视图首次进入从 34.6 秒降到 1.7 秒\n· 差异地图在纯文本 / 修订审阅模式下恢复显示\n· 大文档比对改为后台进行，可取消\n· 两份文档差异过大时，明确提示段落对齐已简化\n· 一段换一段时左右配对，不再拆成删除 + 新增",
   "downloads": {
-    "mac-arm64": "https://.../DocDiff-1.6.0-mac-arm64.dmg",
-    "mac-x64":   "https://.../DocDiff-1.6.0-mac-x64.dmg",
-    "win-exe":   "https://.../DocDiff-Setup-1.6.0.exe",
-    "page":      "https://.../download"
+    "mac-arm64": "https://github.com/evonotevil/DocDiff/releases/download/v1.5.0/DocDiff-1.5.0-mac-arm64.dmg",
+    "mac-x64": "https://github.com/evonotevil/DocDiff/releases/download/v1.5.0/DocDiff-1.5.0-mac-x64.dmg",
+    "win-exe": "https://github.com/evonotevil/DocDiff/releases/download/v1.5.0/DocDiff-Setup-1.5.0.exe",
+    "page": "https://github.com/evonotevil/DocDiff/releases/tag/v1.5.0"
   }
 }
 ```
