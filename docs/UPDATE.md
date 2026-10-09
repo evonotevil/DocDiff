@@ -1,10 +1,10 @@
 # 更新机制
 
-DocDiff 的更新分两个阶段。1.5.0 实现了阶段 0，阶段 1 的前提是代码签名。
+DocDiff 的更新分两个阶段。1.5.1 实现了阶段 0，阶段 1 的前提是代码签名。
 
 ---
 
-## 阶段 0（1.5.0 已实现）：只检查，不安装
+## 阶段 0（1.5.1 已实现）：只检查，不安装
 
 应用向一个静态 JSON 发一次普通 GET，比较版本号，发现新版就在设置里显示更新日志，
 点「打开下载页」用系统浏览器去下载。**不需要任何证书。**
@@ -25,19 +25,19 @@ DocDiff 的更新分两个阶段。1.5.0 实现了阶段 0，阶段 1 的前提�
 
 ```json
 {
-  "version": "1.5.0",
+  "version": "1.5.1",
   "pubDate": "2026-10-09",
   "notes": "· 应用内检查更新（设置 ›「关于与更新」）\n· 纯文本 / OCR 视图首次进入从 34.6 秒降到 1.7 秒\n· 差异地图在纯文本 / 修订审阅模式下恢复显示\n· 大文档比对改为后台进行，可取消\n· 两份文档差异过大时，明确提示段落对齐已简化\n· 一段换一段时左右配对，不再拆成删除 + 新增",
   "downloads": {
-    "mac-arm64": "https://github.com/evonotevil/DocDiff/releases/download/v1.5.0/DocDiff-1.5.0-mac-arm64.dmg",
-    "mac-x64": "https://github.com/evonotevil/DocDiff/releases/download/v1.5.0/DocDiff-1.5.0-mac-x64.dmg",
-    "win-exe": "https://github.com/evonotevil/DocDiff/releases/download/v1.5.0/DocDiff-Setup-1.5.0.exe",
-    "page": "https://github.com/evonotevil/DocDiff/releases/tag/v1.5.0"
+    "mac-arm64": "https://github.com/evonotevil/DocDiff/releases/download/v1.5.1/DocDiff-1.5.1-mac-arm64.dmg",
+    "mac-x64": "https://github.com/evonotevil/DocDiff/releases/download/v1.5.1/DocDiff-1.5.1-mac-x64.dmg",
+    "win-exe": "https://github.com/evonotevil/DocDiff/releases/download/v1.5.1/DocDiff-Setup-1.5.1.exe",
+    "page": "https://github.com/evonotevil/DocDiff/releases/tag/v1.5.1"
   }
 }
 ```
 
-- `version` 必填，按点分段比较数字（所以 `1.5.0` > `1.4.10`，不是字符串比较）。
+- `version` 必填，按点分段比较数字（所以 `1.5.1` > `1.4.10`，不是字符串比较）。
 - `notes` 原样显示，支持换行，超过 4000 字会被截断。
 - `downloads` 按当前平台取 `mac-arm64` / `mac-x64` / `win-exe`，取不到就退回 `page`。
 - 下载链接**必须是 https**：`open-url` 这个 IPC 只放行 https，免得被当成任意协议的跳板。
