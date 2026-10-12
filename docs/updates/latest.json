@@ -1,11 +1,11 @@
 {
-  "version": "1.6.0",
+  "version": "1.6.1",
   "pubDate": "2026-10-12",
-  "notes": "· 审阅记录自动保存，新增待议、备注和审阅人署名\n· 导出带批注的 Word 修订稿、定稿和 PDF 比对报告\n· 离线识别金额、日期及关键词变化\n· 页眉、页脚和脚注参与比较\n· 条款分组、差异筛选和滚动条差异地图\n· 改进窄窗口布局、分组设置及键盘操作",
+  "notes": "· 右栏面板可独立折叠、专注查看单个面板，并记住展开状态。\n· 变更列表自动利用剩余空间，长列表浏览更方便。\n· 优化差异颜色与差异地图，让修改类型和当前位置更清晰。\n· 纯文本和 PDF 精确突出修改词，减少整行高亮干扰。\n· 统一按钮、标签和提示样式，PDF 比对报告配色与界面保持一致。",
   "downloads": {
-    "mac-arm64": "https://github.com/evonotevil/DocDiff/releases/download/v1.6.0/DocDiff-1.6.0-mac-arm64.dmg",
-    "mac-x64": "https://github.com/evonotevil/DocDiff/releases/download/v1.6.0/DocDiff-1.6.0-mac-x64.dmg",
-    "win-exe": "https://github.com/evonotevil/DocDiff/releases/download/v1.6.0/DocDiff-Setup-1.6.0.exe",
-    "page": "https://github.com/evonotevil/DocDiff/releases/tag/v1.6.0"
+    "mac-arm64": "https://github.com/evonotevil/DocDiff/releases/download/v1.6.1/DocDiff-1.6.1-mac-arm64.dmg",
+    "mac-x64": "https://github.com/evonotevil/DocDiff/releases/download/v1.6.1/DocDiff-1.6.1-mac-x64.dmg",
+    "win-exe": "https://github.com/evonotevil/DocDiff/releases/download/v1.6.1/DocDiff-Setup-1.6.1.exe",
+    "page": "https://github.com/evonotevil/DocDiff/releases/tag/v1.6.1"
   }
 }
