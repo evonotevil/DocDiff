@@ -1,11 +1,11 @@
 {
-  "version": "1.6.1",
+  "version": "1.6.2",
   "pubDate": "2026-10-12",
-  "notes": "· 右栏面板可独立折叠、专注查看单个面板，并记住展开状态。\n· 变更列表自动利用剩余空间，长列表浏览更方便。\n· 优化差异颜色与差异地图，让修改类型和当前位置更清晰。\n· 纯文本和 PDF 精确突出修改词，减少整行高亮干扰。\n· 统一按钮、标签和提示样式，PDF 比对报告配色与界面保持一致。",
+  "notes": "· 恢复明快配色与立体按钮，各比较模式用不同颜色区分。\n· 首页新增状态提示，最近比较显示审阅进度。\n· 优化差异颜色、概览和变更列表，PDF 报告同步使用新配色。\n· 调整右栏面板高度，保留折叠、专注查看和展开状态记忆。\n· 增强审阅操作与完成反馈，支持系统“减少动态效果”设置。",
   "downloads": {
-    "mac-arm64": "https://github.com/evonotevil/DocDiff/releases/download/v1.6.1/DocDiff-1.6.1-mac-arm64.dmg",
-    "mac-x64": "https://github.com/evonotevil/DocDiff/releases/download/v1.6.1/DocDiff-1.6.1-mac-x64.dmg",
-    "win-exe": "https://github.com/evonotevil/DocDiff/releases/download/v1.6.1/DocDiff-Setup-1.6.1.exe",
-    "page": "https://github.com/evonotevil/DocDiff/releases/tag/v1.6.1"
+    "mac-arm64": "https://github.com/evonotevil/DocDiff/releases/download/v1.6.2/DocDiff-1.6.2-mac-arm64.dmg",
+    "mac-x64": "https://github.com/evonotevil/DocDiff/releases/download/v1.6.2/DocDiff-1.6.2-mac-x64.dmg",
+    "win-exe": "https://github.com/evonotevil/DocDiff/releases/download/v1.6.2/DocDiff-Setup-1.6.2.exe",
+    "page": "https://github.com/evonotevil/DocDiff/releases/tag/v1.6.2"
   }
 }
