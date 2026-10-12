@@ -16,7 +16,17 @@ await esbuild.build({
   outfile: out, logLevel: 'warning',
 });
 const E = await import(path.toFileURL ? path.toFileURL(out).href : 'file://' + out);
-const { diffDocs, tokenize, linesToBlocks } = E;
+const { diffDocs, diffDocsSec, tokenize, linesToBlocks } = E;
+// 1.6：条款锚点、风险摘要、决定指纹、区段、页码识别
+const out2 = path.join(root, '.cache', 'insight.test.mjs');
+await esbuild.build({
+  entryPoints: [path.join(root, 'renderer/src/lib/insight.ts')],
+  bundle: true, format: 'esm', platform: 'node', target: 'node20', outfile: out2, logLevel: 'warning',
+});
+const I = await import('file://' + out2);
+const out3 = path.join(root, '.cache', 'model.test.mjs');
+await esbuild.build({ entryPoints: [path.join(root, 'renderer/src/lib/model.ts')], bundle: true, format: 'esm', platform: 'node', target: 'node20', outfile: out3, logLevel: 'warning' });
+const M = await import('file://' + out3);
 
 // ---------- 构造块的小工具 ----------
 const O = (x = {}) => ({
@@ -289,4 +299,122 @@ test('样式签名能稳定地分组相同的格式变化', () => {
   const sigs = [...new Set(r.rows[0].merged.map((m) => m.fmt).filter(Boolean))];
   assert.deepEqual(sigs, ['b+'], '同一种格式变化应当是同一个签名');
   assert.equal(r.stats.fmt, 1, '相邻的同种格式变化应当合成一处');
+});
+
+
+// =================== 1.6 ===================
+const sec = (b, s) => ({ ...b, sec: s });
+const contractA = [
+  h('软件服务协议'),
+  p('本协议由甲方：星河科技有限公司与乙方：北辰数据服务有限公司于 2026 年 3 月 1 日签订。'),
+  h('第一条 服务内容', 2),
+  p('乙方提供技术支持服务，服务期限为十二个月。'),
+  h('第二条 费用与支付', 2),
+  p('服务总费用为人民币 120,000 元，甲方应在合同签订后 30 日内支付首期款项。'),
+  tr('首期', '50%', '60,000'),
+  h('第四条 违约责任', 2),
+  p('违约金为合同总价的 10%。'),
+  h('第五条 协议解除', 2),
+  p('在收到书面通知后 15 日内未纠正的，另一方有权解除本协议。'),
+  p('本协议见第 3 条的约定。'),
+];
+const contractB = [
+  h('软件服务协议（修订版）'),
+  p('本协议由甲方：星河科技有限公司与乙方：北辰数据服务有限公司于 2026 年 4 月 1 日签订。'),
+  h('第一条 服务内容', 2),
+  p('乙方提供技术支持服务，服务期限为二十四个月。'),
+  h('第二条 费用与支付', 2),
+  p('服务总费用为人民币 198,000 元，甲方应在合同签订后 15 日内支付首期款项。'),
+  tr('首期', '50%', '99,000'),
+  h('第四条 违约责任', 2),
+  p('违约金为合同总价的 20%。'),
+  p('乙方的累计赔偿责任上限为已支付费用的总额。'),
+  h('第五条 协议解除', 2),
+  p('在收到书面通知后 10 日内未纠正的，另一方有权解除本协议。'),
+  p('本协议见第 5 条的约定。'),
+];
+const RISK_O = { money: true, date: true, keywords: I.DEFAULT_KEYWORDS };
+
+test('中文数字解析', () => {
+  assert.equal(I.parseZhNumber('十二'), 12);
+  assert.equal(I.parseZhNumber('二十四'), 24);
+  assert.equal(I.parseZhNumber('一百二十'), 120);
+  assert.equal(I.parseZhNumber('三万五千'), 35000);
+  assert.equal(I.parseZhNumber('两'), 2);
+  assert.equal(I.parseZhNumber('abc'), null);
+});
+
+test('条款锚点：变更挂到所在条款，文档标题不算条款', () => {
+  const r = diffDocs(contractA, contractB, O());
+  const cm = I.clauseMap(r, contractA, contractB);
+  const find = (s) => r.changes.find((c) => c.after.includes(s) || c.before.includes(s));
+  assert.equal(cm.get(find('二十四').id), '第一条 服务内容');
+  assert.equal(cm.get(find('198').id), '第二条 费用与支付');
+  assert.equal(cm.get(find('99').id), '第二条 费用与支付', '表格行跟随前面的条款');
+  assert.equal(cm.get(find('4').id), null, '标题之前的内容属于文档开头');
+});
+
+test('风险摘要：金额、比例、日期、期限、关键词，忽略条款编号', () => {
+  const r = diffDocs(contractA, contractB, O());
+  const risks = I.detectRisks(r, I.clauseMap(r, contractA, contractB), RISK_O);
+  const by = (s) => { const c = r.changes.find((x) => x.after.trim() === s) || r.changes.find((x) => x.after.includes(s)); return risks.find((k) => k.cid === c.id); };
+  const money = by('198');
+  assert.equal(money.cat, 'money');
+  assert.equal(money.detail.a, 120000); assert.equal(money.detail.b, 198000);
+  assert.equal(money.detail.unit, '元');
+  assert.ok(Math.abs(money.detail.pct - 0.65) < 1e-9);
+  assert.equal(by('20').detail.k, 'percent');
+  assert.deepEqual(by('20').kw, ['违约'], '违约责任条款里的比例变化同时命中关键词');
+  const date = by('4');
+  assert.equal(date.cat, 'date'); assert.equal(date.detail.months, 1);
+  const term = by('二十四');
+  assert.equal(term.cat, 'term'); assert.equal(term.detail.a, 12); assert.equal(term.detail.b, 24); assert.equal(term.detail.unit, '个月');
+  const pay = by('15');
+  assert.equal(pay.cat, 'term'); assert.equal(pay.detail.b - pay.detail.a, -15);
+  assert.equal(by('99').cat, 'money', '表格里没有单位，但在费用条款里');
+  const kw = by('赔偿');
+  assert.equal(kw.cat, 'kw'); assert.deepEqual(kw.detail.words, ['违约', '赔偿', '责任上限'].filter((w) => kw.detail.words.includes(w)));
+  assert.ok(kw.detail.words.includes('赔偿') && kw.detail.words.includes('责任上限'));
+  assert.ok(!by('5') || by('5').cat === 'kw', '“第 3 条”→“第 5 条”是条款编号，不是金额（只可能因为所在条款命中关键词）');
+  assert.equal(risks[0].cat, 'money', '金额排在最前');
+});
+
+test('风险摘要可以按类别关闭', () => {
+  const r = diffDocs(contractA, contractB, O());
+  const cm = I.clauseMap(r, contractA, contractB);
+  const only = I.detectRisks(r, cm, { money: false, date: false, keywords: [] });
+  assert.equal(only.length, 0);
+  const kwOnly = I.detectRisks(r, cm, { money: false, date: false, keywords: ['解除'] });
+  assert.ok(kwOnly.length >= 1 && kwOnly.every((k) => k.cat === 'kw'));
+});
+
+test('分区段比较：页眉和正文各自配对，下标仍指向全局', () => {
+  const A = [sec(p('星河科技 · 软件服务协议'), 'header'), p('正文第一段'), p('正文第二段'), sec(p('[1] 税率按 6% 计算。'), 'footnote')];
+  const B = [sec(p('星河科技 · 软件服务协议（修订版）'), 'header'), p('正文第一段'), p('正文第二段改了'), sec(p('[1] 税率按 9% 计算。'), 'footnote')];
+  const r = diffDocsSec(A, B, O());
+  assert.deepEqual(r.rows.map((x) => x.sec), ['header', 'body', 'body', 'footnote']);
+  assert.deepEqual(r.changes.map((c) => c.sec), ['header', 'body', 'footnote']);
+  assert.deepEqual(r.changes.map((c) => c.id), [1, 2, 3], '编号全局连续');
+  assert.equal(r.rows[3].ai, 3); assert.equal(r.rows[3].bi, 3);
+  for (const c of r.changes) assert.ok(r.rows[c.row].cids.includes(c.id), '变更指回自己的行');
+  // 不同区段的同一句不会互相配成“移动”
+  const A2 = [sec(p('保密条款适用于双方全部员工'), 'header'), p('其他')];
+  const B2 = [p('其他'), p('保密条款适用于双方全部员工')];
+  const r2 = diffDocsSec(A2, B2, O());
+  assert.equal(r2.stats.move, 0);
+});
+
+test('决定指纹：编号整体错位后仍能认回同一处修订', () => {
+  const a = [p('甲方应在十日内付款'), p('乙方提供服务')];
+  const b = [p('甲方应在三十日内付款'), p('乙方提供优质服务')];
+  const r1 = diffDocs(a, b, O());
+  const r2 = diffDocs([p('新增的第一段'), ...a], [p('新增的第一段改了'), ...b], O());
+  const f1 = I.changeFingerprints(r1.changes), f2 = I.changeFingerprints(r2.changes);
+  const s2 = new Set(f2.values());
+  for (const v of f1.values()) assert.ok(s2.has(v), `指纹 ${v} 应当仍然存在`);
+});
+
+test('页码行识别', () => {
+  for (const s of ['第 3 页', '3', '3 / 12', 'Page 3 of 12', '- 3 -', '第  页', '']) assert.ok(M.isPageNumberText(s), s);
+  for (const s of ['星河科技 · 软件服务协议', '第三条 保密', '2026 年度报告']) assert.ok(!M.isPageNumberText(s), s);
 });

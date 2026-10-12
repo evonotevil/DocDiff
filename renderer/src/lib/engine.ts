@@ -1,5 +1,6 @@
 import { diffArrays } from 'diff';
-import type { Block, Run } from './model';
+import type { Block, Run, Sec } from './model';
+import { SEC_ORDER } from './model';
 import { sameStyle } from './docx';
 
 export interface DiffOptions {
@@ -26,9 +27,9 @@ export type BlockDesc =
 export type NoteDesc = BlockDesc | { k: 'move'; n: number } | { k: 'fmt'; sig: FmtSig };
 export interface MTok { op: 0 | -1 | 1; a?: Tok; b?: Tok; cid?: number; fmt?: FmtSig; move?: boolean }
 export type RowKind = 'equal' | 'modified' | 'removed' | 'added' | 'format' | 'moved-from' | 'moved-to';
-export interface Row { kind: RowKind; ai?: number; bi?: number; aList?: number[]; bList?: number[]; merged: MTok[]; cids: number[]; moveRow?: number; blockDesc?: BlockDesc; blockCid?: number }
+export interface Row { sec?: Sec; kind: RowKind; ai?: number; bi?: number; aList?: number[]; bList?: number[]; merged: MTok[]; cids: number[]; moveRow?: number; blockDesc?: BlockDesc; blockCid?: number }
 export type ChangeKind = 'del' | 'ins' | 'mod' | 'fmt' | 'move';
-export interface Change { id: number; kind: ChangeKind; row: number; before: string; after: string; desc?: NoteDesc; row2?: number }
+export interface Change { sec?: Sec; id: number; kind: ChangeKind; row: number; before: string; after: string; desc?: NoteDesc; row2?: number }
 export interface Degraded { pairFallback: boolean; mergeOff: boolean; maxRegion: number }
 export interface DiffResult { rows: Row[]; changes: Change[]; stats: Record<ChangeKind, number>; degraded?: Degraded }
 
@@ -420,6 +421,52 @@ export function diffDocs(blocksA: Block[], blocksB: Block[], o: DiffOptions): Di
   });
   const res: DiffResult = { rows, changes, stats };
   if (diag.pairFallback || diag.mergeOff) res.degraded = diag;
+  return res;
+}
+
+/**
+ * 分区段比较：页眉、正文、脚注、页脚各自比较，再按这个顺序拼起来。
+ * 不同区段之间不配对、不检测移动（页眉里的字“移动”到正文里没有意义）。
+ * 输入的块需要按区段连续排列（model.compareBlocks 就是这么排的），行里的 ai / bi 仍是全局下标。
+ */
+export function diffDocsSec(blocksA: Block[], blocksB: Block[], o: DiffOptions): DiffResult {
+  const secOf = (b: Block): Sec => b.sec || 'body';
+  const hasSec = blocksA.some((b) => b.sec && b.sec !== 'body') || blocksB.some((b) => b.sec && b.sec !== 'body');
+  if (!hasSec) return diffDocs(blocksA, blocksB, o);
+  const range = (bs: Block[], sec: Sec) => {
+    let lo = -1, hi = -1;
+    bs.forEach((b, i) => { if (secOf(b) === sec) { if (lo < 0) lo = i; hi = i + 1; } });
+    return lo < 0 ? [0, 0] : [lo, hi];
+  };
+  const rows: Row[] = [];
+  const changes: Change[] = [];
+  const stats: Record<ChangeKind, number> = { del: 0, ins: 0, mod: 0, fmt: 0, move: 0 };
+  let degraded: Degraded | undefined;
+  for (const sec of SEC_ORDER) {
+    const [a0, a1] = range(blocksA, sec), [b0, b1] = range(blocksB, sec);
+    if (a1 - a0 === 0 && b1 - b0 === 0) continue;
+    const r = diffDocs(blocksA.slice(a0, a1), blocksB.slice(b0, b1), sec === 'body' ? o : { ...o, detectMoves: false });
+    const rowOff = rows.length, idOff = changes.length;
+    for (const row of r.rows) {
+      const x: Row = { ...row, sec };
+      if (x.ai !== undefined) x.ai += a0;
+      if (x.bi !== undefined) x.bi += b0;
+      if (x.aList) x.aList = x.aList.map((i) => i + a0);
+      if (x.bList) x.bList = x.bList.map((i) => i + b0);
+      if (x.moveRow !== undefined) x.moveRow += rowOff;
+      x.cids = x.cids.map((c) => c + idOff);
+      if (x.blockCid !== undefined) x.blockCid += idOff;
+      x.merged = x.merged.map((m) => (m.cid !== undefined ? { ...m, cid: m.cid + idOff } : m));
+      rows.push(x);
+    }
+    for (const c of r.changes) {
+      changes.push({ ...c, sec, id: c.id + idOff, row: c.row + rowOff, row2: c.row2 !== undefined ? c.row2 + rowOff : undefined });
+      stats[c.kind]++;
+    }
+    if (r.degraded) degraded = degraded ? { pairFallback: degraded.pairFallback || r.degraded.pairFallback, mergeOff: degraded.mergeOff || r.degraded.mergeOff, maxRegion: Math.max(degraded.maxRegion, r.degraded.maxRegion) } : r.degraded;
+  }
+  const res: DiffResult = { rows, changes, stats };
+  if (degraded) res.degraded = degraded;
   return res;
 }
 

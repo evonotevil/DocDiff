@@ -373,25 +373,29 @@ async function prepareTessCache(langs) {
   return dir;
 }
 
-let ocrCancelled = false;
-ipcMain.handle('ocr-cancel', async () => {
-  ocrCancelled = true;
+// 取消按“第几次识别”记：渲染端每次开始识别都带一个递增的 run 编号。
+// 以前用一个布尔值，下一次 ocr 调用会把它重置成 false，取消就失效了。
+let cancelledRun = -1;
+ipcMain.handle('ocr-cancel', async (_e, run) => {
+  cancelledRun = typeof run === 'number' ? run : Number.MAX_SAFE_INTEGER;
   if (ocrWorker) { try { await ocrWorker.terminate(); } catch {} ocrWorker = null; ocrLangs = ''; }
 });
 
-ipcMain.handle('ocr', async (e, { images, langs }) => {
-  ocrCancelled = false;
+ipcMain.handle('ocr', async (e, { images, langs, run }) => {
+  const myRun = typeof run === 'number' ? run : 0;
+  const cancelled = () => cancelledRun >= myRun;
   const Tesseract = require('tesseract.js');
   const key = langs.join('+');
   if (!ocrWorker || ocrLangs !== key) {
     if (ocrWorker) await ocrWorker.terminate();
     const cacheDir = await prepareTessCache(langs);
+    if (cancelled()) throw new Error('已取消');
     ocrWorker = await Tesseract.createWorker(langs, 1, {
       langPath: 'https://offline.invalid/tessdata', // 不会被访问：语言包已在缓存中
       cachePath: cacheDir,
       gzip: true,
       logger: (m) => {
-        if (m.status === 'recognizing text' && ocrSender) ocrSender.send('ocr-progress', { page: curPage, progress: m.progress });
+        if (m.status === 'recognizing text' && ocrSender) ocrSender.send('ocr-progress', { page: curPage, progress: m.progress, run: myRun });
       },
     });
     ocrLangs = key;
@@ -400,10 +404,14 @@ ipcMain.handle('ocr', async (e, { images, langs }) => {
   const out = [];
   for (let i = 0; i < images.length; i++) {
     curPage = i;
-    if (ocrCancelled || !ocrWorker) throw new Error('已取消');
-    const { data } = await ocrWorker.recognize(Buffer.from(images[i]));
-    out.push(data.text);
-    e.sender.send('ocr-progress', { page: i, progress: 1 });
+    if (cancelled() || !ocrWorker) throw new Error('已取消');
+    const { data } = await ocrWorker.recognize(Buffer.from(images[i]), {}, { text: true, blocks: true, hocr: false, tsv: false });
+    if (cancelled()) throw new Error('已取消');
+    // 每个词的置信度：渲染端据此给没认准的字标虚线
+    const words = [];
+    for (const b of data.blocks || []) for (const p of b.paragraphs || []) for (const l of p.lines || []) for (const w of l.words || []) words.push([w.text, Math.round(w.confidence)]);
+    out.push({ text: data.text, conf: typeof data.confidence === 'number' ? data.confidence : -1, words });
+    e.sender.send('ocr-progress', { page: i, progress: 1, run: myRun });
   }
   return out;
 });

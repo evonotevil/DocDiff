@@ -13,6 +13,9 @@ export interface Run {
 }
 
 export type BlockKind = 'p' | 'h' | 'li' | 'tr';
+/** 文档的区段：正文之外，页眉、页脚、脚注也参与比较（1.6） */
+export type Sec = 'header' | 'body' | 'footnote' | 'footer';
+export const SEC_ORDER: Sec[] = ['header', 'body', 'footnote', 'footer'];
 
 export interface Block {
   kind: BlockKind;
@@ -23,6 +26,7 @@ export interface Block {
   runs: Run[]; // p/h/li
   cells?: Run[][]; // tr
   page?: number; // PDF 页码（从 1 开始）
+  sec?: Sec; // 不写就是正文
 }
 
 export interface FileInfo {
@@ -44,6 +48,25 @@ export interface DocModel {
   sha256?: string;
   encoding?: string;
   pdfPassword?: string;
+  /** 正文以外的区段；blocks 仍然只有正文（图像 / OCR / 文件详情都按正文工作） */
+  secBlocks?: { header: Block[]; footer: Block[]; footnote: Block[] };
+  /** 区段识别情况，用来写“比较范围” */
+  secInfo?: { header: 'found' | 'none' | 'unknown'; footer: 'found' | 'none' | 'unknown'; footnote: 'found' | 'none' | 'unknown'; pageNumbersDropped?: boolean };
+}
+
+/** 参与富文本比较的全部块：页眉 → 正文 → 脚注 → 页脚，每块带上区段标记 */
+export function compareBlocks(d: DocModel): Block[] {
+  const s = d.secBlocks;
+  if (!s) return d.blocks;
+  const tag = (bs: Block[], sec: Sec) => bs.map((b) => ({ ...b, sec }));
+  return [...tag(s.header, 'header'), ...d.blocks, ...tag(s.footnote, 'footnote'), ...tag(s.footer, 'footer')];
+}
+
+/** 页码行：“第 3 页”“3 / 12”“Page 3 of 12”“- 3 -”，以及域代码没有缓存结果时剩下的“第  页” */
+export function isPageNumberText(text: string): boolean {
+  const s = text.replace(/\s+/g, ' ').trim();
+  if (!s) return true;
+  return /^[-–—]?\s*(第\s*)?\d*\s*页?\s*([\/／]|共|of)?\s*\d*\s*页?\s*[-–—]?$/i.test(s) || /^page\s*\d*\s*(of\s*\d*)?$/i.test(s);
 }
 
 export function blockText(b: Block): string {

@@ -61,6 +61,8 @@ try {
   await delay(600);
   const text = await evaluate('document.body.innerText');
   assert.ok(text.includes('关于与更新') || text.includes('About'), 'Settings/update UI missing');
+  await evaluate(`Array.from(document.querySelectorAll('[role=tab]')).find(b => /关于与更新|About/.test(b.innerText))?.click()`);
+  await delay(300);
   const displayedVersion = await evaluate('document.querySelector(".upd-ver b")?.innerText');
   assert.equal(displayedVersion, `DocDiff v${expectedVersion}`, 'Displayed version must match packaged version');
   await evaluate('document.querySelector(".upd-ver").scrollIntoView({ block: "center" })');
@@ -71,8 +73,21 @@ try {
   assert.equal(update.current, expectedVersion);
   assert.ok(['latest', 'new'].includes(update.status), JSON.stringify(update));
   assert.ok(update.url.startsWith('https://github.com/evonotevil/DocDiff/releases/'), JSON.stringify(update));
+  await evaluate(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
+  await delay(200);
+  assert.ok(await evaluate(`!!document.querySelector('.sample-btn')`), 'Sample contract entry missing');
+  await evaluate(`document.querySelector('.sample-btn').click()`);
+  let sampleCompared = false;
+  for (let i = 0; i < 60; i++) {
+    sampleCompared = await evaluate(`!!document.querySelector('.center-body') && document.querySelectorAll('.risk-item').length > 0`);
+    if (sampleCompared) break;
+    await delay(500);
+  }
+  assert.ok(sampleCompared, 'Bundled sample comparison and risk summary did not render');
+  const sample = await call('Page.captureScreenshot', { format: 'png' });
+  fs.writeFileSync(path.join(out, 'sample-comparison.png'), Buffer.from(sample.data, 'base64'));
   assert.ok(!/remote_font_face_source.*NOTREACHED|NOTREACHED.*remote_font_face_source/i.test(log), 'Native font assertion: ' + log);
-  fs.writeFileSync(path.join(out, 'result.json'), JSON.stringify({ platform: process.platform, displayedVersion, fonts, update }, null, 2));
+  fs.writeFileSync(path.join(out, 'result.json'), JSON.stringify({ platform: process.platform, displayedVersion, fonts, update, sampleCompared }, null, 2));
   console.log('Packaged UI, fonts, settings and live update feed passed:', process.platform);
 } finally {
   socket?.close(); child.kill();

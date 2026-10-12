@@ -1,18 +1,26 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DocModel, FileInfo } from './lib/model';
-import { docPlainText, fmtBytes } from './lib/model';
+import { compareBlocks, docPlainText, fmtBytes } from './lib/model';
 import { loadDoc } from './lib/load';
 import { NeedPassword } from './lib/pdf';
-import { linesToBlocks, DiffOptions, DiffResult, Change } from './lib/engine';
+import { linesToBlocks, DiffOptions, DiffResult, Change, ChangeKind } from './lib/engine';
 import { buildDocx } from './lib/exportDocx';
 import { getPages } from './lib/pages';
-import { isMac, kbd, modPressed } from './lib/platform';
+import { kbd, modPressed } from './lib/platform';
 import { t, setLang, initLang, Lang } from './lib/i18n';
-import { ChangeList, KIND_LABEL, changesMarkdown, short } from './components/ChangeList';
+import { clauseMap, detectRisks, DEFAULT_KEYWORDS, Risk } from './lib/insight';
+import { DecMap, Dec, Verdict, pairKey, loadDecisions, saveDecisions, reviewProgress, initialsOf } from './lib/review';
+import { scopeInfo } from './lib/scope';
+import { summaryMarkdown, reportHtml } from './lib/report';
+import { ChangeList, KIND_LABEL, short } from './components/ChangeList';
 import { ChangeMap } from './components/ChangeMap';
+import { Overview, RiskCard, ScopeCard } from './components/Panels';
+import { ExportDialog, ExportKind } from './components/ExportDialog';
+import { SettingsModal, SettingsValues, UpdInfo, APP_VERSION } from './components/SettingsModal';
+import { Modal } from './components/Modal';
 import { Mascot, Confetti } from './components/Mascot';
 import { Wordmark } from './components/Logo';
-import { Switch, Opt, Seg, Card, Kbd } from './components/ui';
+import { Switch, Opt, Seg, Card, Kbd, useMedia } from './components/ui';
 import * as I from './components/icons';
 import { RichView } from './views/RichView';
 import { PlainView } from './views/PlainView';
@@ -21,10 +29,8 @@ import { ImageView, ImgMode, useImagePages } from './views/ImageView';
 import { DetailsView } from './views/DetailsView';
 import { noteText } from './lib/describe';
 import { useDiff } from './lib/useDiff';
-import { version as appVersion } from '../../package.json';
 
 const api = (window as any).api;
-const APP_VERSION = `v${appVersion}`;
 type Side = 0 | 1;
 const sideLabel = (s: Side) => t(s ? '修改后文档' : '原始文档');
 const MODES = [
@@ -43,13 +49,23 @@ interface Prefs {
   imgMode: ImgMode; threshold: number; showBoxes: boolean; ocrLang: OcrLang; sound: boolean;
   navOpen: boolean; asideOpen: boolean;
   autoCheckUpdate: boolean; skipVersion: string;
+  // 1.6
+  reviewerName: string; reviewerInitials: string; reviewerAsked: boolean;
+  authorName: string; commentAccepted: boolean;
+  riskMoney: boolean; riskDate: boolean; keywords: string[];
+  paperFollowTheme: boolean; celebrate: boolean;
 }
+const sysUser = (() => { try { return String(api.userName?.() || ''); } catch { return ''; } })();
 const DEFAULT_PREFS: Prefs = {
   ignoreCase: false, ignoreWs: true, precision: 'word', detectMoves: true, normPunct: false,
   hideRich: false, hidePlain: false, layout: 'split', wrap: true,
   imgMode: 'split', threshold: 0.1, showBoxes: true, ocrLang: 'chi_sim+eng', sound: true,
   navOpen: true, asideOpen: true,
   autoCheckUpdate: true, skipVersion: '',
+  reviewerName: sysUser, reviewerInitials: initialsOf(sysUser), reviewerAsked: false,
+  authorName: '', commentAccepted: true,
+  riskMoney: true, riskDate: true, keywords: DEFAULT_KEYWORDS,
+  paperFollowTheme: false, celebrate: false,
 };
 function loadPrefs(): Prefs {
   try { return { ...DEFAULT_PREFS, ...JSON.parse(localStorage.getItem('prefs-v2') || '{}') }; } catch { return DEFAULT_PREFS; }
@@ -57,10 +73,10 @@ function loadPrefs(): Prefs {
 
 // ---------- 音效（很轻的提示音，可在设置里关闭） ----------
 let actx: AudioContext | null = null;
-function chime(kind: 'ok' | 'no' | 'done') {
+function chime(kind: 'ok' | 'no' | 'hold' | 'done') {
   try {
     actx ||= new AudioContext();
-    const notes = kind === 'ok' ? [880, 1320] : kind === 'no' ? [330, 262] : [523, 659, 784, 1047];
+    const notes = kind === 'ok' ? [880, 1320] : kind === 'no' ? [330, 262] : kind === 'hold' ? [587, 587] : [523, 659, 784, 1047];
     notes.forEach((f, i) => {
       const o = actx!.createOscillator(), g = actx!.createGain();
       o.type = 'sine'; o.frequency.value = f;
@@ -96,6 +112,12 @@ function textFile(text: string, side: Side): FileInfo {
   const data = new TextEncoder().encode(text);
   const now = Date.now();
   return { path: '', name: t(side ? '粘贴的文字（修改后）.txt' : '粘贴的文字（原始）.txt'), ext: 'txt', size: data.length, mtime: now, birthtime: now, data };
+}
+async function sampleFile(name: string): Promise<FileInfo> {
+  const r = await fetch(`samples/${encodeURIComponent(name)}`);
+  const data = new Uint8Array(await r.arrayBuffer());
+  const now = Date.now();
+  return { path: '', name, ext: 'docx', size: data.length, mtime: now, birthtime: now, data };
 }
 const docStat = (d: DocModel) => `${d.type.toUpperCase()} · ${fmtBytes(d.file.size)}${d.pageCount ? ` · ${t('{n} 页', { n: d.pageCount })}` : ''}`;
 
@@ -142,8 +164,8 @@ function DropZone({ side, doc, loading, error, onOpen, onFiles, onClear, onPaste
           <div className="title">{t('拖入{s}', { s: sideLabel(side) })}</div>
           <div className="hint">{t('支持 Word（.docx）、PDF、TXT')}</div>
           <div className="acts">
-            <button className="btn blue" onClick={onOpen}><I.IconUpload />{t('选择文件')}</button>
-            <button className="btn" onClick={onPaste}><I.IconPaste />{t('粘贴文字')}</button>
+            <button className="btn" onClick={onOpen}><I.IconUpload />{t('选择文件')}</button>
+            <button className="btn plain" onClick={onPaste}><I.IconPaste />{t('粘贴文字')}</button>
           </div>
         </>
       )}
@@ -161,7 +183,7 @@ function FilePill({ side, doc, onOpen, onFiles, changed }: { side: Side; doc: Do
         <span className="who">{sideLabel(side)}{changed ? ` · ${t('已更新')}` : ''}</span>
         <span className="name">{doc.file.name}</span>
       </div>
-      <button className="btn sm plain icon" onClick={onOpen} title={t('换一个文件（也可以直接拖进来）')}><I.IconUpload /></button>
+      <button className="btn sm plain icon" onClick={onOpen} title={t('换一个文件（也可以直接拖进来）')} aria-label={t('换一个文件')}><I.IconUpload /></button>
     </div>
   );
 }
@@ -169,133 +191,53 @@ function FilePill({ side, doc, onOpen, onFiles, changed }: { side: Side; doc: Do
 function PasswordModal({ name, wrong, onOk, onCancel }: { name: string; wrong: boolean; onOk: (p: string) => void; onCancel: () => void }) {
   const [v, setV] = useState('');
   return (
-    <div className="modal-bg" onClick={onCancel}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <h3>{t('这个 PDF 有密码')}</h3>
-        <p>{t('「{f}」受密码保护。', { f: name })}{wrong && <b style={{ color: 'var(--cardinal)' }}>{t('密码不对，再试一次。')}</b>}</p>
-        <input type="password" autoFocus value={v} onChange={(e) => setV(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && onOk(v)} placeholder={t('输入密码')} />
-        <div className="acts"><button className="btn plain" onClick={onCancel}>{t('取消')}</button><button className="btn primary" onClick={() => onOk(v)}>{t('打开')}</button></div>
-      </div>
-    </div>
+    <Modal title={t('这个 PDF 有密码')} onClose={onCancel} footer={<><button className="btn plain" onClick={onCancel}>{t('取消')}</button><button className="btn primary" onClick={() => onOk(v)}>{t('打开')}</button></>}>
+      <p>{t('「{f}」受密码保护。', { f: name })}{wrong && <b className="danger-text">{t('密码不对，再试一次。')}</b>}</p>
+      <input type="password" autoFocus value={v} onChange={(e) => setV(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && onOk(v)} placeholder={t('输入密码')} aria-label={t('输入密码')} />
+    </Modal>
   );
 }
 
 function PasteModal({ side, onOk, onCancel }: { side: Side; onOk: (t: string) => void; onCancel: () => void }) {
   const [v, setV] = useState('');
   return (
-    <div className="modal-bg" onClick={onCancel}>
-      <div className="modal wide" onClick={(e) => e.stopPropagation()}>
-        <h3>{t('粘贴{s}的文字', { s: sideLabel(side) })}</h3>
-        <p>{t('直接粘贴从网页、邮件、聊天软件里复制的内容。')}</p>
-        <textarea autoFocus value={v} onChange={(e) => setV(e.target.value)} placeholder={t('在这里粘贴…（{k}）', { k: kbd('mod+V') })} />
-        <div className="acts"><button className="btn plain" onClick={onCancel}>{t('取消')}</button><button className="btn primary" disabled={!v.trim()} onClick={() => onOk(v)}>{t('使用这段文字')}</button></div>
-      </div>
-    </div>
-  );
-}
-
-function ShortcutRows() {
-  const groups: [string, [string, string][]][] = [
-    [t('通用'), [
-      [t('打开原始文档'), kbd('mod+O')], [t('打开修改后文档'), kbd('mod+shift+O')],
-      [t('新建比较'), kbd('mod+N')], [t('交换左右文档'), kbd('mod+shift+S')],
-      [t('开始比较'), 'Enter'], [t('切换模式'), `${kbd('mod+1')} … ${kbd('mod+6')}`],
-      [t('下一处 / 上一处差异'), 'J / K'],
-    ]],
-    [t('修订审阅'), [
-      [t('接受 / 拒绝'), 'A / R'], [t('撤销上一次决定'), 'U'], [t('上一处 / 下一处'), '← / →'],
-    ]],
-  ];
-  return (
-    <div className="keys-table">
-      {groups.map(([g, rows]) => (
-        <React.Fragment key={g}>
-          <div className="keys-group">{g}</div>
-          {rows.map(([l, k]) => <div className="keys-row" key={l}><span className="kl">{l}</span><span className="kk"><Kbd>{k}</Kbd></span></div>)}
-        </React.Fragment>
-      ))}
-    </div>
-  );
-}
-
-// ---------- 关于与更新 ----------
-export interface UpdInfo { status: 'new' | 'latest' | 'error' | 'off'; current: string; latest?: string; url?: string; notes?: string; pubDate?: string; error?: string }
-
-function UpdateSection({ info, checking, onCheck, onSkip, auto, setAuto }: {
-  info: UpdInfo | null; checking: boolean; onCheck: () => void; onSkip: (v: string) => void;
-  auto: boolean; setAuto: (v: boolean) => void;
-}) {
-  const open = () => { if (info?.url) api.openUrl?.(info.url); };
-  return (
-    <div className="set-sect">
-      <div className="set-title"><I.IconDownload />{t('关于与更新')}</div>
-      <div className="upd">
-        <div className="upd-row">
-          <div className="upd-ver">
-            <b>DocDiff {APP_VERSION}</b>
-            <span>
-              {checking ? t('正在检查…')
-                : info?.status === 'new' ? t('有新版本 {v}', { v: info.latest! })
-                : info?.status === 'latest' ? t('已是最新版本')
-                : info?.status === 'error' ? t('没能连上更新服务器：{e}', { e: t(info.error || '') })
-                : info?.status === 'off' ? t('未配置更新地址')
-                : t('还没有检查过')}
-            </span>
-          </div>
-          <button className="btn sm" disabled={checking} onClick={onCheck}><I.IconRefresh />{t('检查更新')}</button>
-        </div>
-        {info?.status === 'new' && (
-          <div className="upd-new">
-            {info.notes ? <div className="upd-notes">{info.notes}</div> : null}
-            <div className="upd-acts">
-              <button className="btn primary sm" disabled={!info.url} onClick={open}><I.IconDownload />{t('打开下载页')}</button>
-              <button className="btn sm plain" onClick={() => onSkip(info.latest!)}>{t('跳过这个版本')}</button>
-            </div>
-            <div className="upd-hint">{t('浏览器里下载完成后，像第一次安装那样覆盖安装即可，比较记录和设置都会保留。')}</div>
-          </div>
-        )}
-        <Opt label={t('启动时自动检查更新')} hint={t('只向更新地址发一个普通请求，不会上传任何文件信息；关掉后应用完全不联网。')}>
-          <Switch on={auto} onChange={setAuto} />
-        </Opt>
-      </div>
-    </div>
-  );
-}
-
-function SettingsModal({ lang, setLang, theme, setTheme, sound, setSound, onClose, upd }: {
-  lang: Lang; setLang: (l: Lang) => void; theme: 'light' | 'dark'; setTheme: (t: 'light' | 'dark') => void;
-  sound: boolean; setSound: (v: boolean) => void; onClose: () => void;
-  upd: React.ComponentProps<typeof UpdateSection>;
-}) {
-  return (
-    <div className="modal-bg" onClick={onClose}>
-      <div className="modal wide settings-modal" onClick={(e) => e.stopPropagation()}>
-        <h3><I.IconGear />{t('设置')}</h3>
-        <div className="set-sect">
-          <Opt label={t('语言 / Language')}><Seg value={lang} options={[['zh', '中文'], ['en', 'English']]} onChange={(v) => setLang(v as Lang)} /></Opt>
-          <Opt label={t('外观')}><Seg value={theme} options={[['light', t('浅色')], ['dark', t('深色')]]} onChange={(v) => setTheme(v as 'light' | 'dark')} /></Opt>
-          <Opt label={t('音效')} hint={t('审阅修订时的轻提示音')}><Switch on={sound} onChange={setSound} /></Opt>
-        </div>
-        <div className="set-sect">
-          <div className="set-title"><I.IconKeyboard />{t('快捷键')}</div>
-          <ShortcutRows />
-        </div>
-        <UpdateSection {...upd} />
-        <div className="set-about">{t('文档内容始终留在这台电脑上，比对过程不联网。')}</div>
-        <div className="acts"><button className="btn primary" onClick={onClose}>{t('完成')}</button></div>
-      </div>
-    </div>
+    <Modal title={t('粘贴{s}的文字', { s: sideLabel(side) })} onClose={onCancel} className="wide"
+      footer={<><button className="btn plain" onClick={onCancel}>{t('取消')}</button><button className="btn primary" disabled={!v.trim()} onClick={() => onOk(v)}>{t('使用这段文字')}</button></>}>
+      <p>{t('直接粘贴从网页、邮件、聊天软件里复制的内容。')}</p>
+      <textarea autoFocus value={v} onChange={(e) => setV(e.target.value)} placeholder={t('在这里粘贴…（{k}）', { k: kbd('mod+V') })} aria-label={t('粘贴文字')} />
+    </Modal>
   );
 }
 
 // ---------- OCR ----------
 type OcrLang = 'chi_sim+eng' | 'eng' | 'chi_sim';
-interface OcrState { status: 'idle' | 'running' | 'done' | 'error'; msg?: string; pct?: number; a?: string; b?: string; key?: string }
+interface OcrState { status: 'idle' | 'running' | 'done' | 'error'; msg?: string; pct?: number; a?: string; b?: string; key?: string; conf?: [number[], number[]]; low?: [Map<number, Set<number>>, Map<number, Set<number>>] }
 function cleanOcr(t: string) {
   return t
     .replace(/([　-〿㐀-鿿＀-￯])[ \t]+(?=[　-〿㐀-鿿＀-￯])/g, '$1')
     .replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
 }
+class Cancelled extends Error { constructor() { super('已取消'); } }
+/** 把低置信度的词对回最终文字里的位置：行号 → 这一行里低置信度字符的下标 */
+function lowPositions(text: string, words: [string, number][], threshold = 70): Map<number, Set<number>> {
+  const starts = [0];
+  for (let i = 0; i < text.length; i++) if (text[i] === '\n') starts.push(i + 1);
+  const lineOf = (pos: number) => { let lo = 0, hi = starts.length - 1; while (lo < hi) { const m = (lo + hi + 1) >> 1; if (starts[m] <= pos) lo = m; else hi = m - 1; } return lo; };
+  const out = new Map<number, Set<number>>();
+  let p = 0;
+  for (const [w, c] of words) {
+    const ww = String(w).replace(/\s+/g, '');
+    if (!ww) continue;
+    const idx = text.indexOf(ww, p);
+    if (idx < 0 || idx - p > 400) continue;
+    if (c < threshold) for (let k = idx; k < idx + ww.length; k++) { const ln = lineOf(k); (out.get(ln) || out.set(ln, new Set()).get(ln)!).add(k - starts[ln]); }
+    p = idx + ww.length;
+  }
+  return out;
+}
+
+const VERDICT_FB: Record<Verdict, string> = { a: '已接受，保留新版本', r: '已拒绝，恢复原文', h: '已标为待议，留给律师或领导判断' };
+const VERDICT_SHORT: Record<Verdict, string> = { a: '已接受', r: '已拒绝', h: '待议' };
 
 // =========================================================
 export default function App() {
@@ -304,7 +246,7 @@ export default function App() {
   const [errs, setErrs] = useState<[string | null, string | null]>([null, null]);
   const [pwd, setPwd] = useState<{ side: Side; file: FileInfo; wrong: boolean } | null>(null);
   const [pasteSide, setPasteSide] = useState<Side | null>(null);
-  const [showSettings, setShowSettings] = useState(false);
+  const [showSettings, setShowSettings] = useState<false | 'general' | 'review' | 'risk' | 'keys' | 'about'>(false);
   const [lang, setLangState] = useState<Lang>(initLang);
   const [compared, setCompared] = useState(false);
   const [tab, setTab] = useState(0);
@@ -318,30 +260,44 @@ export default function App() {
   const set = <K extends keyof Prefs>(k: K) => (v: Prefs[K]) => setPrefs((p) => ({ ...p, [k]: v }));
   const [formatting, setFormatting] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [scopeOpen, setScopeOpen] = useState(false);
   const [recent, setRecent] = useState<any[]>([]);
   const [changedSides, setChangedSides] = useState<Side[]>([]);
   const [selCid, setSelCid] = useState<number | null>(null);
-  const [decisions, setDecisions] = useState<Record<number, 'a' | 'r'>>({});
-  const [feedback, setFeedback] = useState<'ok' | 'no' | null>(null);
+  const [decisions, setDecisions] = useState<DecMap>({});
+  const [feedback, setFeedback] = useState<Verdict | null>(null);
   const [doneOpen, setDoneOpen] = useState(false);
   const [dismissDegraded, setDismissDegraded] = useState(false);
+  const [dismissCross, setDismissCross] = useState('');
+  const [lostBanner, setLostBanner] = useState<{ n: number; restore: () => void } | null>(null);
   const [upd, setUpd] = useState<UpdInfo | null>(null);
   const [checkingUpd, setCheckingUpd] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [exportBusy, setExportBusy] = useState(false);
+  const [expAuthor, setExpAuthor] = useState('');
+  const [kindFilter, setKindFilter] = useState<ChangeKind[]>([]);
+  const [editName, setEditName] = useState<string | null>(null);
   const [fade, setFade] = useState(50);
   const [slider, setSlider] = useState(50);
   const [zoom, setZoom] = useState(1);
   const [onlyDiffPages, setOnlyDiffPages] = useState(false);
   const [ocr, setOcr] = useState<OcrState>({ status: 'idle' });
+  const ocrRun = useRef(0);
   const decideOrder = useRef<number[]>([]);
   const imgScroll = useRef<HTMLDivElement>(null);
   const redlineRef = useRef<HTMLDivElement>(null);
+  const noteRef = useRef<HTMLInputElement>(null);
+  const narrow = useMedia('(max-width: 1180px)');
+  const [navWide, setNavWide] = useState(false);
+  const [drawer, setDrawer] = useState(false);
 
   useEffect(() => { document.documentElement.dataset.theme = theme; try { localStorage.setItem('theme', theme); } catch {} api.setTheme?.(theme); }, [theme]);
+  useEffect(() => { document.documentElement.dataset.paper = prefs.paperFollowTheme ? 'theme' : 'light'; }, [prefs.paperFollowTheme]);
   useEffect(() => { try { localStorage.setItem('prefs-v2', JSON.stringify(prefs)); } catch {} }, [prefs]);
   useEffect(() => { api.setLang?.(lang); }, []);
   useEffect(() => { api.recentGet?.().then(setRecent); }, [compared]);
-  const flash = (m: string) => { setToast(m); setTimeout(() => setToast(null), 2800); };
+  const toastTimer = useRef<any>(0);
+  const flash = (m: string) => { clearTimeout(toastTimer.current); setToast(m); toastTimer.current = setTimeout(() => setToast(null), 3200); };
 
   // ---------- 检查更新 ----------
   const checkUpdate = useCallback(async (manual: boolean) => {
@@ -358,13 +314,11 @@ export default function App() {
       setCheckingUpd(false);
     }
   }, []);
-  // 启动后等一会儿再静默检查：别和首屏抢资源，也别让用户觉得一开机就在联网
   useEffect(() => {
     if (!prefs.autoCheckUpdate) return;
     const timer = setTimeout(() => checkUpdate(false), 8000);
     return () => clearTimeout(timer);
   }, []);
-  // 有新版本、且不是被跳过的那个，就在齿轮上点一个红点
   const updBadge = upd?.status === 'new' && upd.latest !== prefs.skipVersion;
 
   const [A, B] = docs;
@@ -389,6 +343,12 @@ export default function App() {
     if (fs.length >= 2) { loadFile(0, fs[0]); loadFile(1, fs[1]); return; }
     loadFile(side, fs[0]);
   }, [loadFile]);
+  const trySample = async () => {
+    try {
+      await Promise.all([loadFile(0, await sampleFile('示例合同_v1.docx')), loadFile(1, await sampleFile('示例合同_v2.docx'))]);
+      setCompared(true); setTab(0);
+    } catch { flash(t('示例文件没能打开')); }
+  };
 
   useEffect(() => { if (A && B) setFormatting(A.type === B.type && A.type !== 'txt'); }, [A?.type, B?.type]);
 
@@ -415,11 +375,11 @@ export default function App() {
   useEffect(() => {
     if (!compared || !A || !B) return;
     if (A.file.path && B.file.path) {
-      const f = (d: DocModel) => ({ path: d.file.path, name: d.file.name, ext: d.type });
+      const f = (d: DocModel) => ({ path: d.file.path, name: d.file.name, ext: d.type, sha: d.sha256 });
       api.recentAdd?.({ a: f(A), b: f(B) });
     }
     api.watch?.([A.file.path, B.file.path].filter(Boolean));
-  }, [compared, A?.file.path, B?.file.path]);
+  }, [compared, A?.file.path, B?.file.path, A?.sha256, B?.sha256]);
   useEffect(() => api.onFileChanged?.((p: string) => {
     setDocs((ds) => {
       const sides = ([0, 1] as Side[]).filter((s) => ds[s]?.file.path === p);
@@ -427,7 +387,9 @@ export default function App() {
       return ds;
     });
   }), []);
+  const carryFrom = useRef('');
   const reloadChanged = async () => {
+    carryFrom.current = pairKey(A?.sha256, B?.sha256); // 文件改了 SHA 就变了：把上一版的决定带过来，能认回来的都认回来
     for (const s of changedSides) { const d = docs[s]; if (d?.file.path) await loadFile(s, await api.readPath(d.file.path)); }
     setChangedSides([]);
     flash(t('已按最新文件重新比较'));
@@ -437,12 +399,13 @@ export default function App() {
   // ---------- 比较 ----------
   const opts: DiffOptions = { ignoreCase: prefs.ignoreCase, ignoreWhitespace: prefs.ignoreWs, precision: prefs.precision, formatting, detectMoves: prefs.detectMoves, normPunct: prefs.normPunct };
   const optKey = JSON.stringify(opts);
-  // 引擎已经不产出本地化文案了（见 lib/describe.ts），所以切换语言不再触发重新比对。
-  // 纯文本 / OCR 的结果按当前 tab 懒算：以前不管看不看都要算一遍，等于每次比对做两倍功。
   const docSig = A && B ? `${A.sha256 || A.file.path}|${B.sha256 || B.file.path}` : '';
-  const richTask = useMemo(() => (compared && A && B
-    ? { key: `rich|${docSig}|${optKey}`, blocksA: A.blocks, blocksB: B.blocks, opts: { ...opts, mergeParas: true } }
-    : null), [compared, docSig, optKey, A, B]);
+  // 富文本 / 修订审阅：正文 + 页眉 + 页脚 + 脚注
+  const RA = useMemo(() => (A ? { ...A, blocks: compareBlocks(A) } : null), [A]);
+  const RB = useMemo(() => (B ? { ...B, blocks: compareBlocks(B) } : null), [B]);
+  const richTask = useMemo(() => (compared && RA && RB
+    ? { key: `rich|${docSig}|${optKey}`, blocksA: RA.blocks, blocksB: RB.blocks, opts: { ...opts, mergeParas: true } }
+    : null), [compared, docSig, optKey, RA, RB]);
   const rich = useDiff(richTask);
   const richRes = rich.res;
 
@@ -463,34 +426,76 @@ export default function App() {
   const diffJob = tab === 1 ? plain : tab === 4 ? ocrDiff : rich;
   const imgState = useImagePages(tab === 3 && compared && A && B ? A : (null as any), tab === 3 && compared && A && B ? B : (null as any), prefs.threshold);
 
-  useEffect(() => { setDecisions({}); setDoneOpen(false); decideOrder.current = []; }, [richRes]);
+  // ---------- 解读：条款、风险、比较范围 ----------
+  const clauses = useMemo(() => (richRes && RA && RB ? clauseMap(richRes, RA.blocks, RB.blocks) : new Map<number, string | null>()), [richRes, RA, RB]);
+  const risks: Risk[] = useMemo(() => (richRes ? detectRisks(richRes, clauses, { money: prefs.riskMoney, date: prefs.riskDate, keywords: prefs.keywords }) : []), [richRes, clauses, prefs.riskMoney, prefs.riskDate, prefs.keywords]);
+  const riskById = useMemo(() => new Map(risks.map((r) => [r.cid, r])), [risks]);
+  const scope = useMemo(() => (A && B ? scopeInfo(A, B, opts, richRes) : null), [A, B, optKey, richRes, lang]);
+  const noClauses = useMemo(() => new Map<number, string | null>(), []);
+
+  // ---------- 审阅决定：载入 / 保存 / 设置变化后的迁移 ----------
+  const pk = pairKey(A?.sha256, B?.sha256);
+  const decFor = useRef<DiffResult | null>(null);
+  const lastLoaded = useRef<{ pk: string; snap: string; opts: any } | null>(null);
+  const optSnap = { ignoreCase: prefs.ignoreCase, ignoreWs: prefs.ignoreWs, precision: prefs.precision, detectMoves: prefs.detectMoves, normPunct: prefs.normPunct, formatting };
+  useEffect(() => {
+    if (!richRes) return;
+    let { map, lost } = loadDecisions(pk, richRes.changes);
+    if (!Object.keys(map).length && carryFrom.current && carryFrom.current !== pk) {
+      map = loadDecisions(carryFrom.current, richRes.changes).map;
+      if (Object.keys(map).length) flash(t('文件更新了，已带回上一版里还对得上的 {n} 个决定', { n: Object.values(map).filter((d) => d.v).length }));
+    }
+    carryFrom.current = '';
+    decFor.current = richRes;
+    setDecisions(map);
+    setDoneOpen(false);
+    decideOrder.current = [];
+    const snap = JSON.stringify(optSnap);
+    const prev = lastLoaded.current;
+    if (prev && prev.pk === pk && prev.snap !== snap && lost > 0) {
+      const restoreTo = prev.opts;
+      setLostBanner({ n: lost, restore: () => {
+        setPrefs((p) => ({ ...p, ignoreCase: restoreTo.ignoreCase, ignoreWs: restoreTo.ignoreWs, precision: restoreTo.precision, detectMoves: restoreTo.detectMoves, normPunct: restoreTo.normPunct }));
+        setFormatting(restoreTo.formatting);
+        setLostBanner(null);
+      } });
+    } else setLostBanner(null);
+    lastLoaded.current = { pk, snap, opts: optSnap };
+  }, [richRes]);
+  useEffect(() => { if (richRes && decFor.current === richRes) saveDecisions(pk, richRes.changes, decisions); }, [decisions]);
+
   useEffect(() => setDismissDegraded(false), [docSig, optKey]);
   useEffect(() => setSelCid(null), [tab, richRes, plainRes, ocrRes]);
+  useEffect(() => setKindFilter([]), [docSig]);
 
   const curRes: DiffResult | null = tab === 0 || tab === 2 ? richRes : tab === 1 ? plainRes : tab === 4 ? ocrRes : null;
   const changes: Change[] = curRes?.changes || [];
+  const shown: Change[] = useMemo(() => (kindFilter.length ? changes.filter((c) => kindFilter.includes(c.kind)) : changes), [changes, kindFilter]);
+  const changeById = useMemo(() => new Map(changes.map((c) => [c.id, c])), [changes]);
 
   const go = useCallback((d: number) => {
-    if (!changes.length) return;
-    const idx = changes.findIndex((c) => c.id === selCid);
-    const n = idx < 0 ? (d > 0 ? 0 : changes.length - 1) : Math.min(changes.length - 1, Math.max(0, idx + d));
-    setSelCid(changes[n].id);
-  }, [changes, selCid]);
+    if (!shown.length) return;
+    const idx = shown.findIndex((c) => c.id === selCid);
+    const n = idx < 0 ? (d > 0 ? 0 : shown.length - 1) : Math.min(shown.length - 1, Math.max(0, idx + d));
+    setSelCid(shown[n].id);
+  }, [shown, selCid]);
 
   // ---------- 修订审阅 ----------
-  const decidedCount = changes.filter((c) => decisions[c.id]).length;
-  const nextUndecided = (after: number | null, dec: Record<number, string>) => {
-    const idx = changes.findIndex((c) => c.id === after);
-    return changes.slice(idx + 1).find((c) => !dec[c.id]) || changes.find((c) => !dec[c.id]);
+  const decidedCount = changes.filter((c) => decisions[c.id]?.v).length;
+  const nextUndecided = (after: number | null, dec: DecMap) => {
+    const idx = shown.findIndex((c) => c.id === after);
+    return shown.slice(idx + 1).find((c) => !dec[c.id]?.v) || shown.find((c) => !dec[c.id]?.v);
   };
-  useEffect(() => { if (tab === 2 && selCid == null && changes.length) setSelCid((nextUndecided(null, decisions) || changes[0]).id); }, [tab, changes, selCid]);
-  const decide = (cid: number | null, v: 'a' | 'r' | null) => {
+  useEffect(() => { if (tab === 2 && selCid == null && shown.length) setSelCid((nextUndecided(null, decisions) || shown[0]).id); }, [tab, shown, selCid]);
+  const reviewer = prefs.reviewerName.trim() || t('审阅人');
+  const mkDec = (v: Verdict | undefined, prev?: Dec): Dec => ({ v, by: v ? reviewer : prev?.by || reviewer, at: Date.now(), note: prev?.note });
+  const decide = (cid: number | null, v: Verdict | null) => {
     // 撤销：当前这处还没决定时，撤销最近一次决定并跳回那一处（刚按完 A/R 会自动跳到下一处）
     if (!v) {
-      let target = cid != null && decisions[cid] !== undefined ? cid : decideOrder.current[decideOrder.current.length - 1];
-      if (target == null || decisions[target] === undefined) return;
+      const target = cid != null && decisions[cid]?.v ? cid : decideOrder.current[decideOrder.current.length - 1];
+      if (target == null || !decisions[target]?.v) return;
       const next = { ...decisions };
-      delete next[target];
+      if (next[target].note) next[target] = { ...next[target], v: undefined }; else delete next[target];
       decideOrder.current = decideOrder.current.filter((x) => x !== target);
       setDecisions(next);
       setSelCid(target);
@@ -498,14 +503,13 @@ export default function App() {
       return;
     }
     if (cid == null) return;
-    const next = { ...decisions };
-    next[cid] = v;
+    const next = { ...decisions, [cid]: mkDec(v, decisions[cid]) };
     decideOrder.current = [...decideOrder.current.filter((x) => x !== cid), cid];
     setDecisions(next);
-    setFeedback(v === 'a' ? 'ok' : 'no');
-    if (prefs.sound) chime(v === 'a' ? 'ok' : 'no');
-    setTimeout(() => setFeedback(null), 650);
-    const all = changes.every((c) => next[c.id]);
+    setFeedback(v);
+    if (prefs.sound) chime(v === 'a' ? 'ok' : v === 'r' ? 'no' : 'hold');
+    setTimeout(() => setFeedback(null), 700);
+    const all = changes.every((c) => next[c.id]?.v);
     if (all && changes.length) {
       setTimeout(() => { setDoneOpen(true); if (prefs.sound) chime('done'); }, 450);
     } else {
@@ -513,36 +517,57 @@ export default function App() {
       if (n) setTimeout(() => setSelCid(n.id), 220);
     }
   };
-  const decideAll = (v: 'a' | 'r' | null) => {
-    decideOrder.current = v ? changes.map((c) => c.id) : [];
-    setDecisions(v ? Object.fromEntries(changes.map((c) => [c.id, v])) : {});
-    if (v && changes.length) { setDoneOpen(true); if (prefs.sound) chime('done'); }
+  const setNote = (cid: number, note: string) => {
+    setDecisions((ds) => {
+      const prev = ds[cid];
+      const d: Dec = { v: prev?.v, by: prev?.by || reviewer, at: prev?.at || Date.now(), note: note || undefined };
+      const next = { ...ds };
+      if (!d.v && !d.note) delete next[cid]; else next[cid] = d;
+      return next;
+    });
   };
+  const decideAll = (v: Verdict | null, onlyPending = false) => {
+    if (!v) { decideOrder.current = []; setDecisions(Object.fromEntries(Object.entries(decisions).filter(([, d]) => d.note).map(([k, d]) => [k, { ...d, v: undefined }]))); return; }
+    const next = { ...decisions };
+    for (const c of changes) if (!onlyPending || !next[c.id]?.v) next[c.id] = mkDec(v, next[c.id]);
+    decideOrder.current = changes.map((c) => c.id);
+    setDecisions(next);
+    if (!onlyPending && changes.length) { setDoneOpen(true); if (prefs.sound) chime('done'); }
+  };
+
+  // ---------- 导出 ----------
   const baseName = B ? B.file.name.replace(/\.[^.]+$/, '') : 'document';
-  const exportDocx = async (finalMode: boolean) => {
-    if (!richRes || !A || !B) return;
-    const bytes = await buildDocx(richRes.rows, A.blocks, B.blocks, (cid) => (cid === undefined ? undefined : decisions[cid]), finalMode, baseName);
-    const p = await api.saveFile({ defaultName: `${baseName}-${t(finalMode ? '最终稿' : '修订稿')}.docx`, data: bytes, filters: [{ name: t('Word 文档'), extensions: ['docx'] }] });
-    if (p) flash(t('已导出：{p}', { p }));
-  };
-  const exportPdf = async () => {
-    if (!redlineRef.current) return;
-    const css = Array.from(document.styleSheets).map((s) => { try { return Array.from(s.cssRules).map((r) => r.cssText).join('\n'); } catch { return ''; } }).join('\n');
-    const clone = redlineRef.current.cloneNode(true) as HTMLElement;
-    clone.querySelectorAll('.sel-cid, .sel-row').forEach((e) => e.classList.remove('sel-cid', 'sel-row'));
-    const html = `<!doctype html><html data-theme="light"><head><meta charset="utf-8"><style>${css}
-      @page { size: A4; margin: 18mm 16mm; }
-      html, body { overflow: visible !important; height: auto !important; background: #fff !important; user-select: text; }
-      .redline { box-shadow: none !important; padding: 0 !important; max-width: none !important; border-radius: 0 !important; }
-      .redline > div { content-visibility: visible !important; }
-      .head-note { font: 11px -apple-system, "PingFang SC", sans-serif; color: #666; margin-bottom: 18px; border-bottom: 1px solid #ddd; padding-bottom: 8px; }
-    </style></head><body><div class="head-note">${t('修订对比')}：${A!.file.name} → ${B!.file.name}　·　${t('红色删除线 = 删除，绿色下划线 = 新增，紫色 = 移动，橙色底线 = 格式变化')}</div>${clone.outerHTML}</body></html>`;
-    const p = await api.htmlToPdf({ html, defaultName: `${baseName}-${t('修订对比')}.pdf` });
-    if (p) flash(t('已导出：{p}', { p }));
+  const defaultAuthor = () => prefs.authorName.trim() || B?.meta['最后修改者'] || B?.meta['作者'] || t('修改方');
+  const openExport = () => { setExpAuthor(defaultAuthor()); setExportOpen(true); };
+  const doExport = async (kind: ExportKind) => {
+    if (!richRes || !RA || !RB || !A || !B || !scope) return;
+    setExportBusy(true);
+    try {
+      if (kind === 'report') {
+        const html = reportHtml({ A, B, res: richRes, clauses, risks, decisions, scope, reviewer }, RA.blocks, RB.blocks);
+        const p = await api.htmlToPdf({ html, defaultName: `${baseName}-${t('比对报告')}.pdf` });
+        if (p) { flash(t('已导出：{p}', { p })); setExportOpen(false); }
+      } else {
+        const bytes = await buildDocx(richRes.rows, RA.blocks, RB.blocks, {
+          mode: kind === 'final' ? 'final' : 'redline',
+          author: expAuthor.trim() || t('修改方'),
+          authorDate: new Date(B.file.mtime || Date.now()),
+          reviewer: { name: reviewer, initials: prefs.reviewerInitials.trim() || initialsOf(reviewer) },
+          decisions, commentAccepted: prefs.commentAccepted, risks: riskById, changes: richRes.changes, title: baseName,
+        });
+        const p = await api.saveFile({ defaultName: `${baseName}-${t(kind === 'final' ? '审阅后定稿' : '修订稿')}.docx`, data: bytes, filters: [{ name: t('Word 文档'), extensions: ['docx'] }] });
+        if (p) { flash(t('已导出：{p}', { p })); setExportOpen(false); }
+      }
+    } catch (e: any) {
+      flash(t('导出失败：{e}', { e: String(e?.message || e) }));
+    } finally {
+      setExportBusy(false);
+    }
   };
   const copySummary = () => {
-    if (!curRes || !A || !B) return;
-    api.copyText(changesMarkdown(curRes.changes, A.file.name, B.file.name, curRes.stats));
+    if (!curRes || !A || !B || !scope) return;
+    const useRich = curRes === richRes;
+    api.copyText(summaryMarkdown({ A, B, res: curRes, clauses: useRich ? clauses : noClauses, risks: useRich ? risks : [], decisions: useRich ? decisions : {}, scope, reviewer }));
     flash(t('已复制 {n} 处差异的摘要，可以直接粘贴', { n: curRes.changes.length }));
   };
 
@@ -550,46 +575,60 @@ export default function App() {
   const runOcr = async () => {
     if (!A || !B) return;
     const key = ocrKey;
+    const run = ++ocrRun.current;
+    const alive = () => { if (ocrRun.current !== run) throw new Cancelled(); };
     const langs = prefs.ocrLang.split('+');
     setOcr({ status: 'running', msg: t('正在准备页面…'), pct: 0, key });
     let off: (() => void) | null = null;
     try {
       const texts: string[] = [];
+      const confs: number[][] = [], lows: Map<number, Set<number>>[] = [];
       for (const [si, d] of [[0, A], [1, B]] as [number, DocModel][]) {
-        const pages = await getPages(d, 2, (i, n) => setOcr((o) => ({ ...o, msg: t('正在准备{s}的第 {i}/{n} 页', { s: sideLabel(si as Side), i, n }) })));
+        const pages = await getPages(d, 2, (i, n) => { if (ocrRun.current === run) setOcr((o) => ({ ...o, msg: t('正在准备{s}的第 {i}/{n} 页', { s: sideLabel(si as Side), i, n }) })); });
+        alive();
         const imgs: Uint8Array[] = [];
         for (const p of pages) {
           const blob: Blob = await new Promise((r) => p.canvas.toBlob((b) => r(b!), 'image/png'));
           imgs.push(new Uint8Array(await blob.arrayBuffer()));
+          alive();
         }
         off?.();
-        off = api.onOcrProgress(({ page, progress }: any) => {
+        off = api.onOcrProgress(({ page, progress, run: r }: any) => {
+          if (r !== undefined && r !== run) return;
           const total = pages.length;
           const pct = ((si * total + page + progress) / (2 * total)) * 100;
           api.setProgress?.(pct / 100);
-          setOcr((o) => (o.status === 'running' ? { ...o, pct, msg: t('正在识别{s}：第 {i}/{n} 页', { s: sideLabel(si as Side), i: page + 1, n: total }) } : o));
+          setOcr((o) => (o.status === 'running' && ocrRun.current === run ? { ...o, pct, msg: t('正在识别{s}：第 {i}/{n} 页', { s: sideLabel(si as Side), i: page + 1, n: total }) } : o));
         });
         setOcr((o) => ({ ...o, msg: t('正在加载识别模型…') }));
-        const res: string[] = await api.ocr({ images: imgs, langs });
-        texts.push(res.map((x, i) => (res.length > 1 ? `—— ${t('第 {n} 页', { n: i + 1 })} ——\n` : '') + cleanOcr(x)).join('\n\n'));
+        const res: any[] = await api.ocr({ images: imgs, langs, run });
+        alive();
+        const pagesOut: { text: string; conf: number; words: [string, number][] }[] = res.map((x) => (typeof x === 'string' ? { text: x, conf: -1, words: [] } : x));
+        const full = pagesOut.map((x, i) => (pagesOut.length > 1 ? `—— ${t('第 {n} 页', { n: i + 1 })} ——\n` : '') + cleanOcr(x.text)).join('\n\n');
+        texts.push(full);
+        confs.push(pagesOut.map((x) => x.conf));
+        lows.push(lowPositions(full, pagesOut.flatMap((x) => x.words || [])));
       }
-      setOcr({ status: 'done', a: texts[0], b: texts[1], key });
+      alive();
+      setOcr({ status: 'done', a: texts[0], b: texts[1], key, conf: [confs[0], confs[1]], low: [lows[0], lows[1]] });
       api.notify?.(t('OCR 识别完成'), t('{a} 与 {b} 已可以比较', { a: A.file.name, b: B.file.name }));
       if (prefs.sound) chime('done');
     } catch (e: any) {
+      if (ocrRun.current !== run) return; // 已被取消：取消时已经把状态复位了，别再写回
       const m = String(e?.message || e);
       setOcr(/取消/.test(m) ? { status: 'idle' } : { status: 'error', msg: m, key });
-    } finally { off?.(); api.setProgress?.(-1); }
+    } finally { off?.(); if (ocrRun.current === run) api.setProgress?.(-1); }
   };
-  const cancelOcr = () => { api.ocrCancel?.(); setOcr({ status: 'idle' }); flash(t('已取消识别')); };
+  const cancelOcr = () => { const run = ocrRun.current; ocrRun.current++; api.ocrCancel?.(run); api.setProgress?.(-1); setOcr({ status: 'idle' }); flash(t('已取消识别')); };
+  const lowWords = ocr.low;
 
   // ---------- 菜单 & 键盘 ----------
   const canCompare = !!(A && B) && !busy[0] && !busy[1];
   const startCompare = () => { if (canCompare) { setCompared(true); setTab(0); setChangedSides([]); } };
-  const clearAll = () => { setDocs([null, null]); setCompared(false); setErrs([null, null]); setOcr({ status: 'idle' }); setChangedSides([]); };
-  const swap = () => { setDocs(([a, b]) => [b, a]); setOcr({ status: 'idle' }); };
+  const clearAll = () => { setDocs([null, null]); setCompared(false); setErrs([null, null]); ocrRun.current++; setOcr({ status: 'idle' }); setChangedSides([]); setLostBanner(null); lastLoaded.current = null; };
+  const swap = () => { setDocs(([a, b]) => [b, a]); ocrRun.current++; setOcr({ status: 'idle' }); };
   const actions = useRef<any>({});
-  actions.current = { open, swap, clearAll, go, decide, setTab, startCompare, compared, tab, selCid, decisions, modal: !!(pwd || pasteSide !== null || showSettings) };
+  actions.current = { open, swap, clearAll, go, decide, setTab, startCompare, compared, tab, selCid, modal: !!(pwd || pasteSide !== null || showSettings || exportOpen) };
   useEffect(() => api.onMenu((cmd: string, arg?: any) => {
     const a = actions.current;
     if (cmd === 'open-left') a.open(0);
@@ -604,15 +643,17 @@ export default function App() {
     const onKey = (e: KeyboardEvent) => {
       const a = actions.current;
       const t = e.target as HTMLElement;
-      if (a.modal || /INPUT|TEXTAREA|SELECT/.test(t.tagName) || modPressed(e) || e.altKey) return;
-      if (!a.compared) { if (e.key === 'Enter') a.startCompare(); return; }
+      if (a.modal || /INPUT|TEXTAREA|SELECT/.test(t.tagName) || t.isContentEditable || modPressed(e) || e.altKey) return;
+      if (!a.compared) { if (e.key === 'Enter' && t.tagName !== 'BUTTON') a.startCompare(); return; }
       const k = e.key.toLowerCase();
       if (k === 'j') { a.go(1); e.preventDefault(); }
       else if (k === 'k') { a.go(-1); e.preventDefault(); }
       else if (a.tab === 2) {
         if (k === 'a' || k === 'y') a.decide(a.selCid, 'a');
-        else if (k === 'r' || k === 'n') a.decide(a.selCid, 'r');
+        else if (k === 'r') a.decide(a.selCid, 'r');
+        else if (k === 'h') a.decide(a.selCid, 'h');
         else if (k === 'u') a.decide(a.selCid, null);
+        else if (k === 'n') { e.preventDefault(); noteRef.current?.focus(); }
         else if (e.key === 'ArrowRight') a.go(1);
         else if (e.key === 'ArrowLeft') a.go(-1);
       }
@@ -621,13 +662,34 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  const settingsValues: SettingsValues = {
+    lang, theme, paperFollowTheme: prefs.paperFollowTheme, sound: prefs.sound, celebrate: prefs.celebrate,
+    reviewerName: prefs.reviewerName, reviewerInitials: prefs.reviewerInitials, authorName: prefs.authorName, commentAccepted: prefs.commentAccepted,
+    riskMoney: prefs.riskMoney, riskDate: prefs.riskDate, keywords: prefs.keywords, autoCheckUpdate: prefs.autoCheckUpdate,
+  };
+  const setSetting = <K extends keyof SettingsValues>(k: K, v: SettingsValues[K]) => {
+    if (k === 'lang') return changeLang(v as Lang);
+    if (k === 'theme') return setTheme(v as 'light' | 'dark');
+    if (k === 'autoCheckUpdate') { set('autoCheckUpdate')(v as boolean); if (v) checkUpdate(false); return; }
+    if (k === 'reviewerName') setPrefs((p) => ({ ...p, reviewerAsked: true }));
+    setPrefs((p) => ({ ...p, [k]: v }));
+  };
+
   const modals = (
     <>
       {pwd && <PasswordModal name={pwd.file.name} wrong={pwd.wrong} onCancel={() => setPwd(null)} onOk={(p) => { const x = pwd; setPwd(null); loadFile(x.side, x.file, p); }} />}
       {pasteSide !== null && <PasteModal side={pasteSide} onCancel={() => setPasteSide(null)} onOk={(t) => { const s = pasteSide; setPasteSide(null); loadFile(s, textFile(t, s)); }} />}
-      {showSettings && <SettingsModal lang={lang} setLang={changeLang} theme={theme} setTheme={setTheme} sound={prefs.sound} setSound={set('sound')} onClose={() => setShowSettings(false)}
-        upd={{ info: upd, checking: checkingUpd, onCheck: () => checkUpdate(true), onSkip: (v) => { set('skipVersion')(v); flash(t('已跳过 {v}，下次有更新的版本再提醒你', { v })); }, auto: prefs.autoCheckUpdate, setAuto: (v) => { set('autoCheckUpdate')(v); if (v) checkUpdate(false); } }} />}
-      {toast && <div className="toast">{toast}</div>}
+      {showSettings && <SettingsModal v={settingsValues} set={setSetting} onClose={() => setShowSettings(false)} initialTab={showSettings}
+        upd={{ info: upd, checking: checkingUpd, onCheck: () => checkUpdate(true), onSkip: (v) => { set('skipVersion')(v); flash(t('已跳过 {v}，下次有更新的版本再提醒你', { v })); } }} />}
+      {exportOpen && richRes && (
+        <ExportDialog total={richRes.changes.length} undecided={richRes.changes.length - richRes.changes.filter((c) => decisions[c.id]?.v).length} risks={risks.length}
+          author={expAuthor} setAuthor={setExpAuthor}
+          reviewer={prefs.reviewerName} setReviewer={(v) => { setPrefs((p) => ({ ...p, reviewerName: v, reviewerInitials: initialsOf(v), reviewerAsked: true })); }}
+          commentAccepted={prefs.commentAccepted} setCommentAccepted={set('commentAccepted')}
+          hasSections={richRes.rows.some((r) => r.sec && r.sec !== 'body')}
+          onExport={doExport} onHoldPending={() => decideAll('h', true)} onClose={() => setExportOpen(false)} busy={exportBusy} />
+      )}
+      {toast && <div className="toast" role="status" aria-live="polite">{toast}</div>}
     </>
   );
 
@@ -639,28 +701,27 @@ export default function App() {
       await Promise.all([loadFile(0, await api.readPath(r.a.path)), loadFile(1, await api.readPath(r.b.path))]);
       setCompared(true); setTab(0);
     };
+    const missing = 2 - (A ? 1 : 0) - (B ? 1 : 0);
     return (
       <div className="app home">
         <div className="home-top drag">
           <Wordmark size={36} sub={t('离线文档比对')} />
           <div className="spacer" />
-          <button className={`btn plain icon${updBadge ? ' has-dot' : ''}`} title={t(updBadge ? '设置（有新版本）' : '设置')} onClick={() => setShowSettings(true)}><I.IconGear /></button>
+          <button className={`btn plain icon${updBadge ? ' has-dot' : ''}`} title={t(updBadge ? '设置（有新版本）' : '设置')} aria-label={t('设置')} onClick={() => setShowSettings('general')}><I.IconGear /></button>
         </div>
         <div className="home-scroll">
           <div className="home-inner">
             <div className="hero">
-              <Mascot mood={A && B ? 'cheer' : A || B ? 'happy' : 'think'} size={132} className="mascot-bob" />
+              <Mascot mood={A && B ? 'cheer' : A || B ? 'happy' : 'think'} size={124} className="mascot-bob" />
               <div>
-                <h1>{t(A && B ? '准备好了！按「开始比较」吧' : '找出两份文档的每一处不同')}</h1>
+                <h1>{t(A && B ? '准备好了，开始比较吧' : '找出两份文档的每一处不同')}</h1>
                 <p>{t('Word、PDF、TXT 任意组合 · 所有处理都在这台电脑上完成，不会上传')}</p>
-                <div className="pills">
-                  {MODES.map((m) => <span key={m.label} className="pill">{m.icon}{t(m.label)}</span>)}
-                </div>
+                {!A && !B && <button className="btn sm sample-btn" onClick={trySample}><I.ModeRich />{t('用示例合同试一下')}</button>}
               </div>
             </div>
             <div className="drops">
               <DropZone side={0} doc={A} loading={busy[0]} error={errs[0]} onOpen={() => open(0)} onFiles={(f) => onFiles(0, f)} onClear={() => setDocs((d) => [null, d[1]])} onPaste={() => setPasteSide(0)} />
-              <div className="vs"><button className="vs-chip" title={t('交换左右')} onClick={swap}><I.IconSwap /></button></div>
+              <div className="vs"><button className="vs-chip" title={t('交换左右')} aria-label={t('交换左右')} onClick={swap}><I.IconSwap /></button></div>
               <DropZone side={1} doc={B} loading={busy[1]} error={errs[1]} onOpen={() => open(1)} onFiles={(f) => onFiles(1, f)} onClear={() => setDocs((d) => [d[0], null])} onPaste={() => setPasteSide(1)} />
             </div>
             {recent.length > 0 && (
@@ -669,23 +730,27 @@ export default function App() {
                   <button className="btn sm plain" onClick={async () => { await api.recentClear?.(); setRecent([]); }}>{t('清空')}</button>
                 </h2>
                 <div className="recent-grid">
-                  {recent.map((r, i) => (
-                    <div key={i} className="recent-item" role="button" tabIndex={0} onClick={() => openRecent(r)} onKeyDown={(e) => e.key === 'Enter' && openRecent(r)}>
-                      <div className="row"><span className={`badge ${r.a.ext}`}>{r.a.ext.toUpperCase()}</span><span className="name" title={r.a.name}>{midEllipsis(r.a.name)}</span></div>
-                      <div className="row"><span className={`badge ${r.b.ext}`}>{r.b.ext.toUpperCase()}</span><span className="name" title={r.b.name}>{midEllipsis(r.b.name)}</span></div>
-                      <div className="time">{timeAgo(r.time)}</div>
-                      <button className="btn sm icon x" title={t('从列表移除')} onClick={(e) => { e.stopPropagation(); api.recentRemove(i).then(setRecent); }}><I.IconX /></button>
-                    </div>
-                  ))}
+                  {recent.map((r, i) => {
+                    const prog = r.a.sha && r.b.sha ? reviewProgress(pairKey(r.a.sha, r.b.sha)) : null;
+                    return (
+                      <div key={i} className="recent-item" role="button" tabIndex={0} onClick={() => openRecent(r)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openRecent(r); } }}>
+                        <div className="row"><span className={`badge ${r.a.ext}`}>{r.a.ext.toUpperCase()}</span><span className="name" title={r.a.name}>{midEllipsis(r.a.name)}</span></div>
+                        <div className="row"><span className={`badge ${r.b.ext}`}>{r.b.ext.toUpperCase()}</span><span className="name" title={r.b.name}>{midEllipsis(r.b.name)}</span></div>
+                        <div className="time">{timeAgo(r.time)}{prog && <span className={`prog ${prog.decided >= prog.total ? 'done' : ''}`}>{t('已审 {d}/{n}', { d: prog.decided, n: prog.total })}</span>}</div>
+                        <button className="btn sm icon x" title={t('从列表移除')} aria-label={t('从列表移除')} onClick={(e) => { e.stopPropagation(); api.recentRemove(i).then(setRecent); }}><I.IconX /></button>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
           </div>
         </div>
         <div className="home-cta">
-            {canCompare && <span className="hint">{t('也可以直接按')} <Kbd>Enter</Kbd></span>}
-            <button className="btn primary big" disabled={!canCompare} onClick={startCompare}>{A && B ? t('开始比较') : t('还差 {n} 个文档', { n: 2 - (A ? 1 : 0) - (B ? 1 : 0) })}</button>
-          </div>
+          {canCompare
+            ? <><span className="hint">{t('也可以直接按')} <Kbd>Enter</Kbd></span><button className="btn primary big" onClick={startCompare}>{t('开始比较')}</button></>
+            : <span className="cta-wait">{busy[0] || busy[1] ? t('正在读取文档…') : t('还差 {n} 个文档，放进来就能开始比较', { n: missing })}</span>}
+        </div>
         {modals}
       </div>
     );
@@ -693,64 +758,65 @@ export default function App() {
 
   // =================== 比较界面 ===================
   const stats = curRes?.stats;
-  const undecided = changes.length - decidedCount;
-  const navCount = (i: number) => i === 0 ? richRes?.changes.length : i === 1 ? plainRes?.changes.length : i === 2 ? (richRes ? richRes.changes.length - Object.keys(decisions).length : undefined) : i === 4 ? ocrRes?.changes.length : undefined;
+  const navCount = (i: number): [string | number, string] | undefined =>
+    i === 0 && richRes ? [richRes.changes.length, t('含格式与移动的差异总数')]
+    : i === 1 && plainRes ? [plainRes.changes.length, t('按行比较、不含格式，所以数字可能和富文本不同')]
+    : i === 2 && richRes ? [`${richRes.changes.filter((c) => decisions[c.id]?.v).length}/${richRes.changes.length}`, t('已审阅 / 总数')]
+    : i === 4 && ocrRes ? [ocrRes.changes.length, t('按识别出的文字逐行比较')]
+    : undefined;
 
-  const navBtns = changes.length > 0 && (
-    <span style={{ display: 'inline-flex', gap: 8 }}>
+  const navBtns = shown.length > 0 && (
+    <span className="nav-btns">
       <button className="btn sm" onClick={() => go(-1)} title={t('上一处（K）')}><I.IconUp />{t('上一处')}</button>
       <button className="btn sm" onClick={() => go(1)} title={t('下一处（J）')}><I.IconDown />{t('下一处')}</button>
     </span>
   );
+  const navOpen = narrow ? navWide : prefs.navOpen;
+  const filterNote = kindFilter.length > 0 && (
+    <span className="filter-note">{t('只看：{k}', { k: kindFilter.map((k) => KIND_LABEL[k]).join(t('、')) })}<button className="btn sm plain" onClick={() => setKindFilter([])}>{t('清除')}</button></span>
+  );
 
   // 中间工具条
   let tools: React.ReactNode = null;
-  if (tab === 0) tools = (<><span className="legend"><span><span className="tag del">{t('删除')}</span></span><span><span className="tag ins">{t('新增')}</span></span><span><span className="tag fmt">{t('格式')}</span></span><span><span className="tag move">{t('移动')}</span></span></span><span className="grow" />{navBtns}</>);
-  else if (tab === 1) tools = (<><Seg value={prefs.layout} options={[['split', t('并排')], ['unified', t('合并')]]} onChange={set('layout')} /><span className="grow" />{navBtns}</>);
+  const asideShown = narrow ? drawer : prefs.asideOpen;
+  const inlineLegend = !asideShown && stats && (tab === 0 || tab === 2) ? <Overview stats={stats} filter={kindFilter} setFilter={setKindFilter} compact /> : null;
+  if (tab === 0) tools = (<>{inlineLegend}{filterNote}<span className="grow" />{navBtns}</>);
+  else if (tab === 1) tools = (<><Seg value={prefs.layout} options={[['split', t('并排')], ['unified', t('合并')]]} onChange={set('layout')} label={t('布局')} />{filterNote}<span className="grow" />{navBtns}</>);
   else if (tab === 2) tools = changes.length === 0 ? null : (
     <>
-      <div className="progress-lg"><div style={{ width: `${changes.length ? (decidedCount / changes.length) * 100 : 100}%` }} /></div>
-      <span className="progress-label">{decidedCount} / {changes.length}</span>
-      <div style={{ position: 'relative' }}>
-        <button className="btn sm" onClick={() => setExportOpen((v) => !v)}><I.IconExport />{t('导出')}</button>
-        {exportOpen && (
-          <div className="menu" style={{ right: 0, top: 40 }} onMouseLeave={() => setExportOpen(false)}>
-            <button onClick={() => { setExportOpen(false); exportDocx(true); }}><b>{t('Word 最终稿')}</b><small>{t('还没处理的修订按“接受”算')}</small></button>
-            <button onClick={() => { setExportOpen(false); exportDocx(false); }}><b>{t('Word 修订稿')}</b><small>{t('保留删除线和下划线标记')}</small></button>
-            <button onClick={() => { setExportOpen(false); exportPdf(); }}><b>PDF</b><small>{t('当前修订视图，适合发给别人看')}</small></button>
-          </div>
-        )}
-      </div>
+      <div className="progress-lg" role="progressbar" aria-valuemin={0} aria-valuemax={changes.length} aria-valuenow={decidedCount} aria-label={t('审阅进度')}><div style={{ width: `${changes.length ? (decidedCount / changes.length) * 100 : 100}%` }} /></div>
+      <span className="progress-label">{t('已审 {d}/{n}', { d: decidedCount, n: changes.length })}</span>
+      {filterNote}
     </>
   );
   else if (tab === 3) tools = (
     <>
-      <Seg value={prefs.imgMode} options={[['split', t('并排')], ['diff', t('差异')], ['fade', t('淡化')], ['slider', t('滑块')]]} onChange={set('imgMode')} />
-      {prefs.imgMode === 'fade' && <><span className="progress-label">{t('原始')}</span><input type="range" className="range" style={{ width: 200 }} min={0} max={100} value={fade} onChange={(e) => setFade(Number(e.target.value))} /><span className="progress-label">{t('修改后')}</span></>}
+      <Seg value={prefs.imgMode} options={[['split', t('并排')], ['diff', t('差异')], ['fade', t('淡化')], ['slider', t('滑块')]]} onChange={set('imgMode')} label={t('对比方式')} />
+      {prefs.imgMode === 'fade' && <><span className="progress-label">{t('原始')}</span><input type="range" className="range" style={{ width: 200 }} min={0} max={100} value={fade} onChange={(e) => setFade(Number(e.target.value))} aria-label={t('淡化程度')} /><span className="progress-label">{t('修改后')}</span></>}
       {prefs.imgMode === 'slider' && <span className="progress-label">{t('拖动页面上的分割线来对比')}</span>}
       <span className="grow" />
-      <select className="sel" value={zoom} onChange={(e) => setZoom(Number(e.target.value))} title={t('缩放')}>
+      <select className="sel" value={zoom} onChange={(e) => setZoom(Number(e.target.value))} title={t('缩放')} aria-label={t('缩放')}>
         {[0.5, 0.75, 1, 1.25, 1.5, 2].map((z) => <option key={z} value={z}>{z * 100}%</option>)}
       </select>
     </>
   );
   else if (tab === 4) tools = (
     <>
-      <select className="sel" value={prefs.ocrLang} onChange={(e) => set('ocrLang')(e.target.value as OcrLang)} disabled={ocr.status === 'running'}>
+      <select className="sel" value={prefs.ocrLang} onChange={(e) => set('ocrLang')(e.target.value as OcrLang)} disabled={ocr.status === 'running'} aria-label={t('识别语言')}>
         <option value="chi_sim+eng">{t('中文 + 英文')}</option><option value="chi_sim">{t('仅中文')}</option><option value="eng">{t('仅英文')}</option>
       </select>
       {ocr.status === 'running' ? <button className="btn sm danger-outline" onClick={cancelOcr}><I.IconX />{t('取消识别')}</button>
-        : <button className="btn sm blue" onClick={runOcr}><I.IconOcr />{t(ocrRes ? '重新识别' : '开始识别')}</button>}
-      <span className="grow" />{ocrRes && navBtns}
+        : <button className="btn sm" onClick={runOcr}><I.IconOcr />{t(ocrRes ? '重新识别' : '开始识别')}</button>}
+      {filterNote}<span className="grow" />{ocrRes && navBtns}
     </>
   );
 
   // 主体
   let body: React.ReactNode = null;
   const needsDiff = tab === 0 || tab === 1 || tab === 2 || (tab === 4 && !!ocrBlocks);
+  const sameText = <div className="same-text">{t('在已比较的范围内未发现差异。')}{scope?.notCompared.length ? <small>{t('未比较：{x}', { x: scope.notCompared.join(t('、')) })}</small> : null}</div>;
   if (needsDiff && diffJob.running) body = (
     <div className="empty-state">
-      <Mascot mood="think" className="mascot-bob" />
       <h2>{t('正在比较…')}</h2>
       <div>{t('这份文档比较大，正在后台算，界面不会卡住。')}</div>
       <div className="progress indeterminate"><div /></div>
@@ -759,7 +825,6 @@ export default function App() {
   );
   else if (needsDiff && diffJob.cancelled) body = (
     <div className="empty-state">
-      <Mascot mood="oops" />
       <h2>{t('已取消比较')}</h2>
       <div>{t('可以调整一下比较设置再来一次。')}</div>
       <button className="btn primary" onClick={diffJob.retry}>{t('重新比较')}</button>
@@ -767,24 +832,22 @@ export default function App() {
   );
   else if (needsDiff && diffJob.error) body = (
     <div className="empty-state">
-      <Mascot mood="oops" />
       <h2>{t('比较过程出错了')}</h2>
       <div className="err">{diffJob.error}</div>
       <button className="btn primary" onClick={diffJob.retry}>{t('重新比较')}</button>
     </div>
   );
-  else if (tab === 0 && richRes) body = richRes.rows.length ? <RichView A={A} B={B} res={richRes} selCid={selCid} onSel={setSelCid} hideUnchanged={prefs.hideRich} />
-    : <div className="empty-state"><Mascot mood="oops" /><h2>{t('没找到可以比较的文字')}</h2><div>{t((A.type === 'pdf' || B.type === 'pdf') ? '如果是扫描件，试试「OCR 文本」或「图像」模式。' : '两份文档好像都是空的。')}</div></div>;
+  else if (tab === 0 && richRes && RA && RB) body = richRes.rows.length ? <RichView A={RA} B={RB} res={richRes} selCid={selCid} onSel={setSelCid} hideUnchanged={prefs.hideRich} />
+    : <div className="empty-state"><h2>{t('没找到可以比较的文字')}</h2><div>{t((A.type === 'pdf' || B.type === 'pdf') ? '如果是扫描件，试试「OCR 文本」或「图像」模式。' : '两份文档好像都是空的。')}</div></div>;
   else if (tab === 1 && plainRes && plainBlocks) body = <PlainView A={plainBlocks[0]} B={plainBlocks[1]} res={plainRes} selCid={selCid} onSel={setSelCid} layout={prefs.layout} wrap={prefs.wrap} hideUnchanged={prefs.hidePlain} />;
-  else if (tab === 2 && richRes) body = changes.length ? <RedlineView A={A} B={B} res={richRes} selCid={selCid} onSel={setSelCid} decisions={decisions} innerRef={redlineRef} />
-    : <div className="empty-state"><Mascot mood="cheer" /><h2>{t('没有需要审阅的修订')}</h2><div>{t('两份文档内容一致。')}</div></div>;
+  else if (tab === 2 && richRes && RA && RB) body = changes.length ? <RedlineView A={RA} B={RB} res={richRes} selCid={selCid} onSel={setSelCid} decisions={decisions} innerRef={redlineRef} />
+    : <div className="empty-state"><h2>{t('没有需要审阅的修订')}</h2>{sameText}</div>;
   else if (tab === 3) body = <ImageView state={imgState} mode={prefs.imgMode} zoom={zoom} fade={fade} setFade={setFade} slider={slider} setSlider={setSlider} showBoxes={prefs.showBoxes} onlyDiff={onlyDiffPages} scrollRef={imgScroll} />;
   else if (tab === 4) {
-    if (ocrRes && ocrBlocks) body = <PlainView A={ocrBlocks[0]} B={ocrBlocks[1]} res={ocrRes} selCid={selCid} onSel={setSelCid} layout={prefs.layout} wrap={prefs.wrap} hideUnchanged={prefs.hidePlain} />;
-    else if (ocr.status === 'running') body = <div className="empty-state"><Mascot mood="think" className="mascot-bob" /><h2>{t('正在认真读字…')}</h2><div>{ocr.msg}</div><div className="progress"><div style={{ width: `${ocr.pct || 0}%` }} /></div><button className="btn sm plain" onClick={cancelOcr}>{t('取消')}</button></div>;
+    if (ocrRes && ocrBlocks) body = <PlainView A={ocrBlocks[0]} B={ocrBlocks[1]} res={ocrRes} selCid={selCid} onSel={setSelCid} layout={prefs.layout} wrap={prefs.wrap} hideUnchanged={prefs.hidePlain} lowWords={lowWords} />;
+    else if (ocr.status === 'running') body = <div className="empty-state"><h2>{t('正在识别文字…')}</h2><div>{ocr.msg}</div><div className="progress"><div style={{ width: `${ocr.pct || 0}%` }} /></div><button className="btn sm plain" onClick={cancelOcr}>{t('取消')}</button></div>;
     else body = (
       <div className="empty-state">
-        <Mascot mood={ocr.status === 'error' ? 'oops' : 'happy'} />
         <h2>{t('先识别，再比较')}</h2>
         <div>{t('把两份文档的每一页当成图片来识别文字。适合扫描件、截图型 PDF。')}<br />{t('每页大约 3–5 秒，完全离线。')}</div>
         {ocr.status === 'error' && <div className="err">{t('识别失败')}：{ocr.msg}</div>}
@@ -793,58 +856,59 @@ export default function App() {
     );
   } else if (tab === 5) body = <DetailsView A={A} B={B} />;
 
-  const showMap = (tab === 0 || tab === 1 || tab === 2 || (tab === 4 && !!ocrRes)) && changes.length > 0;
+  const showMap = (tab === 0 || tab === 1 || tab === 2 || (tab === 4 && !!ocrRes)) && shown.length > 0;
   const cur = changes.find((c) => c.id === selCid);
   const curIdx = changes.findIndex((c) => c.id === selCid);
+  const curDec = cur ? decisions[cur.id] : undefined;
+  const isRichTab = tab === 0 || tab === 2;
 
-  // 右侧卡片
+  // 右侧
+  const asideActions = (curRes && changes.length > 0) || (isRichTab && richRes) ? (
+    <div className="aside-actions">
+      {richRes && isRichTab && <button className="btn primary sm" onClick={openExport}><I.IconExport />{t('导出…')}</button>}
+      {curRes && <button className="btn sm" onClick={copySummary} title={t('复制为 Markdown，可粘贴到邮件 / 飞书 / 文档')}><I.IconCopy />{t('复制摘要')}</button>}
+    </div>
+  ) : null;
   const summaryCard = curRes && (
-    <Card title={t('差异概览')} right={changes.length > 0 && <button className="btn sm" onClick={copySummary} title={t('复制为 Markdown，可粘贴到邮件 / 飞书 / 文档')}><I.IconCopy />{t('复制摘要')}</button>}>
-      {changes.length === 0 ? (
-        <div className="same-banner"><Mascot mood="cheer" size={48} />{t('内容完全一致！')}</div>
-      ) : (
-        <div className="stats">
-          <div className="stat-tile del"><span className="ic">−</span><div><b>{stats!.del}</b><br /><span>{t('删除')}</span></div></div>
-          <div className="stat-tile ins"><span className="ic">+</span><div><b>{stats!.ins}</b><br /><span>{t('新增')}</span></div></div>
-          <div className="stat-tile mod"><span className="ic">✎</span><div><b>{stats!.mod}</b><br /><span>{t('修改')}</span></div></div>
-          <div className="stat-tile other"><span className="ic">⇅</span><div><b>{stats!.fmt + stats!.move}</b><br /><span>{t('格式 / 移动')}</span></div></div>
-        </div>
-      )}
+    <Card title={t('差异概览')} right={kindFilter.length > 0 && <button className="btn sm plain" onClick={() => setKindFilter([])}>{t('显示全部')}</button>}>
+      {changes.length === 0 ? <div className="same-banner">{sameText}</div> : <Overview stats={stats!} filter={kindFilter} setFilter={setKindFilter} />}
     </Card>
   );
   const compareSettings = (
     <>
-      <Opt label={t('忽略空白差异')} hint={t('多余空格、换行符不同')}><Switch on={prefs.ignoreWs} onChange={set('ignoreWs')} /></Opt>
-      <Opt label={t('忽略全角 / 半角标点')} hint={t('，和 ,　（和 (　视为相同')}><Switch on={prefs.normPunct} onChange={set('normPunct')} /></Opt>
-      <Opt label={t('忽略大小写')}><Switch on={prefs.ignoreCase} onChange={set('ignoreCase')} /></Opt>
-      <Opt label={t('检测移动的段落')}><Switch on={prefs.detectMoves} onChange={set('detectMoves')} /></Opt>
-      {(tab === 0 || tab === 2) && <Opt label={t('检测格式变化')} hint={t(A.type !== B.type ? 'Word 与 PDF 互比时默认关闭' : '加粗、字号、颜色、标题级别')}><Switch on={formatting} onChange={setFormatting} /></Opt>}
-      {tab === 0 && <Opt label={t('只看有变化的段落')}><Switch on={prefs.hideRich} onChange={set('hideRich')} /></Opt>}
-      {(tab === 1 || tab === 4) && <><Opt label={t('只看有变化的行')}><Switch on={prefs.hidePlain} onChange={set('hidePlain')} /></Opt><Opt label={t('自动换行')}><Switch on={prefs.wrap} onChange={set('wrap')} /></Opt></>}
-      <Opt label={t('比较精度')}><Seg value={prefs.precision} options={[['word', t('按词')], ['char', t('按字符')]]} onChange={set('precision')} /></Opt>
-      {tab === 2 && <Opt label={t('音效')}><Switch on={prefs.sound} onChange={set('sound')} /></Opt>}
+      <Opt label={t('忽略空白差异')} hint={t('多余空格、换行符不同')}><Switch on={prefs.ignoreWs} onChange={set('ignoreWs')} label={t('忽略空白差异')} /></Opt>
+      <Opt label={t('忽略全角 / 半角标点')} hint={t('，和 ,　（和 (　视为相同')}><Switch on={prefs.normPunct} onChange={set('normPunct')} label={t('忽略全角 / 半角标点')} /></Opt>
+      <Opt label={t('忽略大小写')}><Switch on={prefs.ignoreCase} onChange={set('ignoreCase')} label={t('忽略大小写')} /></Opt>
+      <Opt label={t('检测移动的段落')}><Switch on={prefs.detectMoves} onChange={set('detectMoves')} label={t('检测移动的段落')} /></Opt>
+      {isRichTab && <Opt label={t('检测格式变化')} hint={t(A.type !== B.type ? 'Word 与 PDF 互比时默认关闭' : '加粗、字号、颜色、标题级别')}><Switch on={formatting} onChange={setFormatting} label={t('检测格式变化')} /></Opt>}
+      {tab === 0 && <Opt label={t('只看有变化的段落')}><Switch on={prefs.hideRich} onChange={set('hideRich')} label={t('只看有变化的段落')} /></Opt>}
+      {(tab === 1 || tab === 4) && <><Opt label={t('只看有变化的行')}><Switch on={prefs.hidePlain} onChange={set('hidePlain')} label={t('只看有变化的行')} /></Opt><Opt label={t('自动换行')}><Switch on={prefs.wrap} onChange={set('wrap')} label={t('自动换行')} /></Opt></>}
+      <Opt label={t('比较精度')}><Seg value={prefs.precision} options={[['word', t('按词')], ['char', t('按字符')]]} onChange={set('precision')} label={t('比较精度')} /></Opt>
     </>
   );
   let aside: React.ReactNode = null;
   if (tab === 0 || tab === 1 || tab === 2 || tab === 4) {
     aside = (
       <>
+        {asideActions}
+        {isRichTab && <RiskCard risks={risks} changes={changeById} clauses={clauses} onSel={setSelCid} sel={selCid} />}
         {summaryCard}
         {tab === 2 && changes.length > 0 && (
           <Card title={t('批量处理')}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-              <button className="btn sm" style={{ '--fg-b': 'var(--feather-dark)' } as any} onClick={() => decideAll('a')}><I.IconCheck />{t('全部接受')}</button>
+            <div className="batch">
+              <button className="btn sm" onClick={() => decideAll('a')}><I.IconCheck />{t('全部接受')}</button>
               <button className="btn sm danger-outline" onClick={() => decideAll('r')}><I.IconX />{t('全部拒绝')}</button>
             </div>
             {decidedCount > 0 && <button className="btn sm plain block" style={{ marginTop: 8 }} onClick={() => decideAll(null)}>{t('重置所有决定')}</button>}
           </Card>
         )}
         {changes.length > 0 && (
-          <Card className="grow-card" title={<>{t(tab === 2 ? '修订列表' : '变更列表')} <span style={{ color: 'var(--text-3)', fontSize: 14 }}>{changes.length}</span></>}>
-            <ChangeList changes={changes} sel={selCid} onSel={setSelCid} decisions={tab === 2 ? decisions : undefined} />
+          <Card className="grow-card" title={<>{t(tab === 2 ? '修订列表' : '变更列表')} <span className="card-count">{kindFilter.length ? `${shown.length}/${changes.length}` : changes.length}</span></>}>
+            <ChangeList changes={shown} all={changes} sel={selCid} onSel={setSelCid} decisions={tab === 2 ? decisions : undefined} clauses={isRichTab ? clauses : noClauses} risks={isRichTab ? riskById : new Map()} grouped={isRichTab} />
           </Card>
         )}
-        <Card title={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}><I.IconGear />{t('比较设置')}</span>} collapsible open={settingsOpen} onToggle={() => setSettingsOpen((v) => !v)}>
+        {isRichTab && scope && <ScopeCard scope={scope} open={scopeOpen} onToggle={() => setScopeOpen((v) => !v)} />}
+        <Card title={<span className="card-title-ic"><I.IconGear />{t('比较设置')}</span>} collapsible open={settingsOpen} onToggle={() => setSettingsOpen((v) => !v)}>
           <div>{compareSettings}</div>
         </Card>
       </>
@@ -855,13 +919,13 @@ export default function App() {
       <>
         <Card title={t('版面对比')}>
           {imgState.loading && !imgState.diffs.length ? <div className="progress-label">{imgState.loading}</div> : diffPages ? (
-            <div className="stats"><div className="stat-tile del"><span className="ic">!</span><div><b>{diffPages}</b><br /><span>{t('页有差异')}</span></div></div><div className="stat-tile ins"><span className="ic">✓</span><div><b>{imgState.diffs.length - diffPages}</b><br /><span>{t('页相同')}</span></div></div></div>
-          ) : <div className="same-banner"><Mascot mood="cheer" size={48} />{t('每一页都一模一样！')}</div>}
+            <div className="page-stats"><div className="ps diff"><b>{diffPages}</b><span>{t('页有差异')}</span></div><div className="ps same"><b>{imgState.diffs.length - diffPages}</b><span>{t('页相同')}</span></div></div>
+          ) : <div className="same-banner"><div className="same-text">{t('每一页在视觉上都没有发现差异。')}</div></div>}
           <div style={{ marginTop: 10 }}>
-            <Opt label={t('标出差异区域')}><Switch on={prefs.showBoxes} onChange={set('showBoxes')} /></Opt>
-            <Opt label={t('只看有差异的页')}><Switch on={onlyDiffPages} onChange={setOnlyDiffPages} /></Opt>
+            <Opt label={t('标出差异区域')}><Switch on={prefs.showBoxes} onChange={set('showBoxes')} label={t('标出差异区域')} /></Opt>
+            <Opt label={t('只看有差异的页')}><Switch on={onlyDiffPages} onChange={setOnlyDiffPages} label={t('只看有差异的页')} /></Opt>
             <Opt label={t('灵敏度')}>
-              <select className="sel" value={prefs.threshold} onChange={(e) => set('threshold')(Number(e.target.value))}>
+              <select className="sel" value={prefs.threshold} onChange={(e) => set('threshold')(Number(e.target.value))} aria-label={t('灵敏度')}>
                 <option value={0.03}>{t('很高')}</option><option value={0.1}>{t('标准')}</option><option value={0.2}>{t('较低')}</option><option value={0.35}>{t('低')}</option>
               </select>
             </Opt>
@@ -871,28 +935,52 @@ export default function App() {
           <div className="pagelist" style={{ overflow: 'auto' }}>
             {imgState.diffs.map((d, i) => (
               <button key={i} onClick={() => document.getElementById(`page-${i}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
-                <span><span className="dot" style={{ background: d.pct < 0.001 ? 'var(--feather)' : 'var(--cardinal)' }} />{t('第 {n} 页', { n: i + 1 })}</span>
-                <span style={{ color: 'var(--text-3)' }}>{d.aMissing || d.bMissing ? t('缺页') : d.pct < 0.001 ? t('相同') : `${d.pct < 0.01 ? '<0.01' : d.pct.toFixed(2)}%`}</span>
+                <span><span className={`dot ${d.pct < 0.001 ? 'same' : 'diff'}`} />{t('第 {n} 页', { n: i + 1 })}</span>
+                <span className="muted">{d.aMissing || d.bMissing ? t('缺页') : d.pct < 0.001 ? t('相同') : `${d.pct < 0.01 ? '<0.01' : d.pct.toFixed(2)}%`}</span>
               </button>
             ))}
           </div>
-          <div className="progress-label" style={{ fontSize: 12, marginTop: 10, fontWeight: 700, whiteSpace: 'normal', lineHeight: 1.5 }}>{t('Word 和 TXT 会先在本机排成页面再比较，分页可能和 Word 略有不同。')}</div>
+          <div className="aside-note">{t('Word 和 TXT 会先在本机排成页面再比较，分页可能和 Word 略有不同。')}</div>
+        </Card>
+      </>
+    );
+  }
+  if (tab === 4 && ocr.status === 'done' && ocr.conf && aside) {
+    const avg = (xs: number[]) => { const v = xs.filter((x) => x >= 0); return v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length) : -1; };
+    const lowConf = [...ocr.conf[0], ...ocr.conf[1]].some((c) => c >= 0 && c < 80);
+    aside = (
+      <>
+        {aside}
+        <Card title={t('识别置信度')}>
+          {[0, 1].map((s) => (
+            <div className="conf-row" key={s}>
+              <span>{sideLabel(s as Side)}</span>
+              <span className="conf-pages">{ocr.conf![s].map((c, i) => <span key={i} className={`conf ${c < 0 ? '' : c < 80 ? 'low' : 'ok'}`} title={t('第 {n} 页：{c}%', { n: i + 1, c: c < 0 ? '—' : Math.round(c) })}>{c < 0 ? '—' : Math.round(c)}</span>)}</span>
+              <b>{avg(ocr.conf![s]) < 0 ? '—' : `${avg(ocr.conf![s])}%`}</b>
+            </div>
+          ))}
+          {lowConf && <div className="aside-note warn">{t('有页面识别把握不高，结果仅供参考。虚线标出的是没认准的字。')}</div>}
         </Card>
       </>
     );
   }
 
-  const navOpen = prefs.navOpen, asideOpen = prefs.asideOpen && !!aside;
+  const asideOpen = (narrow ? drawer : prefs.asideOpen) && !!aside;
+  const toggleNav = () => (narrow ? setNavWide((v) => !v) : set('navOpen')(!prefs.navOpen));
+  const toggleAside = () => (narrow ? setDrawer((v) => !v) : set('asideOpen')(!prefs.asideOpen));
+  const crossFormat = A.type !== B.type && (A.type === 'pdf' || B.type === 'pdf') && isRichTab && dismissCross !== docSig;
+  const askReviewer = tab === 2 && changes.length > 0 && !prefs.reviewerAsked;
+
   return (
-    <div className={`app shell ${aside ? '' : 'no-aside'} ${navOpen ? '' : 'nav-mini'} ${asideOpen ? '' : 'aside-off'} ${showMap ? 'has-map' : ''}`}>
-      <nav className="nav">
+    <div className={`app shell ${aside ? '' : 'no-aside'} ${navOpen ? '' : 'nav-mini'} ${asideOpen ? '' : 'aside-off'} ${showMap ? 'has-map' : ''} ${narrow ? 'narrow' : ''}`}>
+      <nav className="nav" aria-label={t('比较模式')}>
         <div className="nav-drag drag" />
         <div className="nav-brand drag"><Wordmark size={34} /></div>
         {MODES.map((m, i) => {
           const n = navCount(i);
           return (
-            <button key={i} className={`nav-item ${tab === i ? 'on' : ''}`} onClick={() => setTab(i)} title={kbd(`mod+${i + 1}`)}>
-              {m.icon}<span>{t(m.label)}</span>{n !== undefined && <span className="count">{n}</span>}
+            <button key={i} className={`nav-item ${tab === i ? 'on' : ''}`} onClick={() => setTab(i)} title={`${t(m.label)}（${kbd(`mod+${i + 1}`)}）${n ? ' · ' + n[1] : ''}`} aria-current={tab === i ? 'page' : undefined}>
+              {m.icon}<span>{t(m.label)}</span>{n !== undefined && <span className="count">{n[0]}</span>}
             </button>
           );
         })}
@@ -900,26 +988,42 @@ export default function App() {
         <div className="nav-foot">
           <button className="nav-item" onClick={clearAll} title={t('新建比较')}><I.IconPlusDoc /><span>{t('新建比较')}</span></button>
           <button className="nav-item" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} title={t(theme === 'dark' ? '浅色模式' : '深色模式')}>{theme === 'dark' ? <I.IconSun /> : <I.IconMoon />}<span>{t(theme === 'dark' ? '浅色模式' : '深色模式')}</span></button>
-          <button className={`nav-item${updBadge ? ' has-dot' : ''}`} onClick={() => setShowSettings(true)} title={t(updBadge ? '设置（有新版本）' : '设置')}><I.IconGear /><span>{t('设置')}</span></button>
+          <button className={`nav-item${updBadge ? ' has-dot' : ''}`} onClick={() => setShowSettings('general')} title={t(updBadge ? '设置（有新版本）' : '设置')}><I.IconGear /><span>{t('设置')}</span></button>
         </div>
       </nav>
 
-      <button className="edge-handle left" onClick={() => set('navOpen')(!navOpen)} title={t(navOpen ? '收起左侧栏' : '展开左侧栏')} aria-label={t(navOpen ? '收起左侧栏' : '展开左侧栏')}>{navOpen ? <I.IconChevronLeft /> : <I.IconChevronRight />}</button>
-      {aside && <button className="edge-handle right" onClick={() => set('asideOpen')(!asideOpen)} title={t(asideOpen ? '收起右侧栏' : '展开右侧栏')} aria-label={t(asideOpen ? '收起右侧栏' : '展开右侧栏')}>{asideOpen ? <I.IconChevronRight /> : <I.IconChevronLeft />}</button>}
+      <button className="edge-handle left" onClick={toggleNav} title={t(navOpen ? '收起左侧栏' : '展开左侧栏')} aria-label={t(navOpen ? '收起左侧栏' : '展开左侧栏')} aria-expanded={navOpen}>{navOpen ? <I.IconChevronLeft /> : <I.IconChevronRight />}</button>
+      {aside && <button className="edge-handle right" onClick={toggleAside} title={t(asideOpen ? '收起右侧栏' : '展开右侧栏')} aria-label={t(asideOpen ? '收起右侧栏' : '展开右侧栏')} aria-expanded={asideOpen}>{asideOpen ? <I.IconChevronRight /> : <I.IconChevronLeft />}</button>}
 
-      <div className="center">
+      <main className="center">
         <div className="center-head drag">
           <FilePill side={0} doc={A} onOpen={() => open(0)} onFiles={(f) => onFiles(0, f)} changed={changedSides.includes(0)} />
-          <button className="vs-chip" title={t('交换左右（{k}）', { k: kbd('mod+shift+S') })} onClick={swap}><I.IconSwap /></button>
+          <button className="vs-chip" title={t('交换左右（{k}）', { k: kbd('mod+shift+S') })} aria-label={t('交换左右')} onClick={swap}><I.IconSwap /></button>
           <FilePill side={1} doc={B} onOpen={() => open(1)} onFiles={(f) => onFiles(1, f)} changed={changedSides.includes(1)} />
           {(busy[0] || busy[1]) && <div className="spinner" style={{ width: 22, height: 22, borderWidth: 3 }} />}
         </div>
         {changedSides.length > 0 && (
-          <div className="banner">
+          <div className="banner" role="status">
             <I.IconRefresh />
             <span className="grow">{t('「{f}」刚刚在磁盘上被修改了', { f: changedSides.map((s) => docs[s]?.file.name).join('」/「') })}</span>
-            <button className="btn sm blue" onClick={reloadChanged}>{t('重新比较')}</button>
+            <button className="btn sm" onClick={reloadChanged}>{t('重新比较')}</button>
             <button className="btn sm plain" onClick={() => setChangedSides([])}>{t('忽略')}</button>
+          </div>
+        )}
+        {lostBanner && (
+          <div className="banner warn" role="status">
+            <I.IconWarn />
+            <span className="grow">{t('改了比较设置后，有 {n} 个决定对应的修订不在了。它们已经保存，改回原来的设置就会回来。', { n: lostBanner.n })}</span>
+            <button className="btn sm" onClick={lostBanner.restore}>{t('改回原来的设置')}</button>
+            <button className="btn sm plain" onClick={() => setLostBanner(null)}>{t('知道了')}</button>
+          </div>
+        )}
+        {crossFormat && (
+          <div className="banner info" role="note">
+            <I.IconWarn />
+            <span className="grow"><b>{t('跨格式比对')}</b>{t('：PDF 的文字是从版面推断的，段落和表格可能被拆开。')}{formatting ? t('格式差异已检测，但 PDF 的格式信息不完整。') : t('格式差异（加粗、字号等）没有检测。')}</span>
+            {!formatting && <button className="btn sm" onClick={() => setFormatting(true)}>{t('检测格式差异')}</button>}
+            <button className="btn sm plain" onClick={() => setDismissCross(docSig)}>{t('知道了')}</button>
           </div>
         )}
         {(errs[0] || errs[1]) && <div className="err" style={{ margin: '0 18px 12px' }}>{errs[0] || errs[1]}</div>}
@@ -935,40 +1039,71 @@ export default function App() {
                     ? t('两份文档差异太大（单个区段 {n} 组比较），为了不卡死改用了按位置粗配，段落对应关系可能不准。', { n: curRes.degraded.maxRegion.toLocaleString() })
                     : t('差异区段过大，本次没有识别段落的拆分与合并。')}</span>
                 </div>
-                <button className="btn sm plain" onClick={() => setDismissDegraded(true)} title={t('知道了')}><I.IconX /></button>
+                <button className="btn sm plain icon" onClick={() => setDismissDegraded(true)} title={t('知道了')} aria-label={t('知道了')}><I.IconX /></button>
               </div>
             )}
             {body}
-            {showMap && <ChangeMap bottom={tab === 2 ? 92 : 6} changes={changes} selCid={selCid} onSel={setSelCid} dep={[curRes, tab, prefs.hideRich, prefs.hidePlain, prefs.layout, prefs.wrap, decisions]} />}
+            {showMap && <ChangeMap bottom={tab === 2 ? (askReviewer ? 160 : 118) : 6} changes={shown} selCid={selCid} onSel={setSelCid} dep={[curRes, tab, prefs.hideRich, prefs.hidePlain, prefs.layout, prefs.wrap, decisions, asideOpen, navOpen]} />}
+            {askReviewer && (
+              <div className="reviewer-ask" role="note">
+                <span className="chip"><span className="av">{(prefs.reviewerInitials || initialsOf(reviewer)).slice(0, 2)}</span>{reviewer}</span>
+                {editName === null ? (
+                  <>
+                    <span className="grow">{t('你将以「{n}」的身份审阅。每个决定都会在导出的 Word 里署这个名字。', { n: reviewer })}</span>
+                    <button className="btn sm" onClick={() => setEditName(prefs.reviewerName)}>{t('改名字')}</button>
+                    <button className="btn sm primary" onClick={() => set('reviewerAsked')(true)}>{t('好的')}</button>
+                  </>
+                ) : (
+                  <>
+                    <input className="grow" autoFocus value={editName} onChange={(e) => setEditName(e.target.value)} aria-label={t('审阅人姓名')}
+                      onKeyDown={(e) => { if (e.key === 'Enter' && editName.trim()) { setPrefs((p) => ({ ...p, reviewerName: editName.trim(), reviewerInitials: initialsOf(editName.trim()), reviewerAsked: true })); setEditName(null); } if (e.key === 'Escape') setEditName(null); }} />
+                    <button className="btn sm primary" disabled={!editName.trim()} onClick={() => { setPrefs((p) => ({ ...p, reviewerName: editName.trim(), reviewerInitials: initialsOf(editName.trim()), reviewerAsked: true })); setEditName(null); }}>{t('保存')}</button>
+                  </>
+                )}
+              </div>
+            )}
             {tab === 2 && changes.length > 0 && (
-              <div className={`review-bar ${feedback || ''}`}>
-                {feedback ? (
-                  <div className="info"><span className="fb">{feedback === 'ok' ? <><I.IconCheck />{t('已接受，保留新版本')}</> : <><I.IconX />{t('已拒绝，恢复原文')}</>}</span></div>
-                ) : cur ? (
-                  <div className="info">
-                    <span className="t"><span className={`tag ${cur.kind}`}>{KIND_LABEL[cur.kind]}</span>{t('第 {i} / {n} 处', { i: curIdx + 1, n: changes.length })}{decisions[cur.id] && <span className={`dec ${decisions[cur.id]}`}>{decisions[cur.id] === 'a' ? `· ${t('已接受')}` : `· ${t('已拒绝')}`}</span>}</span>
-                    <span className="d">{cur.kind === 'mod' ? `“${short(cur.before, 40)}” → “${short(cur.after, 40)}”` : cur.kind === 'ins' ? `${t('新增')}：${short(cur.after, 80)}` : cur.kind === 'del' ? `${t('删除')}：${short(cur.before, 80)}` : cur.kind === 'fmt' ? `${short(cur.before, 40)}（${noteText(cur)}）` : `${t('移动')}：${short(cur.before, 80)}`}</span>
-                  </div>
-                ) : <div className="info"><span className="t">{t('点文中任意一处修订开始审阅')}</span></div>}
-                <span className="keys"><Kbd>R</Kbd>{t('拒绝')} <Kbd>A</Kbd>{t('接受')} <Kbd>J</Kbd><Kbd>K</Kbd>{t('切换')}</span>
-                <button className="btn red big" disabled={!cur} onClick={() => decide(selCid, 'r')}>{t('拒绝')}</button>
-                <button className="btn primary big" disabled={!cur} onClick={() => decide(selCid, 'a')}>{t('接受')}</button>
+              <div className={`review-bar ${feedback ? 'fb-' + feedback : ''}`}>
+                <div className="rb-top">
+                  {feedback ? (
+                    <span className="fb" role="status">{feedback === 'a' ? <I.IconCheck /> : feedback === 'r' ? <I.IconX /> : <I.IconWarn />}{t(VERDICT_FB[feedback])}</span>
+                  ) : cur ? (
+                    <span className="t">
+                      <span className={`tag ${cur.kind}`}>{KIND_LABEL[cur.kind]}</span>
+                      {t('第 {i} / {n} 处', { i: curIdx + 1, n: changes.length })}
+                      <span className="rb-where">{cur.sec && cur.sec !== 'body' ? t(cur.sec === 'header' ? '页眉' : cur.sec === 'footer' ? '页脚' : '脚注') : clauses.get(cur.id) ?? t('开头部分')}</span>
+                      {riskById.get(cur.id) && <span className={`tag risk r-${riskById.get(cur.id)!.cat}`}>{t('需要留意')}</span>}
+                      {curDec?.v && <span className={`dec ${curDec.v}`}>{t(VERDICT_SHORT[curDec.v])}{curDec.by ? ` · ${curDec.by}` : ''}</span>}
+                    </span>
+                  ) : <span className="t">{t('点文中任意一处修订开始审阅')}</span>}
+                  <span className="grow" />
+                  <button className="chip as-btn" onClick={() => setShowSettings('review')} title={t('审阅人：{n}（点击修改）', { n: reviewer })}><span className="av">{(prefs.reviewerInitials || initialsOf(reviewer)).slice(0, 2)}</span>{reviewer}</button>
+                </div>
+                {cur && <div className="rb-diff">{cur.kind === 'mod' ? <><del>{short(cur.before, 60)}</del><span className="arrow">→</span><ins>{short(cur.after, 60)}</ins></> : cur.kind === 'ins' ? <ins>{short(cur.after, 120)}</ins> : cur.kind === 'del' ? <del>{short(cur.before, 120)}</del> : cur.kind === 'fmt' ? <>{short(cur.before, 60)}<em>（{noteText(cur)}）</em></> : <>{short(cur.before, 100)}<em>（{t('整段移动')}）</em></>}</div>}
+                <div className="rb-acts">
+                  <label className="rb-note">
+                    <Kbd>N</Kbd>
+                    <input id="note-input" ref={noteRef} disabled={!cur} value={cur ? decisions[cur.id]?.note || '' : ''} placeholder={t('备注（可选），会写进 Word 批注')}
+                      onChange={(e) => cur && setNote(cur.id, e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') (e.target as HTMLInputElement).blur(); }} aria-label={t('备注')} />
+                  </label>
+                  <span className="keys"><Kbd>R</Kbd>{t('拒绝')} <Kbd>H</Kbd>{t('待议')} <Kbd>A</Kbd>{t('接受')}</span>
+                  <button className="btn red" disabled={!cur} onClick={() => decide(selCid, 'r')}>{t('拒绝')}</button>
+                  <button className="btn hold" disabled={!cur} onClick={() => decide(selCid, 'h')}>{t('待议')}</button>
+                  <button className="btn primary" disabled={!cur} onClick={() => decide(selCid, 'a')}>{t('接受')}</button>
+                </div>
               </div>
             )}
             {tab === 2 && doneOpen && (
               <div className="overlay-bg">
-                <Confetti />
-                <div className="done-card">
-                  <Mascot mood="cheer" size={150} />
-                  <h2>{t('审阅完成！')}</h2>
-                  <div style={{ color: 'var(--text-2)', fontWeight: 700 }}>{t('{n} 处修订全部处理完毕', { n: changes.length })}</div>
+                {prefs.celebrate && <Confetti />}
+                <div className="done-card" role="dialog" aria-label={t('审阅完成')}>
+                  <h2>{t('审阅完成')}</h2>
+                  <div className="muted">{t('{n} 处修订全部处理完毕', { n: changes.length })}</div>
                   <div className="done-stats">
-                    <div className="done-stat a"><div className="h">{t('接受')}</div><div className="v">{Object.values(decisions).filter((v) => v === 'a').length}</div></div>
-                    <div className="done-stat r"><div className="h">{t('拒绝')}</div><div className="v">{Object.values(decisions).filter((v) => v === 'r').length}</div></div>
+                    {(['a', 'r', 'h'] as Verdict[]).map((v) => <div key={v} className={`done-stat ${v}`}><div className="h">{t(v === 'a' ? '接受' : v === 'r' ? '拒绝' : '待议')}</div><div className="v">{changes.filter((c) => decisions[c.id]?.v === v).length}</div></div>)}
                   </div>
                   <div className="done-acts">
-                    <button className="btn primary big block" onClick={() => exportDocx(true)}>{t('导出 Word 最终稿')}</button>
-                    <button className="btn big block" onClick={exportPdf}>{t('导出 PDF 修订对比')}</button>
+                    <button className="btn primary big block" onClick={() => { setDoneOpen(false); openExport(); }}><I.IconExport />{t('导出审阅结果…')}</button>
                     <button className="btn plain block" onClick={() => setDoneOpen(false)}>{t('回去再看看')}</button>
                   </div>
                 </div>
@@ -976,9 +1111,10 @@ export default function App() {
             )}
           </div>
         </div>
-      </div>
+      </main>
 
-      {aside && asideOpen && <aside className="aside"><div className="aside-drag drag" />{aside}</aside>}
+      {aside && asideOpen && <aside className={`aside ${narrow ? 'drawer' : ''}`} aria-label={t('差异与设置')}><div className="aside-drag drag" />{aside}</aside>}
+      {aside && asideOpen && narrow && <div className="drawer-scrim" onClick={() => setDrawer(false)} />}
       {modals}
     </div>
   );

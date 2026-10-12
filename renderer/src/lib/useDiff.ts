@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { diffDocs, type DiffOptions, type DiffResult } from './engine';
+import { diffDocsSec as diffDocs, type DiffOptions, type DiffResult } from './engine';
 import type { Block } from './model';
 import type { DiffRes } from './diff.worker';
 

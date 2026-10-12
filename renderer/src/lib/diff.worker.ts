@@ -1,5 +1,5 @@
 // 大文档的比对放到这里跑，主线程只等结果，期间可以取消（直接 terminate）。
-import { diffDocs, type DiffOptions, type DiffResult } from './engine';
+import { diffDocsSec as diffDocs, type DiffOptions, type DiffResult } from './engine';
 import type { Block } from './model';
 
 export interface DiffReq { id: number; blocksA: Block[]; blocksB: Block[]; opts: DiffOptions }

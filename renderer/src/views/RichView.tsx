@@ -4,6 +4,7 @@ import type { DiffResult, Row } from '../lib/engine';
 import { BlockGroup, RTok } from '../components/DocBlock';
 import { t } from '../lib/i18n';
 import { fmtText, blockTagText, blockNoteText } from '../lib/describe';
+import { useSections, SecHead, SecHeadProps } from './sections';
 
 function sideToks(r: Row, side: 'a' | 'b'): RTok[] {
   const out: RTok[] = [];
@@ -29,7 +30,8 @@ export function useScrollToChange(ref: React.RefObject<HTMLElement>, selCid: num
     if (skipRef?.current) { skipRef.current = false; return; }
     const row = rowOf(selCid);
     if (row !== undefined) onExpand?.(row);
-    requestAnimationFrame(() => {
+    // 两帧之后再找元素：被折叠的段落 / 区段刚刚展开，要等 React 把它渲染出来
+    requestAnimationFrame(() => requestAnimationFrame(() => {
       const root = ref.current;
       if (!root) return;
       const el = (root.querySelector(`[data-cid="${selCid}"]`) || (row !== undefined ? root.querySelector(`[data-row="${row}"]`) : null)) as HTMLElement | null;
@@ -38,7 +40,7 @@ export function useScrollToChange(ref: React.RefObject<HTMLElement>, selCid: num
         const cell = el.closest('[data-row]') as HTMLElement | null;
         if (cell) { cell.classList.remove('row-flash'); void cell.offsetWidth; cell.classList.add('row-flash'); }
       }
-    });
+    }));
   }, [selCid]);
 }
 
@@ -68,7 +70,8 @@ export function RichView({ A, B, res, selCid, onSel, hideUnchanged }: { A: DocMo
   const anchor = useRef<{ span: HTMLElement; top: number; idx: number } | null>(null);
   useEffect(() => { setExpanded(new Set()); setAlign(null); setPinned(null); setHover(null); }, [res]);
   const rowOfCid = (cid: number) => res.changes.find((c) => c.id === cid)?.row;
-  useScrollToChange(ref, selCid, rowOfCid, (row) => { if (hideUnchanged && !expanded.has(row)) setExpanded((s) => new Set(s).add(row)); }, skipScroll);
+  const secs = useSections(res);
+  useScrollToChange(ref, selCid, rowOfCid, (row) => { secs.reveal(res.rows[row]?.sec); if (hideUnchanged && !expanded.has(row)) setExpanded((s) => new Set(s).add(row)); }, skipScroll);
 
   const rows = res.rows;
 
@@ -197,20 +200,23 @@ export function RichView({ A, B, res, selCid, onSel, hideUnchanged }: { A: DocMo
     if (el) { el.classList.remove('row-flash'); void el.offsetWidth; el.classList.add('row-flash'); }
   };
 
-  // 隐藏未变化：每个变化前后保留 1 段
-  const visible: (number | { fold: number[] })[] = [];
-  if (hideUnchanged) {
-    const keep = new Array(rows.length).fill(false);
-    rows.forEach((r, i) => { if (r.kind !== 'equal') for (let k = i - 1; k <= i + 1; k++) if (k >= 0 && k < rows.length) keep[k] = true; });
-    let buf: number[] = [];
-    rows.forEach((_, i) => {
-      if (keep[i] || expanded.has(i)) { if (buf.length) { visible.push({ fold: buf }); buf = []; } visible.push(i); }
-      else buf.push(i);
-    });
-    if (buf.length) visible.push({ fold: buf });
-  } else rows.forEach((_, i) => visible.push(i));
+  // 隐藏未变化：每个变化前后保留 1 段；页眉 / 页脚 / 脚注各自一个区段，可以折叠
+  type Item = number | { fold: number[] } | { sec: SecHeadProps };
+  const visible: Item[] = [];
+  const keep = new Array(rows.length).fill(!hideUnchanged);
+  if (hideUnchanged) rows.forEach((r, i) => { if (r.kind !== 'equal') for (let k = i - 1; k <= i + 1; k++) if (k >= 0 && k < rows.length && (rows[k].sec || 'body') === (r.sec || 'body')) keep[k] = true; });
+  let buf: number[] = [];
+  const flushFold = () => { if (buf.length) { visible.push({ fold: buf }); buf = []; } };
+  rows.forEach((r, i) => {
+    const head = secs.headAt(i);
+    if (head) { flushFold(); visible.push({ sec: head }); }
+    if (secs.hidden(r.sec)) return;
+    if (keep[i] || expanded.has(i)) { flushFold(); visible.push(i); }
+    else buf.push(i);
+  });
+  flushFold();
 
-  const n = visible.length;
+  const isSec = (x: Item | undefined) => !!x && typeof x === 'object' && 'sec' in x;
   const frame = (b: Box | undefined, cls: string) => b && <div className={`line-frame ${cls}`} style={{ top: b.top, left: b.left, width: b.width, height: b.height }} />;
   return (
     <>
@@ -219,13 +225,15 @@ export function RichView({ A, B, res, selCid, onSel, hideUnchanged }: { A: DocMo
           <div className="colhead"><span className={`badge ${A.type}`}>{A.type.toUpperCase()}</span>{A.file.name}</div>
           <div className="colhead"><span className={`badge ${B.type}`}>{B.type.toUpperCase()}</span>{B.file.name}</div>
           {visible.map((v, vi) => {
-            const edge = (vi === 0 ? ' first' : '') + (vi === n - 1 ? ' last' : '');
+            if (isSec(v)) return <SecHead key={'s' + vi} {...(v as { sec: SecHeadProps }).sec} span />;
+            const edge = (vi === 0 || isSec(visible[vi - 1]) ? ' first' : '') + (vi === visible.length - 1 || isSec(visible[vi + 1]) ? ' last' : '');
             if (typeof v !== 'number') {
-              const expand = () => setExpanded((st) => { const x = new Set(st); v.fold.forEach((i) => x.add(i)); return x; });
+              const f = v as { fold: number[] };
+              const expand = () => setExpanded((st) => { const x = new Set(st); f.fold.forEach((i) => x.add(i)); return x; });
               return (
                 <React.Fragment key={'f' + vi}>
-                  <div className={`cell fold-cell${edge}`}><button className="btn sm plain block" onClick={expand}>{t('⋯ {n} 个未变化的段落', { n: v.fold.length })}</button></div>
-                  <div className={`cell fold-cell${edge}`}><button className="btn sm plain block" onClick={expand}>{t('⋯ {n} 个未变化的段落', { n: v.fold.length })}</button></div>
+                  <div className={`cell fold-cell${edge}`}><button className="btn sm plain block" onClick={expand}>{t('⋯ {n} 个未变化的段落', { n: f.fold.length })}</button></div>
+                  <div className={`cell fold-cell${edge}`}><button className="btn sm plain block" onClick={expand}>{t('⋯ {n} 个未变化的段落', { n: f.fold.length })}</button></div>
                 </React.Fragment>
               );
             }

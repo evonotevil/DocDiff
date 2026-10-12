@@ -2,6 +2,7 @@ import * as pdfjs from 'pdfjs-dist';
 // @ts-ignore
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import type { Block, Run, DocModel, FileInfo } from './model';
+import { isPageNumberText } from './model';
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -24,8 +25,10 @@ const CJK = /[⺀-鿿豈-﫿＀-￯　-〿]/;
 export async function parsePdf(file: FileInfo, password?: string): Promise<DocModel> {
   const pdf = await openPdf(file.data, password);
   const lines: Line[] = [];
+  const pageH: number[] = [];
   for (let p = 1; p <= pdf.numPages; p++) {
     const page = await pdf.getPage(p);
+    try { pageH[p] = page.getViewport({ scale: 1 }).height; } catch { pageH[p] = 842; }
     const tc = await page.getTextContent();
     try { await page.getOperatorList(); } catch {}
     const fontInfo = (name: string) => {
@@ -51,6 +54,11 @@ export async function parsePdf(file: FileInfo, password?: string): Promise<DocMo
       if (/^\s+$/.test(str)) {
         if (sameLine && (it.width || 0) > size * 1.5) { cur!.runs.push({ t: '\t' }); cur!.text += '\t'; cur!.cols = true; cur!._end = x + (it.width || 0); }
         else if (sameLine) { cur!.runs.push({ ...cur!.runs[cur!.runs.length - 1], t: ' ' }); cur!.text += ' '; cur!._end = x + (it.width || 0); }
+        continue;
+      }
+      // 脚注在正文里的上标号（小一号、抬高的 1~3 位数字）：Word 那边不进文字，这里也去掉，免得每处都报差异
+      if (cur && cur.page === p && /^\d{1,3}$/.test(str.trim()) && size < cur.size * 0.8 && y > cur.y + cur.size * 0.15 && Math.abs(x - (cur._end ?? x)) < cur.size * 0.6) {
+        cur._end = x + (it.width || 0);
         continue;
       }
       const fi = fontInfo(it.fontName);
@@ -82,6 +90,73 @@ export async function parsePdf(file: FileInfo, password?: string): Promise<DocMo
   // 行 → 段落
   const sizes = lines.map((l) => l.size).sort((a, b) => a - b);
   const median = sizes[Math.floor(sizes.length / 2)] || 10;
+
+  // ---- 页眉 / 页脚：每页顶部、底部反复出现的同一行（数字视为通配，页码就能对上）----
+  const nPages = pdf.numPages;
+  const band = (l: Line): 'top' | 'bottom' | null => {
+    const H = pageH[l.page] || 842;
+    if (l.y > H * 0.9) return 'top';
+    if (l.y < H * 0.075) return 'bottom';
+    return null;
+  };
+  const norm = (t: string) => t.replace(/\d+/g, '#').replace(/\s+/g, '');
+  const hfKey = new Map<string, Set<number>>();
+  for (const l of lines) { const b = band(l); if (b) { const k = b + '|' + norm(l.text); (hfKey.get(k) || hfKey.set(k, new Set()).get(k)!).add(l.page); } }
+  const need = Math.max(2, Math.ceil(nPages * 0.5));
+  // 多页：每页都出现的顶部 / 底部行；单页：没法看重复，就看位置 + 字号（比正文小的顶部 / 底部行）
+  const isHF = (l: Line) => {
+    const b = band(l);
+    if (!b) return false;
+    if (nPages >= 2) return (hfKey.get(b + '|' + norm(l.text))?.size || 0) >= need;
+    return l.size < median * 0.95 || isPageNumberText(l.text);
+  };
+  const header: Block[] = [], footer: Block[] = [];
+  const seenHF = new Set<string>();
+  let pageNumbersDropped = false;
+  for (const l of lines) {
+    if (!isHF(l)) continue;
+    const k = band(l) + '|' + norm(l.text);
+    if (seenHF.has(k)) continue;
+    seenHF.add(k);
+    if (isPageNumberText(l.text)) { pageNumbersDropped = true; continue; }
+    (band(l) === 'top' ? header : footer).push({ kind: 'p', runs: mergeRuns(trimRuns(l.runs)), page: l.page });
+  }
+  let body = lines.filter((l) => !isHF(l));
+
+  // ---- 脚注：页面下部、字号明显小于正文、以编号开头的一组行 ----
+  const notes: Block[] = [];
+  const noteLines = new Set<Line>();
+  for (let p = 1; p <= nPages; p++) {
+    const H = pageH[p] || 842;
+    const pl = body.filter((l) => l.page === p);
+    const tail: Line[] = [];
+    for (let i = pl.length - 1; i >= 0; i--) {
+      const l = pl[i];
+      if (l.y > H * 0.35 || l.size > median * 0.88) break;
+      tail.unshift(l);
+    }
+    if (!tail.length || !/^\s*\[?\d{1,3}\]?(?=[\s.、)）]|$|[\u3400-\u9fff])/.test(tail[0].text) || tail.length === pl.length) continue;
+    let curNote: Line[] = [];
+    const flushNote = () => {
+      if (!curNote.length) return;
+      const runs: Run[] = [];
+      curNote.forEach((l, i) => { if (i) runs.push({ t: ' ' }); runs.push(...l.runs); });
+      const text = runs.map((r) => r.t).join('');
+      const m = text.match(/^\s*\[?(\d{1,3})\]?[\s.、)）]*/);
+      let cut = m ? m[0].length : 0;
+      const rest = trimRuns(runs);
+      while (cut > 0 && rest.length) { const r = rest[0]; if (r.t.length <= cut) { cut -= r.t.length; rest.shift(); } else { rest[0] = { ...r, t: r.t.slice(cut) }; cut = 0; } }
+      notes.push({ kind: 'p', runs: mergeRuns([{ t: `[${m ? m[1] : notes.length + 1}] ` }, ...trimRuns(rest)]), page: p });
+      curNote = [];
+    };
+    for (const l of tail) {
+      if (/^\s*\[?\d{1,3}\]?(?=[\s.、)）]|$|[\u3400-\u9fff])/.test(l.text)) flushNote();
+      curNote.push(l);
+      noteLines.add(l);
+    }
+    flushNote();
+  }
+  body = body.filter((l) => !noteLines.has(l));
   const blocks: Block[] = [];
   const BULLET = /^\s*([•·▪■◦○●\-–*\u2022\u25aa\u25cf\u25e6\u2023\u2043\uf0a7\uf0b7\uf076\uf0d8\uf0fc\uf06e\ue000-\uf8ff]|\(?\d{1,3}[.)、]|\(?[a-zA-Z][.)]|[一二三四五六七八九十]+、)\s*/;
   let cur: { lines: Line[] } | null = null;
@@ -133,9 +208,9 @@ export async function parsePdf(file: FileInfo, password?: string): Promise<DocMo
     blocks.push(blk);
     cur = null;
   };
-  for (let i = 0; i < lines.length; i++) {
-    const l = lines[i];
-    const prev = i > 0 ? lines[i - 1] : null;
+  for (let i = 0; i < body.length; i++) {
+    const l = body[i];
+    const prev = i > 0 ? body[i - 1] : null;
     if (!cur || !prev) { cur = { lines: [l] }; continue; }
     const lh = Math.max(prev.size, l.size) * 1.2;
     const gap = prev.y - l.y;
@@ -172,7 +247,17 @@ export async function parsePdf(file: FileInfo, password?: string): Promise<DocMo
   meta['是否为扫描件'] = blocks.length === 0 ? '可能是（未提取到文字，请使用 OCR 模式）' : '否';
   const pageCount = pdf.numPages;
   await pdf.destroy();
-  return { file, type: 'pdf', blocks, meta, pageCount, pdfPassword: password };
+  const multi = nPages >= 2;
+  return {
+    file, type: 'pdf', blocks, meta, pageCount, pdfPassword: password,
+    secBlocks: { header, footer, footnote: notes },
+    secInfo: {
+      header: header.length ? 'found' : multi ? 'none' : 'unknown',
+      footer: footer.length ? 'found' : multi || pageNumbersDropped ? 'none' : 'unknown',
+      footnote: notes.length ? 'found' : 'unknown',
+      pageNumbersDropped,
+    },
+  };
 }
 
 function trimRuns(runs: Run[]): Run[] {

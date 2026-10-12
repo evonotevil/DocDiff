@@ -1,5 +1,6 @@
 import JSZip from 'jszip';
 import type { Block, Run, DocModel, FileInfo } from './model';
+import { blockText, isPageNumberText } from './model';
 
 const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 
@@ -223,17 +224,16 @@ export async function parseDocx(file: FileInfo): Promise<DocModel> {
     return b;
   };
 
-  const walk = async (container: Element) => {
+  const walk = async (container: Element, out: Block[] = blocks) => {
     for (const el of kids(container)) {
       const ln = el.localName;
-      if (ln === 'p') blocks.push(await paraBlock(el));
+      if (ln === 'p') out.push(await paraBlock(el));
       else if (ln === 'tbl') {
         for (const tr of kids(el, 'tr')) {
           const cells: Run[][] = [];
           for (const tc of kids(tr, 'tc')) {
             const cr: Run[] = [];
             const ps = tc.getElementsByTagNameNS(W, 'p');
-            Array.from(ps).forEach(() => {});
             let first = true;
             for (const p of Array.from(ps)) {
               const pb = await paraBlock(p, true);
@@ -243,17 +243,82 @@ export async function parseDocx(file: FileInfo): Promise<DocModel> {
             }
             cells.push(cr);
           }
-          blocks.push({ kind: 'tr', runs: [], cells });
+          out.push({ kind: 'tr', runs: [], cells });
         }
-      } else if (ln === 'sdt') await walk(kid(el, 'sdtContent') || el);
-      else if (ln === 'customXml' || ln === 'ins') await walk(el);
+      } else if (ln === 'sdt') await walk(kid(el, 'sdtContent') || el, out);
+      else if (ln === 'customXml' || ln === 'ins') await walk(el, out);
     }
   };
   const body = doc.getElementsByTagNameNS(W, 'body')[0];
   if (body) await walk(body);
 
+  // ---- 页眉、页脚、脚注（1.6 起参与比较） ----
+  // 页眉页脚按 sectPr 里引用的顺序读取（首页 / 奇偶页的不同版本都算），文字完全相同的只留一份；
+  // 只有页码的行不比较 —— PDF 那边每页的页码都不同，比了只会全是噪音。
+  const partPath = (target: string) => (target.startsWith('/') ? target.slice(1) : 'word/' + target).replace(/\/\.\//g, '/');
+  const readParts = async (refName: 'headerReference' | 'footerReference') => {
+    const out: Block[] = [];
+    const seen = new Set<string>();
+    let dropped = false;
+    const ids: string[] = [];
+    for (const r of Array.from(doc.getElementsByTagNameNS(W, refName))) {
+      const id = r.getAttribute('r:id') || r.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'id') || '';
+      if (id && !ids.includes(id)) ids.push(id);
+    }
+    for (const id of ids) {
+      const target = rels.get(id);
+      if (!target) continue;
+      const x = await xml(partPath(target));
+      const root = x?.documentElement;
+      if (!root) continue;
+      const bs: Block[] = [];
+      await walk(root, bs);
+      for (const b of bs) {
+        const text = blockText(b).trim();
+        if (b.kind !== 'tr' && isPageNumberText(text)) { if (text) dropped = true; continue; }
+        if (b.kind === 'tr' && !text) continue;
+        const key = b.kind + '|' + text;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(b);
+      }
+    }
+    return { blocks: out, dropped };
+  };
+  const hdr = await readParts('headerReference');
+  const ftr = await readParts('footerReference');
+
+  // 脚注 / 尾注：按正文里第一次引用的顺序编号，正文里的上标号不出现在文字里（PDF 那边也会去掉）
+  const notes: Block[] = [];
+  for (const [file, refName, elName] of [['word/footnotes.xml', 'footnoteReference', 'footnote'], ['word/endnotes.xml', 'endnoteReference', 'endnote']] as const) {
+    const x = await xml(file);
+    if (!x) continue;
+    const order: string[] = [];
+    for (const r of Array.from(doc.getElementsByTagNameNS(W, refName))) { const id = wattr(r, 'id'); if (id && !order.includes(id)) order.push(id); }
+    const byId = new Map<string, Element>();
+    for (const fn of Array.from(x.getElementsByTagNameNS(W, elName))) {
+      const ty = wattr(fn, 'type');
+      if (ty && ty !== 'normal') continue;
+      byId.set(wattr(fn, 'id') || '', fn);
+    }
+    const ids = [...order.filter((id) => byId.has(id)), ...[...byId.keys()].filter((id) => !order.includes(id))];
+    for (const id of ids) {
+      const bs: Block[] = [];
+      await walk(byId.get(id)!, bs);
+      const kept = bs.filter((b) => blockText(b).trim());
+      if (!kept.length) continue;
+      const n = notes.filter((b) => (b as any)._first).length + 1;
+      kept.forEach((b, i) => {
+        if (i === 0) { (b as any)._first = true; b.runs = [{ t: `[${n}] ` }, ...b.runs.map((r, k) => (k === 0 ? { ...r, t: r.t.replace(/^\s+/, '') } : r))]; }
+        if (b.kind === 'h' || b.kind === 'li') { b.kind = 'p'; delete b.level; delete b.marker; delete b.list; }
+        notes.push(b);
+      });
+    }
+  }
+  notes.forEach((b) => delete (b as any)._first);
+
   // 合并相邻同样式 run，去掉完全空的段落尾部
-  for (const b of blocks) {
+  for (const b of [...blocks, ...hdr.blocks, ...ftr.blocks, ...notes]) {
     if (b.kind === 'tr') b.cells = b.cells!.map(mergeRuns);
     else b.runs = mergeRuns(b.runs);
   }
@@ -285,7 +350,14 @@ export async function parseDocx(file: FileInfo): Promise<DocModel> {
   const cmts = zip.file('word/comments.xml');
   meta['批注数量'] = cmts ? String((await xml('word/comments.xml'))!.getElementsByTagNameNS(W, 'comment').length) : '0';
 
-  return { file, type: 'docx', blocks, meta, pageCount };
+  return {
+    file, type: 'docx', blocks, meta, pageCount,
+    secBlocks: { header: hdr.blocks, footer: ftr.blocks, footnote: notes },
+    secInfo: {
+      header: hdr.blocks.length ? 'found' : 'none', footer: ftr.blocks.length ? 'found' : 'none',
+      footnote: notes.length ? 'found' : 'none', pageNumbersDropped: hdr.dropped || ftr.dropped,
+    },
+  };
 }
 
 function mergeRuns(runs: Run[]): Run[] {

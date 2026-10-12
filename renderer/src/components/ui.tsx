@@ -1,7 +1,7 @@
 import React from 'react';
 
-export function Switch({ on, onChange, disabled }: { on: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
-  return <button className={`switch ${on ? 'on' : ''}`} disabled={disabled} onClick={() => onChange(!on)} role="switch" aria-checked={on} />;
+export function Switch({ on, onChange, disabled, label }: { on: boolean; onChange: (v: boolean) => void; disabled?: boolean; label?: string }) {
+  return <button type="button" className={`switch ${on ? 'on' : ''}`} disabled={disabled} onClick={() => onChange(!on)} role="switch" aria-checked={on} aria-label={label} />;
 }
 export function Opt({ label, hint, children, disabled }: { label: string; hint?: string; children: React.ReactNode; disabled?: boolean }) {
   return (
@@ -11,10 +11,10 @@ export function Opt({ label, hint, children, disabled }: { label: string; hint?:
     </label>
   );
 }
-export function Seg<T extends string | number>({ value, options, onChange, full }: { value: T; options: [T, React.ReactNode][]; onChange: (v: T) => void; full?: boolean }) {
+export function Seg<T extends string | number>({ value, options, onChange, full, label }: { value: T; options: [T, React.ReactNode][]; onChange: (v: T) => void; full?: boolean; label?: string }) {
   return (
-    <span className={`seg ${full ? 'full' : ''}`}>
-      {options.map(([v, l]) => <button key={String(v)} className={v === value ? 'on' : ''} onClick={() => onChange(v)}>{l}</button>)}
+    <span className={`seg ${full ? 'full' : ''}`} role="group" aria-label={label}>
+      {options.map(([v, l]) => <button type="button" key={String(v)} className={v === value ? 'on' : ''} aria-pressed={v === value} onClick={() => onChange(v)}>{l}</button>)}
     </span>
   );
 }
@@ -24,17 +24,36 @@ export function Card({ title, right, children, className, collapsible, open, onT
 }) {
   return (
     <section className={`card ${className || ''}`}>
-      {title && (
-        <header className={`card-head ${collapsible ? 'clickable' : ''}`} onClick={collapsible ? onToggle : undefined}>
-          <h3>{title}</h3>
-          <span className="card-right" onClick={(e) => e.stopPropagation()}>{right}</span>
-          {collapsible && <span className={`chev ${open ? 'open' : ''}`}>›</span>}
+      {title && (collapsible ? (
+        <header className="card-head clickable">
+          <button type="button" className="card-toggle" aria-expanded={!!open} onClick={onToggle}>
+            <h3>{title}</h3>
+            <span className={`chev ${open ? 'open' : ''}`} aria-hidden="true">›</span>
+          </button>
+          {right && <span className="card-right">{right}</span>}
         </header>
-      )}
+      ) : (
+        <header className="card-head">
+          <h3>{title}</h3>
+          {right && <span className="card-right">{right}</span>}
+        </header>
+      ))}
       {(!collapsible || open) && children}
     </section>
   );
 }
 export function Kbd({ children }: { children: React.ReactNode }) {
   return <kbd className="kbd">{children}</kbd>;
+}
+
+/** 窗口宽度是否满足某个媒体查询（用来在窄窗口下自动收起侧栏） */
+export function useMedia(q: string): boolean {
+  const [m, setM] = React.useState(() => matchMedia(q).matches);
+  React.useEffect(() => {
+    const mq = matchMedia(q);
+    const on = () => setM(mq.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, [q]);
+  return m;
 }

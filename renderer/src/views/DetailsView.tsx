@@ -46,7 +46,7 @@ export function DetailsView({ A, B }: { A: DocModel; B: DocModel }) {
   return (
     <div className="scroll">
       <div className="details selectable">
-        {identical && <div className="err" style={{ background: 'var(--green-2)', color: 'var(--green-active)', marginBottom: 12 }}>{t('两个文件的 SHA-256 完全一致，是同一个文件。')}</div>}
+        {identical && <div className="same-file" role="status">{t('两个文件的 SHA-256 完全一致，是同一个文件。')}</div>}
         <table>
           <thead><tr><th>{t('属性')}</th><th><span className={`badge ${A.type}`}>{A.type.toUpperCase()}</span> {t('原始文档')}</th><th><span className={`badge ${B.type}`}>{B.type.toUpperCase()}</span> {t('修改后文档')}</th></tr></thead>
           <tbody>

@@ -2,6 +2,7 @@
 // 引擎本身不再碰 t()，所以切换语言不需要重新比对，只需要重新渲染。
 import { t, isEn } from './i18n';
 import type { BlockDesc, Change, FmtSig, NoteDesc } from './engine';
+import type { Risk } from './insight';
 
 const SEP = () => (isEn() ? ', ' : '，');
 const dflt = () => t('默认');
@@ -63,4 +64,44 @@ export function noteText(c?: Pick<Change, 'desc'> | null): string {
   if (d.k === 'move') return t('移动到第 {n} 段附近', { n: d.n });
   if (d.k === 'fmt') return fmtText(d.sig);
   return blockNoteText(d);
+}
+
+// ---------- 风险摘要 ----------
+const num = (v: number) => (Math.abs(v) >= 1000 || Number.isInteger(v) ? v.toLocaleString(isEn() ? 'en-US' : 'zh-CN', { maximumFractionDigits: 2 }) : String(+v.toFixed(2)));
+const signed = (v: number) => (v > 0 ? '+' : v < 0 ? '−' : '±') + num(Math.abs(v));
+
+/** 风险标签：金额 / 比例 / 日期 / 期限 / 关键词 */
+export function riskTag(r: Risk): string {
+  if (r.detail.k === 'percent') return t('比例');
+  return t(r.cat === 'money' ? '金额' : r.cat === 'date' ? '日期' : r.cat === 'term' ? '期限' : '关键词');
+}
+
+/** 风险的一行说明，例如“+78,000 元 · +65%”“30 → 15 日 · 缩短 15 日” */
+export function riskText(r: Risk): string {
+  const d = r.detail;
+  const parts: string[] = [];
+  switch (d.k) {
+    case 'money': {
+      parts.push(`${signed(d.b - d.a)}${d.unit ? ' ' + d.unit : ''}`);
+      if (d.pct !== undefined && isFinite(d.pct)) parts.push(`${d.pct > 0 ? '+' : d.pct < 0 ? '−' : '±'}${Math.abs(Math.round(d.pct * 1000) / 10)}%`);
+      break;
+    }
+    case 'percent': parts.push(`${num(d.a)}% → ${num(d.b)}%`, t('{n} 个百分点', { n: signed(d.b - d.a) })); break;
+    case 'amount-new': parts.push(t(d.del ? '删除金额 {v}' : '新增金额 {v}', { v: `${num(d.v)}${d.unit ? ' ' + d.unit : ''}` })); break;
+    case 'date': {
+      if (d.months) parts.push(t(d.months > 0 ? '推后 {n} 个月' : '提前 {n} 个月', { n: Math.abs(d.months) }));
+      else parts.push(t(d.days > 0 ? '推后 {n} 天' : '提前 {n} 天', { n: Math.abs(d.days) }));
+      break;
+    }
+    case 'term': {
+      parts.push(`${num(d.a)} → ${num(d.b)}${d.unit ? ' ' + d.unit : ''}`);
+      const ratio = d.a ? d.b / d.a : 0;
+      if (ratio >= 2 && Number.isInteger(ratio)) parts.push(`×${ratio}`);
+      else parts.push(t(d.b > d.a ? '延长 {n}' : '缩短 {n}', { n: `${num(Math.abs(d.b - d.a))}${d.unit ? ' ' + d.unit : ''}` }));
+      break;
+    }
+    case 'kw': parts.push(t('命中：{w}', { w: d.words.join(isEn() ? ', ' : '、') })); break;
+  }
+  if (r.kw?.length) parts.push(t('命中：{w}', { w: r.kw.join(isEn() ? ', ' : '、') }));
+  return parts.join(' · ');
 }
