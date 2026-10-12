@@ -79,6 +79,10 @@ try {
   await evaluate(`document.querySelector('.sample-btn').click()`);
   let sampleCompared = false;
   for (let i = 0; i < 60; i++) {
+    await evaluate(`(() => {
+      const drawer = document.querySelector('.center-body') && document.querySelector('.edge-handle.right');
+      if (drawer?.getAttribute('aria-expanded') === 'false') drawer.click();
+    })()`);
     sampleCompared = await evaluate(`!!document.querySelector('.center-body') && document.querySelectorAll('.risk-item').length > 0`);
     if (sampleCompared) break;
     await delay(500);
