@@ -2,6 +2,7 @@ import React from 'react';
 import type { DocModel } from '../lib/model';
 import { blockText, countWords, docPlainText, fmtBytes, fmtDate } from '../lib/model';
 import { t, tMeta } from '../lib/i18n';
+import { Notice } from '../components/Panel';
 
 const TYPE_NAME = (k: string) => ({ docx: t('Word 文档 (.docx)'), pdf: t('PDF 文档'), txt: t('纯文本') } as Record<string, string>)[k];
 
@@ -46,7 +47,7 @@ export function DetailsView({ A, B }: { A: DocModel; B: DocModel }) {
   return (
     <div className="scroll">
       <div className="details selectable">
-        {identical && <div className="same-file" role="status">{t('两个文件的 SHA-256 完全一致，是同一个文件。')}</div>}
+        {identical && <Notice tone="ok" className="stack" title={t('两个文件的 SHA-256 完全一致，是同一个文件。')} />}
         <table>
           <thead><tr><th>{t('属性')}</th><th><span className={`badge ${A.type}`}>{A.type.toUpperCase()}</span> {t('原始文档')}</th><th><span className={`badge ${B.type}`}>{B.type.toUpperCase()}</span> {t('修改后文档')}</th></tr></thead>
           <tbody>

@@ -14,13 +14,14 @@ import { scopeInfo } from './lib/scope';
 import { summaryMarkdown, reportHtml } from './lib/report';
 import { ChangeList, KIND_LABEL, short } from './components/ChangeList';
 import { ChangeMap } from './components/ChangeMap';
-import { Overview, RiskCard, ScopeCard } from './components/Panels';
+import { Overview, RiskList, ScopeBody } from './components/Panels';
+import { Panel, PanelGroup, Notice, usePanelState } from './components/Panel';
 import { ExportDialog, ExportKind } from './components/ExportDialog';
 import { SettingsModal, SettingsValues, UpdInfo, APP_VERSION } from './components/SettingsModal';
 import { Modal } from './components/Modal';
 import { Mascot, Confetti } from './components/Mascot';
 import { Wordmark } from './components/Logo';
-import { Switch, Opt, Seg, Card, Kbd, useMedia } from './components/ui';
+import { Switch, Opt, Seg, Kbd, useMedia } from './components/ui';
 import * as I from './components/icons';
 import { RichView } from './views/RichView';
 import { PlainView } from './views/PlainView';
@@ -155,7 +156,7 @@ function DropZone({ side, doc, loading, error, onOpen, onFiles, onClear, onPaste
           <I.FileGlyph type={doc.type} size={64} />
           <div className="name">{doc.file.name}</div>
           <div className="sub">{docStat(doc)} · {t('{n} 段', { n: doc.blocks.filter((b) => b.kind === 'tr' || b.runs.length).length })}</div>
-          {doc.type === 'pdf' && doc.blocks.length === 0 && <div className="err">{t('没读到文字，可能是扫描件。比较后用「OCR 文本」或「图像」模式。')}</div>}
+          {doc.type === 'pdf' && doc.blocks.length === 0 && <Notice tone="warn" className="stack" title={t('没读到文字，可能是扫描件。')}>{t('比较后用「OCR 文本」或「图像」模式。')}</Notice>}
           <div className="acts"><button className="btn sm" onClick={onOpen}><I.IconUpload />{t('更换')}</button><button className="btn sm plain" onClick={onClear}>{t('移除')}</button></div>
         </>
       ) : (
@@ -169,7 +170,7 @@ function DropZone({ side, doc, loading, error, onOpen, onFiles, onClear, onPaste
           </div>
         </>
       )}
-      {error && <div className="err">{error}</div>}
+      {error && <Notice tone="err" className="stack" title={error} />}
     </div>
   );
 }
@@ -259,8 +260,7 @@ export default function App() {
   const [prefs, setPrefs] = useState<Prefs>(loadPrefs);
   const set = <K extends keyof Prefs>(k: K) => (v: Prefs[K]) => setPrefs((p) => ({ ...p, [k]: v }));
   const [formatting, setFormatting] = useState(true);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [scopeOpen, setScopeOpen] = useState(false);
+  const panels = usePanelState();
   const [recent, setRecent] = useState<any[]>([]);
   const [changedSides, setChangedSides] = useState<Side[]>([]);
   const [selCid, setSelCid] = useState<number | null>(null);
@@ -736,7 +736,7 @@ export default function App() {
                       <div key={i} className="recent-item" role="button" tabIndex={0} onClick={() => openRecent(r)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openRecent(r); } }}>
                         <div className="row"><span className={`badge ${r.a.ext}`}>{r.a.ext.toUpperCase()}</span><span className="name" title={r.a.name}>{midEllipsis(r.a.name)}</span></div>
                         <div className="row"><span className={`badge ${r.b.ext}`}>{r.b.ext.toUpperCase()}</span><span className="name" title={r.b.name}>{midEllipsis(r.b.name)}</span></div>
-                        <div className="time">{timeAgo(r.time)}{prog && <span className={`prog ${prog.decided >= prog.total ? 'done' : ''}`}>{t('已审 {d}/{n}', { d: prog.decided, n: prog.total })}</span>}</div>
+                        <div className="time">{timeAgo(r.time)}{prog && <span className={`tag sm ${prog.decided >= prog.total ? 'brand' : 'hold'}`}>{t('已审 {d}/{n}', { d: prog.decided, n: prog.total })}</span>}</div>
                         <button className="btn sm icon x" title={t('从列表移除')} aria-label={t('从列表移除')} onClick={(e) => { e.stopPropagation(); api.recentRemove(i).then(setRecent); }}><I.IconX /></button>
                       </div>
                     );
@@ -773,7 +773,7 @@ export default function App() {
   );
   const navOpen = narrow ? navWide : prefs.navOpen;
   const filterNote = kindFilter.length > 0 && (
-    <span className="filter-note">{t('只看：{k}', { k: kindFilter.map((k) => KIND_LABEL[k]).join(t('、')) })}<button className="btn sm plain" onClick={() => setKindFilter([])}>{t('清除')}</button></span>
+    <span className="tag outline lg">{t('只看：{k}', { k: kindFilter.map((k) => KIND_LABEL[k]).join(t('、')) })}<button type="button" className="tag-x" onClick={() => setKindFilter([])} title={t('清除筛选')} aria-label={t('清除筛选')}><I.IconX /></button></span>
   );
 
   // 中间工具条
@@ -833,7 +833,7 @@ export default function App() {
   else if (needsDiff && diffJob.error) body = (
     <div className="empty-state">
       <h2>{t('比较过程出错了')}</h2>
-      <div className="err">{diffJob.error}</div>
+      <Notice tone="err" title={diffJob.error} />
       <button className="btn primary" onClick={diffJob.retry}>{t('重新比较')}</button>
     </div>
   );
@@ -850,7 +850,7 @@ export default function App() {
       <div className="empty-state">
         <h2>{t('先识别，再比较')}</h2>
         <div>{t('把两份文档的每一页当成图片来识别文字。适合扫描件、截图型 PDF。')}<br />{t('每页大约 3–5 秒，完全离线。')}</div>
-        {ocr.status === 'error' && <div className="err">{t('识别失败')}：{ocr.msg}</div>}
+        {ocr.status === 'error' && <Notice tone="err" title={t('识别失败')}>{ocr.msg}</Notice>}
         <button className="btn primary big" onClick={runOcr}>{t('开始识别')}</button>
       </div>
     );
@@ -869,11 +869,8 @@ export default function App() {
       {curRes && <button className="btn sm" onClick={copySummary} title={t('复制为 Markdown，可粘贴到邮件 / 飞书 / 文档')}><I.IconCopy />{t('复制摘要')}</button>}
     </div>
   ) : null;
-  const summaryCard = curRes && (
-    <Card title={t('差异概览')} right={kindFilter.length > 0 && <button className="btn sm plain" onClick={() => setKindFilter([])}>{t('显示全部')}</button>}>
-      {changes.length === 0 ? <div className="same-banner">{sameText}</div> : <Overview stats={stats!} filter={kindFilter} setFilter={setKindFilter} />}
-    </Card>
-  );
+  const listTitle = t(tab === 2 ? '修订列表' : tab === 3 ? '页面' : '变更列表');
+  const panelNames: Record<string, string> = { risk: t('需要留意'), overview: t('差异概览'), batch: t('批量处理'), list: listTitle, scope: t('比较范围与条件'), settings: t('比较设置'), visual: t('版面对比'), pages: t('页面'), conf: t('识别置信度') };
   const compareSettings = (
     <>
       <Opt label={t('忽略空白差异')} hint={t('多余空格、换行符不同')}><Switch on={prefs.ignoreWs} onChange={set('ignoreWs')} label={t('忽略空白差异')} /></Opt>
@@ -886,42 +883,76 @@ export default function App() {
       <Opt label={t('比较精度')}><Seg value={prefs.precision} options={[['word', t('按词')], ['char', t('按字符')]]} onChange={set('precision')} label={t('比较精度')} /></Opt>
     </>
   );
+  const clearFilter = kindFilter.length > 0 && <button type="button" className="link-btn" onClick={() => setKindFilter([])}>{t('清除筛选')}</button>;
   let aside: React.ReactNode = null;
+  let ocrConf: React.ReactNode = null;
+  if (tab === 4 && ocr.status === 'done' && ocr.conf) {
+    const avg = (xs: number[]) => { const v = xs.filter((x) => x >= 0); return v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length) : -1; };
+    const lowConf = [...ocr.conf[0], ...ocr.conf[1]].some((c) => c >= 0 && c < 80);
+    ocrConf = (
+      <Panel id="conf" title={t('识别置信度')}>
+        {[0, 1].map((s) => (
+          <div className="conf-row" key={s}>
+            <span>{sideLabel(s as Side)}</span>
+            <span className="conf-pages">{ocr.conf![s].map((c, i) => <span key={i} className={`tag sm ${c < 0 ? '' : c < 80 ? 'hold' : 'brand'}`} title={t('第 {n} 页：{c}%', { n: i + 1, c: c < 0 ? '—' : Math.round(c) })}>{c < 0 ? '—' : Math.round(c)}</span>)}</span>
+            <b>{avg(ocr.conf![s]) < 0 ? '—' : `${avg(ocr.conf![s])}%`}</b>
+          </div>
+        ))}
+        {lowConf && <Notice tone="warn" className="in-panel">{t('有页面识别把握不高，结果仅供参考。虚线标出的是没认准的字。')}</Notice>}
+      </Panel>
+    );
+  }
   if (tab === 0 || tab === 1 || tab === 2 || tab === 4) {
     aside = (
       <>
         {asideActions}
-        {isRichTab && <RiskCard risks={risks} changes={changeById} clauses={clauses} onSel={setSelCid} sel={selCid} />}
-        {summaryCard}
-        {tab === 2 && changes.length > 0 && (
-          <Card title={t('批量处理')}>
-            <div className="batch">
-              <button className="btn sm" onClick={() => decideAll('a')}><I.IconCheck />{t('全部接受')}</button>
-              <button className="btn sm danger-outline" onClick={() => decideAll('r')}><I.IconX />{t('全部拒绝')}</button>
-            </div>
-            {decidedCount > 0 && <button className="btn sm plain block" style={{ marginTop: 8 }} onClick={() => decideAll(null)}>{t('重置所有决定')}</button>}
-          </Card>
-        )}
-        {changes.length > 0 && (
-          <Card className="grow-card" title={<>{t(tab === 2 ? '修订列表' : '变更列表')} <span className="card-count">{kindFilter.length ? `${shown.length}/${changes.length}` : changes.length}</span></>}>
-            <ChangeList changes={shown} all={changes} sel={selCid} onSel={setSelCid} decisions={tab === 2 ? decisions : undefined} clauses={isRichTab ? clauses : noClauses} risks={isRichTab ? riskById : new Map()} grouped={isRichTab} />
-          </Card>
-        )}
-        {isRichTab && scope && <ScopeCard scope={scope} open={scopeOpen} onToggle={() => setScopeOpen((v) => !v)} />}
-        <Card title={<span className="card-title-ic"><I.IconGear />{t('比较设置')}</span>} collapsible open={settingsOpen} onToggle={() => setSettingsOpen((v) => !v)}>
-          <div>{compareSettings}</div>
-        </Card>
+        <PanelGroup state={panels} names={panelNames}>
+          {isRichTab && risks.length > 0 && (
+            <Panel id="risk" tone="warn" icon={<I.IconWarn />} title={t('需要留意')} count={risks.length}>
+              <RiskList risks={risks} changes={changeById} clauses={clauses} onSel={setSelCid} sel={selCid} />
+            </Panel>
+          )}
+          {curRes && (
+            <Panel id="overview" title={t('差异概览')} count={changes.length || undefined} right={clearFilter}>
+              {changes.length === 0 ? <Notice tone="ok" className="in-panel" title={t('在已比较的范围内未发现差异。')}>{scope?.notCompared.length ? t('未比较：{x}', { x: scope.notCompared.join(t('、')) }) : null}</Notice>
+                : <Overview stats={stats!} filter={kindFilter} setFilter={setKindFilter} />}
+            </Panel>
+          )}
+          {tab === 2 && changes.length > 0 && (
+            <Panel id="batch" title={t('批量处理')}>
+              <div className="batch">
+                <button className="btn sm" onClick={() => decideAll('a')}><I.IconCheck />{t('全部接受')}</button>
+                <button className="btn sm danger" onClick={() => decideAll('r')}><I.IconX />{t('全部拒绝')}</button>
+              </div>
+              {decidedCount > 0 && <button className="btn sm plain block" style={{ marginTop: 8 }} onClick={() => decideAll(null)}>{t('重置所有决定')}</button>}
+            </Panel>
+          )}
+          {changes.length > 0 && (
+            <Panel id="list" grow title={listTitle} count={kindFilter.length ? `${shown.length}/${changes.length}` : changes.length} right={clearFilter}>
+              <ChangeList changes={shown} all={changes} sel={selCid} onSel={setSelCid} decisions={tab === 2 ? decisions : undefined} clauses={isRichTab ? clauses : noClauses} risks={isRichTab ? riskById : new Map()} grouped={isRichTab} />
+            </Panel>
+          )}
+          {ocrConf}
+          {isRichTab && scope && (
+            <Panel id="scope" icon={<I.IconCheck />} title={t('比较范围与条件')} count={scope.degraded ? <span className="tag hold sm">{t('简化对齐')}</span> : undefined}>
+              <ScopeBody scope={scope} />
+            </Panel>
+          )}
+          <Panel id="settings" icon={<I.IconGear />} title={t('比较设置')}>
+            <div>{compareSettings}</div>
+          </Panel>
+        </PanelGroup>
       </>
     );
   } else if (tab === 3) {
     const diffPages = imgState.diffs.filter((d) => d.pct >= 0.001).length;
     aside = (
-      <>
-        <Card title={t('版面对比')}>
+      <PanelGroup state={panels} names={panelNames}>
+        <Panel id="visual" title={t('版面对比')}>
           {imgState.loading && !imgState.diffs.length ? <div className="progress-label">{imgState.loading}</div> : diffPages ? (
             <div className="page-stats"><div className="ps diff"><b>{diffPages}</b><span>{t('页有差异')}</span></div><div className="ps same"><b>{imgState.diffs.length - diffPages}</b><span>{t('页相同')}</span></div></div>
-          ) : <div className="same-banner"><div className="same-text">{t('每一页在视觉上都没有发现差异。')}</div></div>}
-          <div style={{ marginTop: 10 }}>
+          ) : <Notice tone="ok" className="in-panel" title={t('每一页在视觉上都没有发现差异。')} />}
+          <div style={{ marginTop: 8 }}>
             <Opt label={t('标出差异区域')}><Switch on={prefs.showBoxes} onChange={set('showBoxes')} label={t('标出差异区域')} /></Opt>
             <Opt label={t('只看有差异的页')}><Switch on={onlyDiffPages} onChange={setOnlyDiffPages} label={t('只看有差异的页')} /></Opt>
             <Opt label={t('灵敏度')}>
@@ -930,9 +961,9 @@ export default function App() {
               </select>
             </Opt>
           </div>
-        </Card>
-        <Card className="grow-card" title={t('页面')}>
-          <div className="pagelist" style={{ overflow: 'auto' }}>
+        </Panel>
+        <Panel id="pages" grow title={t('页面')} count={imgState.diffs.length || undefined}>
+          <div className="pagelist">
             {imgState.diffs.map((d, i) => (
               <button key={i} onClick={() => document.getElementById(`page-${i}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
                 <span><span className={`dot ${d.pct < 0.001 ? 'same' : 'diff'}`} />{t('第 {n} 页', { n: i + 1 })}</span>
@@ -940,28 +971,9 @@ export default function App() {
               </button>
             ))}
           </div>
-          <div className="aside-note">{t('Word 和 TXT 会先在本机排成页面再比较，分页可能和 Word 略有不同。')}</div>
-        </Card>
-      </>
-    );
-  }
-  if (tab === 4 && ocr.status === 'done' && ocr.conf && aside) {
-    const avg = (xs: number[]) => { const v = xs.filter((x) => x >= 0); return v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length) : -1; };
-    const lowConf = [...ocr.conf[0], ...ocr.conf[1]].some((c) => c >= 0 && c < 80);
-    aside = (
-      <>
-        {aside}
-        <Card title={t('识别置信度')}>
-          {[0, 1].map((s) => (
-            <div className="conf-row" key={s}>
-              <span>{sideLabel(s as Side)}</span>
-              <span className="conf-pages">{ocr.conf![s].map((c, i) => <span key={i} className={`conf ${c < 0 ? '' : c < 80 ? 'low' : 'ok'}`} title={t('第 {n} 页：{c}%', { n: i + 1, c: c < 0 ? '—' : Math.round(c) })}>{c < 0 ? '—' : Math.round(c)}</span>)}</span>
-              <b>{avg(ocr.conf![s]) < 0 ? '—' : `${avg(ocr.conf![s])}%`}</b>
-            </div>
-          ))}
-          {lowConf && <div className="aside-note warn">{t('有页面识别把握不高，结果仅供参考。虚线标出的是没认准的字。')}</div>}
-        </Card>
-      </>
+          <div className="caption">{t('Word 和 TXT 会先在本机排成页面再比较，分页可能和 Word 略有不同。')}</div>
+        </Panel>
+      </PanelGroup>
     );
   }
 
@@ -1003,47 +1015,34 @@ export default function App() {
           {(busy[0] || busy[1]) && <div className="spinner" style={{ width: 22, height: 22, borderWidth: 3 }} />}
         </div>
         {changedSides.length > 0 && (
-          <div className="banner" role="status">
-            <I.IconRefresh />
-            <span className="grow">{t('「{f}」刚刚在磁盘上被修改了', { f: changedSides.map((s) => docs[s]?.file.name).join('」/「') })}</span>
-            <button className="btn sm" onClick={reloadChanged}>{t('重新比较')}</button>
-            <button className="btn sm plain" onClick={() => setChangedSides([])}>{t('忽略')}</button>
-          </div>
+          <Notice className="bar" title={t('「{f}」刚刚在磁盘上被修改了', { f: changedSides.map((s) => docs[s]?.file.name).join('」/「') })}
+            action={<button className="btn sm" onClick={reloadChanged}>{t('重新比较')}</button>} onClose={() => setChangedSides([])} closeLabel={t('忽略')} />
         )}
         {lostBanner && (
-          <div className="banner warn" role="status">
-            <I.IconWarn />
-            <span className="grow">{t('改了比较设置后，有 {n} 个决定对应的修订不在了。它们已经保存，改回原来的设置就会回来。', { n: lostBanner.n })}</span>
-            <button className="btn sm" onClick={lostBanner.restore}>{t('改回原来的设置')}</button>
-            <button className="btn sm plain" onClick={() => setLostBanner(null)}>{t('知道了')}</button>
-          </div>
+          <Notice tone="warn" className="bar" title={t('{n} 个决定对不上了。', { n: lostBanner.n })}
+            action={<button className="btn sm" onClick={lostBanner.restore}>{t('改回原来的设置')}</button>} onClose={() => setLostBanner(null)}>
+            {t('比较设置改过了。这些决定已经保存，改回原来的设置就会回来。')}
+          </Notice>
         )}
         {crossFormat && (
-          <div className="banner info" role="note">
-            <I.IconWarn />
-            <span className="grow"><b>{t('跨格式比对')}</b>{t('：PDF 的文字是从版面推断的，段落和表格可能被拆开。')}{formatting ? t('格式差异已检测，但 PDF 的格式信息不完整。') : t('格式差异（加粗、字号等）没有检测。')}</span>
-            {!formatting && <button className="btn sm" onClick={() => setFormatting(true)}>{t('检测格式差异')}</button>}
-            <button className="btn sm plain" onClick={() => setDismissCross(docSig)}>{t('知道了')}</button>
-          </div>
+          <Notice className="bar" role="note" title={t('跨格式比对。')}
+            action={!formatting && <button className="btn sm" onClick={() => setFormatting(true)}>{t('检测格式差异')}</button>} onClose={() => setDismissCross(docSig)}>
+            {t('PDF 的文字是从版面推断的，段落和表格可能被拆开。')}{formatting ? t('格式差异已检测，但 PDF 的格式信息不完整。') : t('格式差异（加粗、字号等）没有检测。')}
+          </Notice>
         )}
-        {(errs[0] || errs[1]) && <div className="err" style={{ margin: '0 18px 12px' }}>{errs[0] || errs[1]}</div>}
+        {(errs[0] || errs[1]) && <Notice tone="err" className="bar" title={errs[0] || errs[1]} />}
         {tools && <div className="center-tools">{tools}</div>}
         <div className="center-body">
           <div className="main">
             {curRes?.degraded && !dismissDegraded && (
-              <div className="degraded" role="status">
-                <I.IconWarn />
-                <div>
-                  <b>{t('这次用了简化的段落对齐')}</b>
-                  <span>{curRes.degraded.pairFallback
-                    ? t('两份文档差异太大（单个区段 {n} 组比较），为了不卡死改用了按位置粗配，段落对应关系可能不准。', { n: curRes.degraded.maxRegion.toLocaleString() })
-                    : t('差异区段过大，本次没有识别段落的拆分与合并。')}</span>
-                </div>
-                <button className="btn sm plain icon" onClick={() => setDismissDegraded(true)} title={t('知道了')} aria-label={t('知道了')}><I.IconX /></button>
-              </div>
+              <Notice tone="warn" className="in-main" title={t('这次用了简化的段落对齐')} onClose={() => setDismissDegraded(true)}>
+                {curRes.degraded.pairFallback
+                  ? t('两份文档差异太大（单个区段 {n} 组比较），为了不卡死改用了按位置粗配，段落对应关系可能不准。', { n: curRes.degraded.maxRegion.toLocaleString() })
+                  : t('差异区段过大，本次没有识别段落的拆分与合并。')}
+              </Notice>
             )}
             {body}
-            {showMap && <ChangeMap bottom={tab === 2 ? (askReviewer ? 160 : 118) : 6} changes={shown} selCid={selCid} onSel={setSelCid} dep={[curRes, tab, prefs.hideRich, prefs.hidePlain, prefs.layout, prefs.wrap, decisions, asideOpen, navOpen]} />}
+            {showMap && <ChangeMap bottom={tab === 2 ? (askReviewer ? 160 : 118) : 6} changes={changes} filter={kindFilter} selCid={selCid} onSel={setSelCid} dep={[curRes, tab, prefs.hideRich, prefs.hidePlain, prefs.layout, prefs.wrap, decisions, asideOpen, navOpen]} />}
             {askReviewer && (
               <div className="reviewer-ask" role="note">
                 <span className="chip"><span className="av">{(prefs.reviewerInitials || initialsOf(reviewer)).slice(0, 2)}</span>{reviewer}</span>
@@ -1072,8 +1071,8 @@ export default function App() {
                       <span className={`tag ${cur.kind}`}>{KIND_LABEL[cur.kind]}</span>
                       {t('第 {i} / {n} 处', { i: curIdx + 1, n: changes.length })}
                       <span className="rb-where">{cur.sec && cur.sec !== 'body' ? t(cur.sec === 'header' ? '页眉' : cur.sec === 'footer' ? '页脚' : '脚注') : clauses.get(cur.id) ?? t('开头部分')}</span>
-                      {riskById.get(cur.id) && <span className={`tag risk r-${riskById.get(cur.id)!.cat}`}>{t('需要留意')}</span>}
-                      {curDec?.v && <span className={`dec ${curDec.v}`}>{t(VERDICT_SHORT[curDec.v])}{curDec.by ? ` · ${curDec.by}` : ''}</span>}
+                      {riskById.get(cur.id) && <span className="tag hold">{t('需要留意')}</span>}
+                      {curDec?.v && <span className={`tag ${curDec.v === 'a' ? 'brand' : curDec.v === 'r' ? 'del' : 'hold'}`}>{t(VERDICT_SHORT[curDec.v])}{curDec.by ? ` · ${curDec.by}` : ''}</span>}
                     </span>
                   ) : <span className="t">{t('点文中任意一处修订开始审阅')}</span>}
                   <span className="grow" />

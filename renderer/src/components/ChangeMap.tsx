@@ -4,13 +4,16 @@ import { t } from '../lib/i18n';
 
 const DENSE = 200;   // 超过这么多处差异，改画密度条
 const BUCKETS = 120;
-const RANK: Record<string, number> = { del: 5, mod: 4, ins: 3, move: 2, fmt: 1 };
+const RANK: Record<string, number> = { del: 5, mod: 4, ins: 3, move: 2, fmt: 1 };  // 数量相同时按这个顺序取色
 
 /**
  * 差异地图兼滚动条：中间区域的原生滚动条隐藏掉，由它来显示位置、拖动和跳转。
- * 每处差异一条彩色刻度；差异很多时按位置分桶画成密度条（颜色取桶里最“重”的类型，深浅表示数量）。
+ * 每处差异一条彩色刻度（修改 = 左红右绿）；可见区域只画描边，不盖住刻度。
+ * 筛选某一类时，其他类别降到 25% 而不是消失。差异很多时按位置分桶画成密度条：
+ * 颜色取这一段里数量最多的类别，深浅三档表示多少。
  */
-export function ChangeMap({ changes, selCid, onSel, dep, bottom = 6 }: { changes: Change[]; selCid: number | null; onSel: (id: number) => void; dep: any; bottom?: number }) {
+export function ChangeMap({ changes, filter = [], selCid, onSel, dep, bottom = 6 }: { changes: Change[]; filter?: string[]; selCid: number | null; onSel: (id: number) => void; dep: any; bottom?: number }) {
+  const pass = (k: string) => !filter.length || filter.includes(k);
   const ref = useRef<HTMLDivElement>(null);
   const [ticks, setTicks] = useState<{ id: number; kind: string; top: number; h: number }[]>([]);
   const [view, setView] = useState({ top: 0, h: 100 });
@@ -69,7 +72,7 @@ export function ChangeMap({ changes, selCid, onSel, dep, bottom = 6 }: { changes
     const inView = pct * 100 >= view.top && pct * 100 <= view.top + view.h;
     if (!inView) {
       let best: number | null = null, bd = 1e9;
-      if (ticks.length <= DENSE) for (const t of ticks) { const d = Math.abs(t.top / 100 - pct); if (d < bd) { bd = d; best = t.id; } }
+      if (ticks.length <= DENSE) for (const t of ticks) { if (!pass(t.kind)) continue; const d = Math.abs(t.top / 100 - pct); if (d < bd) { bd = d; best = t.id; } }
       if (best !== null && bd < 0.012) { onSel(best); return; }
       sc.scrollTop = pct * sc.scrollHeight - sc.clientHeight / 2;
     }
@@ -96,21 +99,27 @@ export function ChangeMap({ changes, selCid, onSel, dep, bottom = 6 }: { changes
   const dense = ticks.length > DENSE;
   let buckets: { kind: string; n: number }[] = [];
   if (dense) {
-    buckets = Array.from({ length: BUCKETS }, () => ({ kind: '', n: 0 }));
+    const counts = Array.from({ length: BUCKETS }, () => ({} as Record<string, number>));
     for (const tk of ticks) {
-      const b = buckets[Math.min(BUCKETS - 1, Math.max(0, Math.floor((tk.top / 100) * BUCKETS)))];
-      b.n++;
-      if (!b.kind || RANK[tk.kind] > RANK[b.kind]) b.kind = tk.kind;
+      if (!pass(tk.kind)) continue;
+      const c = counts[Math.min(BUCKETS - 1, Math.max(0, Math.floor((tk.top / 100) * BUCKETS)))];
+      c[tk.kind] = (c[tk.kind] || 0) + 1;
     }
+    buckets = counts.map((c) => {
+      let kind = '', best = 0, n = 0;
+      for (const [k, v] of Object.entries(c)) { n += v; if (v > best || (v === best && RANK[k] > RANK[kind])) { best = v; kind = k; } }
+      return { kind, n };
+    });
   }
   const maxN = dense ? Math.max(1, ...buckets.map((b) => b.n)) : 1;
+  const level = (n: number) => (n / maxN > 0.66 ? 1 : n / maxN > 0.33 ? 0.7 : 0.4);
   return (
     <div className={`changemap ${dense ? 'dense' : ''}`} ref={ref} style={{ bottom }} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}
       role="scrollbar" aria-orientation="vertical" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(view.top)} tabIndex={0} onKeyDown={onKey}
       title={t('差异地图：拖动滚动，点击跳到附近的差异')} aria-label={t('差异地图')}>
       {dense
-        ? buckets.map((b, i) => b.n > 0 && <div key={i} className={`cm-tick k-${b.kind}`} style={{ top: `${(i / BUCKETS) * 100}%`, height: `${100 / BUCKETS}%`, opacity: 0.35 + 0.65 * (b.n / maxN) }} />)
-        : ticks.map((tk) => <div key={tk.id} className={`cm-tick k-${tk.kind} ${tk.id === selCid ? 'on' : ''}`} style={{ top: `${tk.top}%`, height: `max(3px, ${tk.h}%)` }} />)}
+        ? buckets.map((b, i) => b.n > 0 && <div key={i} className={`cm-tick k-${b.kind}`} style={{ top: `${(i / BUCKETS) * 100}%`, height: `${100 / BUCKETS}%`, opacity: level(b.n) }} />)
+        : ticks.map((tk) => <div key={tk.id} className={`cm-tick k-${tk.kind} ${tk.id === selCid ? 'on' : ''} ${pass(tk.kind) ? '' : 'dim'}`} style={{ top: `${tk.top}%`, height: `max(3px, ${tk.h}%)` }} />)}
       <div className="cm-view" style={{ top: `${view.top}%`, height: `${Math.max(3, view.h)}%` }} />
     </div>
   );

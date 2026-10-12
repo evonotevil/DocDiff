@@ -9,6 +9,8 @@ import { groupChanges } from '../lib/report';
 const KINDS: Record<string, string> = { del: '删除', ins: '新增', mod: '修改', fmt: '格式', move: '移动' };
 export const KIND_LABEL = new Proxy({} as Record<string, string>, { get: (_, k: string) => t(KINDS[k] || k) });
 const VERDICT: Record<string, string> = { a: '已接受', r: '已拒绝', h: '待议' };
+const VTONE: Record<string, string> = { a: 'brand', r: 'del', h: 'hold' };
+const plain = (c: Change) => (c.kind === 'mod' ? `${short(c.before, 40)} → ${short(c.after, 40)}` : short(c.kind === 'ins' ? c.after : c.before, 80));
 
 const PAGE = 400;
 const hhmm = (ts: number) => { const d = new Date(ts); const p = (x: number) => String(x).padStart(2, '0'); return `${p(d.getHours())}:${p(d.getMinutes())}`; };
@@ -69,26 +71,22 @@ export function ChangeList({ changes, all, sel, onSel, decisions, clauses, risks
             const d = decisions?.[c.id];
             const risk = risks.get(c.id);
             return (
-              <button key={c.id} data-chg={c.id} className={`chg k-${c.kind} ${c.id === sel ? 'on' : ''} ${d?.v ? 'done-' + d.v : ''}`} onClick={() => onSel(c.id)} aria-current={c.id === sel}>
-                <span className={`chg-dot ${c.kind}`}>{order.get(c.id)}</span>
+              <button key={c.id} data-chg={c.id} className={`chg k-${c.kind} ${c.id === sel ? 'on' : ''} ${d?.v ? 'done-' + d.v : ''}`} onClick={() => onSel(c.id)} aria-current={c.id === sel}
+                title={`${t('第 {i} 处', { i: order.get(c.id) ?? 0 })} · ${KIND_LABEL[c.kind]}`} aria-label={`${KIND_LABEL[c.kind]}：${plain(c)}`}>
+                <span className={`chg-bar k-${c.kind}`} aria-hidden="true" />
                 <span className="chg-body">
-                  <span className="chg-top">
-                    <span className={`tag ${c.kind}`}>{KIND_LABEL[c.kind]}</span>
-                    {risk && <span className={`tag risk r-${risk.cat}`}>{riskTag(risk)}</span>}
-                  </span>
                   <span className="txt">
-                    {c.kind === 'fmt' ? (<>{short(c.before) || t('（段落）')}<em>{noteText(c)}</em></>) :
-                     c.kind === 'move' ? (<>{short(c.before)}<em>{t('整段换了位置')}</em></>) :
-                     c.kind === 'mod' ? (<><del>{short(c.before, 50)}</del><span className="arrow">→</span><ins>{short(c.after, 50)}</ins></>) :
-                     c.kind === 'del' ? <del>{short(c.before)}</del> : <ins>{short(c.after)}</ins>}
+                    {c.kind === 'fmt' ? (<><em>{noteText(c)}</em>{short(c.before, 60) || t('（段落）')}</>) :
+                     c.kind === 'move' ? (<><em>{t('整段换了位置')}</em>{short(c.before, 60)}</>) :
+                     c.kind === 'mod' ? (<><del>{short(c.before, 40)}</del><span className="arrow">→</span><ins>{short(c.after, 40)}</ins></>) :
+                     c.kind === 'del' ? <del>{short(c.before, 80)}</del> : <ins>{short(c.after, 80)}</ins>}
                   </span>
-                  {decisions && (d?.v || d?.note) && (
-                    <span className="chg-rec">
-                      {d.v && <span className={`dec ${d.v}`}>{t(VERDICT[d.v])}</span>}
-                      <span>{[d.by, d.at ? hhmm(d.at) : '', d.note].filter(Boolean).join(' · ')}</span>
-                    </span>
+                  {decisions && (d?.by || d?.note) && d?.v && (
+                    <span className="chg-rec">{[d.by, d.at ? hhmm(d.at) : '', d.note].filter(Boolean).join(' · ')}</span>
                   )}
                 </span>
+                {decisions && d?.v ? <span className={`tag ${VTONE[d.v]}`}>{t(VERDICT[d.v])}</span>
+                  : risk ? <span className="tag hold" title={t('需要留意')}>{riskTag(risk)}</span> : null}
               </button>
             );
           })}

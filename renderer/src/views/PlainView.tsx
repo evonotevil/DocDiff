@@ -61,8 +61,10 @@ export function PlainView({ A, B, res, selCid, onSel, layout, wrap, hideUnchange
     if (buf.length) visible.push({ fold: buf });
   } else rows.forEach((_, i) => visible.push(i));
 
-  const kindA = (r: Row) => (r.kind === 'equal' || r.kind === 'format' ? '' : r.kind === 'added' || r.kind === 'moved-to' ? 'empty' : 'del') + (r.kind.startsWith('moved') ? ' mv' : '');
-  const kindB = (r: Row) => (r.kind === 'equal' || r.kind === 'format' ? '' : r.kind === 'removed' || r.kind === 'moved-from' ? 'empty' : 'ins') + (r.kind.startsWith('moved') ? ' mv' : '');
+  // 整行增删才铺浅底色；改了几个词的行只画左侧色条，颜色留给改动的词（组件标准 · 纯文本差异行）
+  const whole = (r: Row) => (r.kind === 'added' || r.kind === 'removed' ? ' whole' : '');
+  const kindA = (r: Row) => (r.kind === 'equal' || r.kind === 'format' ? '' : r.kind === 'added' || r.kind === 'moved-to' ? 'empty' : 'del' + whole(r)) + (r.kind.startsWith('moved') ? ' mv' : '');
+  const kindB = (r: Row) => (r.kind === 'equal' || r.kind === 'format' ? '' : r.kind === 'removed' || r.kind === 'moved-from' ? 'empty' : 'ins' + whole(r)) + (r.kind.startsWith('moved') ? ' mv' : '');
 
   return (
     <div className="scroll" ref={ref} onClick={onClick}>
@@ -88,8 +90,8 @@ export function PlainView({ A, B, res, selCid, onSel, layout, wrap, hideUnchange
           }
           return (
             <div className="crow" key={v} data-row={v}>
-              {r.ai !== undefined && <div className={`cside del${r.kind.startsWith('moved') ? ' mv' : ''}`}><span className="ln">{la}</span><span className="ln"></span><span className="ct">{toks(r, 'a', selCid, r.kind === 'modified', r.ai !== undefined ? lowWords?.[0].get(r.ai) : undefined)}</span></div>}
-              {r.bi !== undefined && <div className={`cside ins${r.kind.startsWith('moved') ? ' mv' : ''}`}><span className="ln"></span><span className="ln">{lb}</span><span className="ct">{toks(r, 'b', selCid, r.kind === 'modified', r.bi !== undefined ? lowWords?.[1].get(r.bi) : undefined)}</span></div>}
+              {r.ai !== undefined && <div className={`cside del${whole(r)}${r.kind.startsWith('moved') ? ' mv' : ''}`}><span className="ln">{la}</span><span className="ln"></span><span className="ct">{toks(r, 'a', selCid, r.kind === 'modified', r.ai !== undefined ? lowWords?.[0].get(r.ai) : undefined)}</span></div>}
+              {r.bi !== undefined && <div className={`cside ins${whole(r)}${r.kind.startsWith('moved') ? ' mv' : ''}`}><span className="ln"></span><span className="ln">{lb}</span><span className="ct">{toks(r, 'b', selCid, r.kind === 'modified', r.bi !== undefined ? lowWords?.[1].get(r.bi) : undefined)}</span></div>}
             </div>
           );
         })}

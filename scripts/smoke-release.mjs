@@ -88,10 +88,24 @@ try {
     await delay(500);
   }
   assert.ok(sampleCompared, 'Bundled sample comparison and risk summary did not render');
+  const panelId = await evaluate(`document.querySelector('.pnl[data-panel]')?.dataset.panel`);
+  assert.ok(panelId, 'Collapsible sidebar panels missing');
+  await evaluate(`document.querySelector('.pnl[data-panel="' + ${JSON.stringify(panelId)} + '"] .pnl-tg').click()`);
+  await delay(200);
+  assert.equal(await evaluate(`document.querySelector('.pnl[data-panel="' + ${JSON.stringify(panelId)} + '"] .pnl-tg').getAttribute('aria-expanded')`), 'false');
+  await evaluate(`document.querySelector('.pnl[data-panel="' + ${JSON.stringify(panelId)} + '"] .icon-btn').click()`);
+  await delay(200);
+  assert.equal(await evaluate(`document.querySelectorAll('.pnl[data-panel]').length`), 1, 'Focus mode must show one panel');
+  assert.ok(await evaluate(`!!document.querySelector('.focus-bar')`));
+  await evaluate(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
+  await delay(200);
+  assert.ok(await evaluate(`document.querySelectorAll('.pnl[data-panel]').length > 1 && !document.querySelector('.focus-bar')`), 'Escape must restore all panels');
+  await evaluate(`document.querySelector('.pnl[data-panel="' + ${JSON.stringify(panelId)} + '"] .pnl-tg').click()`);
+  await delay(200);
   const sample = await call('Page.captureScreenshot', { format: 'png' });
   fs.writeFileSync(path.join(out, 'sample-comparison.png'), Buffer.from(sample.data, 'base64'));
   assert.ok(!/remote_font_face_source.*NOTREACHED|NOTREACHED.*remote_font_face_source/i.test(log), 'Native font assertion: ' + log);
-  fs.writeFileSync(path.join(out, 'result.json'), JSON.stringify({ platform: process.platform, displayedVersion, fonts, update, sampleCompared }, null, 2));
+  fs.writeFileSync(path.join(out, 'result.json'), JSON.stringify({ platform: process.platform, displayedVersion, fonts, update, sampleCompared, panelControls: true }, null, 2));
   console.log('Packaged UI, fonts, settings and live update feed passed:', process.platform);
 } finally {
   socket?.close(); child.kill();

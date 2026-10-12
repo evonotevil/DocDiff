@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { t } from '../lib/i18n';
 import { Modal } from './Modal';
+import { Notice } from './Panel';
 import * as I from './icons';
 
 export type ExportKind = 'redline' | 'final' | 'report';
@@ -54,19 +55,13 @@ export function ExportDialog({ total, undecided, risks, author, setAuthor, revie
         </>
       )}
       {undecided > 0 && (
-        <div className="warn-box">
-          <I.IconWarn />
-          <div>
-            {kind === 'final'
-              ? <><b>{t('还有 {n} 处没有处理', { n: undecided })}</b><span>{t('定稿需要先处理完每一处修订。可以回去继续审阅，或者把它们都标为待议（在定稿里保持为修订）。')}</span></>
-              : kind === 'redline'
-                ? <span>{t('还有 {n} 处没有处理。修订稿中它们保持为修订、不加批注。', { n: undecided })}</span>
-                : <span>{t('还有 {n} 处没有处理，报告里显示为“—”。', { n: undecided })}</span>}
-            {kind === 'final' && <button className="btn sm" onClick={onHoldPending}>{t('把 {n} 处都标为待议', { n: undecided })}</button>}
-          </div>
-        </div>
+        <Notice tone="warn" className="stack" title={t('还有 {n} 处没有处理。', { n: undecided })}
+          action={kind === 'final' && <button className="btn sm" onClick={onHoldPending}>{t('把 {n} 处都标为待议', { n: undecided })}</button>}>
+          {kind === 'final' ? t('定稿需要先处理完每一处修订。可以回去继续审阅，或者把它们都标为待议（在定稿里保持为修订）。')
+            : kind === 'redline' ? t('修订稿中它们保持为修订、不加批注。') : t('报告里显示为“—”。')}
+        </Notice>
       )}
-      <p className="exp-note">
+      <p className="caption">
         {kind === 'report'
           ? t('共 {n} 处差异{r}。', { n: total, r: risks ? t('，其中 {k} 处需要留意', { k: risks }) : '' })
           : t('导出的 Word 是根据比较内容重新排版的：页面设置、部分编号样式和图片可能与原件不同。') + (hasSections ? ' ' + t('页眉页脚放回 Word 的页眉页脚，脚注列在文末。') : '')}

@@ -79,3 +79,9 @@ export const IconPanelLeft = () => <S d={<><rect x="1.8" y="2.8" width="12.4" he
 export const IconPanelRight = () => <S d={<><rect x="1.8" y="2.8" width="12.4" height="10.4" rx="1.6" /><path d="M10 2.8v10.4" /></>} />;
 export const IconWarn = () => <S d={<><path d="M8 2.2 1.4 13.8h13.2L8 2.2Z" /><path d="M8 6.4v3.1" /><path d="M8 11.6h.01" /></>} />;
 export const IconDownload = () => <S d={<><path d="M8 2.2v7.3" /><path d="M5 6.8 8 9.8l3-3" /><path d="M2.6 11.4v1.2a1.2 1.2 0 0 0 1.2 1.2h8.4a1.2 1.2 0 0 0 1.2-1.2v-1.2" /></>} />;
+/** 只看这一块 / 恢复（四角向外 / 向内） */
+export const IconFocus = () => <S d={<path d="M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5 9.5 6.5M2.5 13.5l4-4" />} />;
+export const IconUnfocus = () => <S d={<path d="M13.5 6.5h-4v-4M2.5 9.5h4v4M9.5 6.5l4-4M6.5 9.5l-4 4" />} />;
+export const IconInfo = () => <S d={<><circle cx="8" cy="8" r="6.2" /><path d="M8 7.2v3.8M8 5h.01" /></>} />;
+export const IconOk = () => <S d={<><circle cx="8" cy="8" r="6.2" /><path d="M5.4 8.2l1.8 1.8 3.4-3.6" /></>} />;
+export const IconErr = () => <S d={<><circle cx="8" cy="8" r="6.2" /><path d="M5.8 5.8l4.4 4.4M10.2 5.8l-4.4 4.4" /></>} />;

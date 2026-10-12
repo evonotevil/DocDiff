@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import type { DocModel } from '../lib/model';
 import { getPages, diffPage, PageDiff } from '../lib/pages';
 import { t } from '../lib/i18n';
+import { Notice } from '../components/Panel';
 
 export type ImgMode = 'split' | 'diff' | 'fade' | 'slider';
 
@@ -59,7 +60,7 @@ function Slider({ d, pos, setPos }: { d: PageDiff; pos: number; setPos: (n: numb
 export function ImageView({ state, mode, zoom, fade, setFade, slider, setSlider, showBoxes, onlyDiff, scrollRef }: {
   state: ReturnType<typeof useImagePages>; mode: ImgMode; zoom: number; fade: number; setFade: (n: number) => void; slider: number; setSlider: (n: number) => void; showBoxes: boolean; onlyDiff: boolean; scrollRef: React.RefObject<HTMLDivElement>;
 }) {
-  if (state.error) return <div className="empty-state"><div className="err">{t('页面渲染失败')}：{state.error}</div></div>;
+  if (state.error) return <div className="empty-state"><Notice tone="err" title={t('页面渲染失败')}>{state.error}</Notice></div>;
   if (state.loading && !state.diffs.length) return <div className="empty-state"><div className="spinner" />{state.loading}</div>;
   const width = mode === 'split' ? `${Math.round(100 * zoom)}%` : `${Math.round(62 * zoom)}%`;
   return (

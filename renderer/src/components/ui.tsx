@@ -18,30 +18,6 @@ export function Seg<T extends string | number>({ value, options, onChange, full,
     </span>
   );
 }
-export function Card({ title, right, children, className, collapsible, open, onToggle }: {
-  title?: React.ReactNode; right?: React.ReactNode; children?: React.ReactNode; className?: string;
-  collapsible?: boolean; open?: boolean; onToggle?: () => void;
-}) {
-  return (
-    <section className={`card ${className || ''}`}>
-      {title && (collapsible ? (
-        <header className="card-head clickable">
-          <button type="button" className="card-toggle" aria-expanded={!!open} onClick={onToggle}>
-            <h3>{title}</h3>
-            <span className={`chev ${open ? 'open' : ''}`} aria-hidden="true">›</span>
-          </button>
-          {right && <span className="card-right">{right}</span>}
-        </header>
-      ) : (
-        <header className="card-head">
-          <h3>{title}</h3>
-          {right && <span className="card-right">{right}</span>}
-        </header>
-      ))}
-      {(!collapsible || open) && children}
-    </section>
-  );
-}
 export function Kbd({ children }: { children: React.ReactNode }) {
   return <kbd className="kbd">{children}</kbd>;
 }

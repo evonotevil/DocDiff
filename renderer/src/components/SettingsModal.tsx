@@ -66,7 +66,7 @@ function UpdateSection({ info, checking, onCheck, onSkip, auto, setAuto }: {
         <button className="btn sm" disabled={checking} onClick={onCheck}><I.IconRefresh />{t('检查更新')}</button>
       </div>
       {info?.status === 'new' && (
-        <div className="upd-new">
+        <div className="nt ok upd-new">
           {info.notes ? <div className="upd-notes">{info.notes}</div> : null}
           <div className="upd-acts">
             <button className="btn primary sm" disabled={!info.url} onClick={open}><I.IconDownload />{t('打开下载页')}</button>

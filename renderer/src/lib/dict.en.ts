@@ -391,4 +391,11 @@ export const EN_DICT: Record<string, string> = {
   '{n} 处差异': '{n} differences',
   '、': ', ',
   '；': '; ',
+  // 1.6.1 组件标准
+  '只看这一块': 'Show only this panel', '显示全部（Esc）': 'Show all (Esc)', '只看：': 'Showing only: ',
+  '清除筛选': 'Clear filter', '第 {i} 处': 'Change {i}',
+  '跨格式比对。': 'Cross-format comparison.', 'PDF 的文字是从版面推断的，段落和表格可能被拆开。': 'PDF text is inferred from the page layout, so paragraphs and tables may be split. ',
+  '{n} 个决定对不上了。': '{n} decisions no longer match.', '比较设置改过了。这些决定已经保存，改回原来的设置就会回来。': 'Compare settings changed. The decisions are saved and come back when you restore the previous settings.',
+  '还有 {n} 处没有处理。': '{n} changes are still undecided.', '修订稿中它们保持为修订、不加批注。': 'They stay as tracked changes without comments.', '报告里显示为“—”。': 'They show as “—” in the report.',
+  '没读到文字，可能是扫描件。': 'No text found. This may be a scan.', '比较后用「OCR 文本」或「图像」模式。': 'After comparing, use OCR text or Image mode.',
 };
