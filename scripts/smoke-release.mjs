@@ -80,7 +80,7 @@ try {
   let sampleCompared = false;
   for (let i = 0; i < 60; i++) {
     await evaluate(`(() => {
-      const toggle = document.querySelector('.app.shell .tbar button[aria-label="展开检查器"], .app.shell .tbar button[aria-label="Expand inspector"]');
+      const toggle = document.querySelector('.app.shell .tbar button[aria-label="展开检查器"], .app.shell .tbar button[aria-label="Show inspector"]');
       if (toggle?.getAttribute('aria-expanded') === 'false') toggle.click();
     })()`);
     sampleCompared = await evaluate(`!!document.querySelector('.app.shell .main') && document.querySelectorAll('.insp .drow[data-chg]').length > 0`);
@@ -99,7 +99,7 @@ try {
   await evaluate(toggleInspector);
   await delay(200);
   assert.ok(await evaluate(`!document.querySelector('.insp')`), 'Inspector must hide');
-  await evaluate(`document.querySelector('.tbar button[aria-label="展开检查器"], .tbar button[aria-label="Expand inspector"]').click()`);
+  await evaluate(`document.querySelector('.tbar button[aria-label="展开检查器"], .tbar button[aria-label="Show inspector"]').click()`);
   await delay(200);
   assert.ok(await evaluate(`!!document.querySelector('.insp .drow[data-chg]')`), 'Inspector must reopen');
   const navBefore = await evaluate(`document.querySelector('.app.shell').classList.contains('nav-mini')`);
