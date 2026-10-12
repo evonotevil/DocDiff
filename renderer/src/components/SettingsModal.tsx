@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { t, Lang } from '../lib/i18n';
-import { kbd } from '../lib/platform';
+import { isMac, kbd } from '../lib/platform';
 import { initialsOf } from '../lib/review';
 import { DEFAULT_KEYWORDS } from '../lib/insight';
 import { Modal } from './Modal';
@@ -28,6 +28,7 @@ function ShortcutRows() {
       [t('新建比较'), kbd('mod+N')], [t('交换左右文档'), kbd('mod+shift+S')],
       [t('开始比较'), 'Enter'], [t('切换模式'), `${kbd('mod+1')} … ${kbd('mod+6')}`],
       [t('下一处 / 上一处差异'), 'J / K'],
+      [t('收起 / 展开侧栏'), isMac ? '⌃⌘S' : 'Ctrl+Alt+S'], [t('收起 / 展开检查器'), isMac ? '⌥⌘I' : 'Ctrl+Alt+I'],
     ]],
     [t('修订审阅'), [
       [t('接受 / 拒绝'), 'A / R'], [t('标为待议'), 'H'], [t('写备注'), 'N'], [t('撤销上一次决定'), 'U'], [t('上一处 / 下一处'), '← / →'],

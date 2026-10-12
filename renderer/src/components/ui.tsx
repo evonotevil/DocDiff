@@ -1,7 +1,7 @@
 import React from 'react';
 
-export function Switch({ on, onChange, disabled, label }: { on: boolean; onChange: (v: boolean) => void; disabled?: boolean; label?: string }) {
-  return <button type="button" className={`switch ${on ? 'on' : ''}`} disabled={disabled} onClick={() => onChange(!on)} role="switch" aria-checked={on} aria-label={label} />;
+export function Switch({ on, onChange, disabled, label, size }: { on: boolean; onChange: (v: boolean) => void; disabled?: boolean; label?: string; size?: 'sm' }) {
+  return <button type="button" className={`switch ${on ? 'on' : ''} ${size || ''}`} disabled={disabled} onClick={() => onChange(!on)} role="switch" aria-checked={on} aria-label={label} />;
 }
 export function Opt({ label, hint, children, disabled }: { label: string; hint?: string; children: React.ReactNode; disabled?: boolean }) {
   return (

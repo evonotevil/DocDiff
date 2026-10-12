@@ -1,6 +1,6 @@
 import React from 'react';
 const S = (p: { d: React.ReactNode; size?: number; vb?: string }) => (
-  <svg width={p.size || 16} height={p.size || 16} viewBox={p.vb || '0 0 16 16'} fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round">{p.d}</svg>
+  <svg width={p.size || 20} height={p.size || 20} viewBox={p.vb || '0 0 16 16'} fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">{p.d}</svg>
 );
 export const IconRich = () => <S d={<><rect x="3" y="1.8" width="10" height="12.4" rx="1.6" /><path d="M5.5 5h5M5.5 7.5h5M5.5 10h3" /></>} />;
 export const IconPlain = () => <S d={<path d="M3 4h10M3 7h7M3 10h10M3 13h5" />} />;
@@ -82,6 +82,16 @@ export const IconDownload = () => <S d={<><path d="M8 2.2v7.3" /><path d="M5 6.8
 /** 只看这一块 / 恢复（四角向外 / 向内） */
 export const IconFocus = () => <S d={<path d="M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5 9.5 6.5M2.5 13.5l4-4" />} />;
 export const IconUnfocus = () => <S d={<path d="M13.5 6.5h-4v-4M2.5 9.5h4v4M9.5 6.5l4-4M6.5 9.5l-4 4" />} />;
+export const IconMore = () => <S d={<path d="M3.5 8h.01M8 8h.01M12.5 8h.01" strokeWidth={2.6} />} />;
 export const IconInfo = () => <S d={<><circle cx="8" cy="8" r="6.2" /><path d="M8 7.2v3.8M8 5h.01" /></>} />;
 export const IconOk = () => <S d={<><circle cx="8" cy="8" r="6.2" /><path d="M5.4 8.2l1.8 1.8 3.4-3.6" /></>} />;
 export const IconErr = () => <S d={<><circle cx="8" cy="8" r="6.2" /><path d="M5.8 5.8l4.4 4.4M10.2 5.8l-4.4 4.4" /></>} />;
+
+// ---------- 模式图标的白色线条（规范 3.0）：放在 24px 彩色圆角方块里，侧栏专用 ----------
+const G = (d: React.ReactNode) => () => <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" aria-hidden>{d}</svg>;
+export const GlyphRich = G(<><path d="M4.5 2.5h5l2.5 2.5v8.5h-7.5z" /><path d="M6.5 7.5h3M6.5 10.5h3" /></>);
+export const GlyphPlain = G(<path d="M3 4.5h10M3 8h7M3 11.5h9" />);
+export const GlyphRedline = G(<><path d="M3 13.5h4" /><path d="M9.5 3.5l3 3-6 6H3.5v-3z" /></>);
+export const GlyphImage = G(<><rect x="2.5" y="3.5" width="11" height="9" rx="2" /><path d="M2.5 11l3.5-3 3 2.5 2-1.5 2.5 2" /></>);
+export const GlyphOcr = G(<><path d="M2.5 5.5v-1a2 2 0 0 1 2-2h1M10.5 2.5h1a2 2 0 0 1 2 2v1M13.5 10.5v1a2 2 0 0 1-2 2h-1M5.5 13.5h-1a2 2 0 0 1-2-2v-1" /><path d="M5.5 7h5M5.5 9.5h3" /></>);
+export const GlyphDetails = G(<><circle cx="8" cy="8" r="5.5" /><path d="M8 7.5v3.5M8 5h.01" /></>);

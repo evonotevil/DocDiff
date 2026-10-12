@@ -30,6 +30,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      - run: npm run tokens:check
       - run: npm run typecheck
       - run: npm run build
       - run: npx electron-builder --${{ matrix.platform }} --${{ matrix.arch }} --publish never

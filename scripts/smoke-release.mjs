@@ -80,32 +80,38 @@ try {
   let sampleCompared = false;
   for (let i = 0; i < 60; i++) {
     await evaluate(`(() => {
-      const drawer = document.querySelector('.center-body') && document.querySelector('.edge-handle.right');
-      if (drawer?.getAttribute('aria-expanded') === 'false') drawer.click();
+      const toggle = document.querySelector('.app.shell .tbar button[aria-label="展开检查器"], .app.shell .tbar button[aria-label="Expand inspector"]');
+      if (toggle?.getAttribute('aria-expanded') === 'false') toggle.click();
     })()`);
-    sampleCompared = await evaluate(`!!document.querySelector('.center-body') && document.querySelectorAll('.risk-item').length > 0`);
+    sampleCompared = await evaluate(`!!document.querySelector('.app.shell .main') && document.querySelectorAll('.insp .drow[data-chg]').length > 0`);
     if (sampleCompared) break;
     await delay(500);
   }
-  assert.ok(sampleCompared, 'Bundled sample comparison and risk summary did not render');
-  const panelId = await evaluate(`document.querySelector('.pnl[data-panel]')?.dataset.panel`);
-  assert.ok(panelId, 'Collapsible sidebar panels missing');
-  await evaluate(`document.querySelector('.pnl[data-panel="' + ${JSON.stringify(panelId)} + '"] .pnl-tg').click()`);
+  assert.ok(sampleCompared, 'Bundled sample comparison and inspector did not render');
+  const kind = await evaluate(`document.querySelector('.insp .fchip .fdot')?.className.match(/k-(\\w+)/)?.[1]`);
+  assert.ok(kind, 'Difference filters missing');
+  await evaluate(`document.querySelector('.insp .fchip .fdot.k-' + ${JSON.stringify(kind)}).parentElement.click()`);
   await delay(200);
-  assert.equal(await evaluate(`document.querySelector('.pnl[data-panel="' + ${JSON.stringify(panelId)} + '"] .pnl-tg').getAttribute('aria-expanded')`), 'false');
-  await evaluate(`document.querySelector('.pnl[data-panel="' + ${JSON.stringify(panelId)} + '"] .icon-btn').click()`);
+  assert.ok(await evaluate(`Array.from(document.querySelectorAll('.insp .drow[data-chg]')).every(row => row.classList.contains('k-' + ${JSON.stringify(kind)}))`), 'Inspector filter must select one change type');
+  await evaluate(`document.querySelector('.insp .fchip').click()`);
   await delay(200);
-  assert.equal(await evaluate(`document.querySelectorAll('.pnl[data-panel]').length`), 1, 'Focus mode must show one panel');
-  assert.ok(await evaluate(`!!document.querySelector('.focus-bar')`));
-  await evaluate(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
+  const toggleInspector = `document.querySelector('.tbar button[aria-label="收起检查器"], .tbar button[aria-label="Hide inspector"]').click()`;
+  await evaluate(toggleInspector);
   await delay(200);
-  assert.ok(await evaluate(`document.querySelectorAll('.pnl[data-panel]').length > 1 && !document.querySelector('.focus-bar')`), 'Escape must restore all panels');
-  await evaluate(`document.querySelector('.pnl[data-panel="' + ${JSON.stringify(panelId)} + '"] .pnl-tg').click()`);
+  assert.ok(await evaluate(`!document.querySelector('.insp')`), 'Inspector must hide');
+  await evaluate(`document.querySelector('.tbar button[aria-label="展开检查器"], .tbar button[aria-label="Expand inspector"]').click()`);
+  await delay(200);
+  assert.ok(await evaluate(`!!document.querySelector('.insp .drow[data-chg]')`), 'Inspector must reopen');
+  const navBefore = await evaluate(`document.querySelector('.app.shell').classList.contains('nav-mini')`);
+  await evaluate(`document.querySelector('nav button[aria-expanded]').click()`);
+  await delay(200);
+  assert.notEqual(await evaluate(`document.querySelector('.app.shell').classList.contains('nav-mini')`), navBefore, 'Sidebar must toggle');
+  await evaluate(`document.querySelector('nav button[aria-expanded]').click()`);
   await delay(200);
   const sample = await call('Page.captureScreenshot', { format: 'png' });
   fs.writeFileSync(path.join(out, 'sample-comparison.png'), Buffer.from(sample.data, 'base64'));
   assert.ok(!/remote_font_face_source.*NOTREACHED|NOTREACHED.*remote_font_face_source/i.test(log), 'Native font assertion: ' + log);
-  fs.writeFileSync(path.join(out, 'result.json'), JSON.stringify({ platform: process.platform, displayedVersion, fonts, update, sampleCompared, panelControls: true }, null, 2));
+  fs.writeFileSync(path.join(out, 'result.json'), JSON.stringify({ platform: process.platform, displayedVersion, fonts, update, sampleCompared, inspectorControls: true }, null, 2));
   console.log('Packaged UI, fonts, settings and live update feed passed:', process.platform);
 } finally {
   socket?.close(); child.kill();

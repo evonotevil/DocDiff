@@ -1,0 +1,697 @@
+{
+ "name": "DocDiff",
+ "version": 3,
+ "color": {
+  "themes": [
+   {
+    "id": "light",
+    "name": "浅色"
+   },
+   {
+    "id": "dark",
+    "name": "深色"
+   }
+  ],
+  "tokens": [
+   {
+    "name": "surface",
+    "value": {
+     "light": "#ffffff",
+     "dark": "#131f24"
+    },
+    "usage": "工具面：工具栏、弹出层、审阅栏、弹窗的底色。"
+   },
+   {
+    "name": "side",
+    "value": {
+     "light": "#f7f7f7",
+     "dark": "#1a262c"
+    },
+    "usage": "侧面（Polar）：侧栏和检查器。左右两栏必须用同一个值。"
+   },
+   {
+    "name": "canvas",
+    "value": {
+     "light": "#f2f3f2",
+     "dark": "#0d171b"
+    },
+    "usage": "画布：文档区的底色，纸放在它上面。"
+   },
+   {
+    "name": "paper",
+    "value": {
+     "light": "#ffffff",
+     "dark": "#1c2a30"
+    },
+    "usage": "纸：文档本身。界面上唯一的大面积白。"
+   },
+   {
+    "name": "swan",
+    "value": {
+     "light": "#e5e5e5",
+     "dark": "#37464f"
+    },
+    "usage": "Swan：所有 2px 边框、按钮底边（中性）、分隔线。只画在平面交界处。"
+   },
+   {
+    "name": "hover",
+    "value": {
+     "light": "#efefef",
+     "dark": "#22323a"
+    },
+    "usage": "悬停底色：行、菜单项、筛选片。"
+   },
+   {
+    "name": "title",
+    "value": {
+     "light": "#3c3c3c",
+     "dark": "#f1f7fb"
+    },
+    "usage": "标题和数字：22/900、15/900。"
+   },
+   {
+    "name": "eel",
+    "value": {
+     "light": "#4b4b4b",
+     "dark": "#dce6ec"
+    },
+    "usage": "Eel：正文、行文字。在 side 上 8.1:1。"
+   },
+   {
+    "name": "text-2",
+    "value": {
+     "light": "#6f6f6f",
+     "dark": "#a6b6bf"
+    },
+    "usage": "次要文字：区块标题、分组标题、说明。Wolf 加深一级，保证在 side 上 4.7:1。"
+   },
+   {
+    "name": "wolf",
+    "value": {
+     "light": "#777777",
+     "dark": "#8fa1ab"
+    },
+    "usage": "Wolf：界面图标、未选中的导航图标。不用于 13px 以下的文字。"
+   },
+   {
+    "name": "hare",
+    "value": {
+     "light": "#afafaf",
+     "dark": "#52656d"
+    },
+    "usage": "Hare：占位符、禁用态。不用于需要阅读的文字。"
+   },
+   {
+    "name": "doc-ink",
+    "value": {
+     "light": "#3c3c3c",
+     "dark": "#e3ebef"
+    },
+    "usage": "文档正文（宋体）。在 paper 上 ≥12:1。"
+   },
+   {
+    "name": "feather",
+    "value": "#58cc02",
+    "usage": "Feather 绿：主操作、接受、进度、品牌。结果页最多一个实心绿。白字在其上只有 2.1:1，是多邻国的品牌写法：只允许 15px/800 及以上的按钮字。"
+   },
+   {
+    "name": "feather-lip",
+    "value": "#58a700",
+    "usage": "Feather 底边：绿按钮的 4px 底边和描边。"
+   },
+   {
+    "name": "feather-ink",
+    "value": {
+     "light": "#3d7d00",
+     "dark": "#93d333"
+    },
+    "usage": "绿色文字：成功提示、“已接受”。"
+   },
+   {
+    "name": "feather-tint",
+    "value": {
+     "light": "#d7ffb8",
+     "dark": "#1f3a12"
+    },
+    "usage": "绿色浅底：成功提示条、审阅人标签、完成页。"
+   },
+   {
+    "name": "macaw",
+    "value": "#1cb0f6",
+    "usage": "Macaw 蓝：选中、焦点框、文件操作、“富文本”模式。"
+   },
+   {
+    "name": "macaw-lip",
+    "value": "#1899d6",
+    "usage": "Macaw 底边：蓝按钮底边、选中筛选片的边。"
+   },
+   {
+    "name": "macaw-ink",
+    "value": {
+     "light": "#0c6fa6",
+     "dark": "#49c0f8"
+    },
+    "usage": "蓝色文字：链接、选中筛选片里的字。"
+   },
+   {
+    "name": "macaw-tint",
+    "value": {
+     "light": "#ddf4ff",
+     "dark": "#16384a"
+    },
+    "usage": "选中浅底：选中的筛选片、悬停时纸上差异的描边底。"
+   },
+   {
+    "name": "bee",
+    "value": "#ffc800",
+    "usage": "Bee 黄：只表示“需要留意 / 待议”。只用在小图标和计数上，不做面板底色。"
+   },
+   {
+    "name": "bee-lip",
+    "value": "#e5a500",
+    "usage": "Bee 底边：待议按钮。"
+   },
+   {
+    "name": "bee-ink",
+    "value": {
+     "light": "#8a5c00",
+     "dark": "#ffd84d"
+    },
+    "usage": "黄色语义的文字：“需要留意 7”。"
+   },
+   {
+    "name": "bee-tint",
+    "value": {
+     "light": "#fff4cc",
+     "dark": "#3d3417"
+    },
+    "usage": "待议浅底：审阅栏选中“待议”时整条变色。"
+   },
+   {
+    "name": "fox",
+    "value": "#ff9600",
+    "usage": "Fox 橙：只用于“文件详情”模式图标。"
+   },
+   {
+    "name": "beetle",
+    "value": "#ce82ff",
+    "usage": "Beetle 紫：只用于“OCR 文本”模式图标（与“移动”差异同色，二者不会同屏出现在同一尺寸上）。"
+   },
+   {
+    "name": "cardinal",
+    "value": "#ff4b4b",
+    "usage": "Cardinal 红：拒绝、出错、PDF 徽标。"
+   },
+   {
+    "name": "cardinal-lip",
+    "value": "#ea2b2b",
+    "usage": "Cardinal 底边：拒绝按钮。"
+   },
+   {
+    "name": "cardinal-ink",
+    "value": {
+     "light": "#c41e1e",
+     "dark": "#ff8a8a"
+    },
+    "usage": "红色文字：出错提示、“已拒绝”。"
+   },
+   {
+    "name": "cardinal-tint",
+    "value": {
+     "light": "#ffdfe0",
+     "dark": "#3d1f22"
+    },
+    "usage": "红色浅底：出错提示条。"
+   },
+   {
+    "name": "diff-del",
+    "value": "#ff4b4b",
+    "usage": "删除（Cardinal）亮面：8px 圆点、22px 编号圆、地图刻度。界面里不做大面积。"
+   },
+   {
+    "name": "diff-del-lip",
+    "value": "#ea2b2b",
+    "usage": "删除底边：编号圆底边、刻度描边、纸上的删除线。"
+   },
+   {
+    "name": "diff-del-ink",
+    "value": {
+     "light": "#c41e1e",
+     "dark": "#ff8a8a"
+    },
+    "usage": "删除墨色：纸上被标记的文字、检查器里的摘录。"
+   },
+   {
+    "name": "diff-del-hl",
+    "value": {
+     "light": "#ffdfe0",
+     "dark": "#4a2326"
+    },
+    "usage": "删除文中高亮：纸上差异文字的底色。"
+   },
+   {
+    "name": "diff-del-bg",
+    "value": {
+     "light": "#fff0f0",
+     "dark": "#2e1c1f"
+    },
+    "usage": "删除浅底：整段删除时段落的底色、审阅栏摘录底。"
+   },
+   {
+    "name": "diff-del-glyph",
+    "value": "#ffffff",
+    "usage": "删除亮面上的符号颜色（编号、＋、−）。"
+   },
+   {
+    "name": "diff-ins",
+    "value": "#89e219",
+    "usage": "新增（Mask）亮面：8px 圆点、22px 编号圆、地图刻度。界面里不做大面积。Mask 在白底上只有 1.6:1，必须带 diff-ins-lip 描边。"
+   },
+   {
+    "name": "diff-ins-lip",
+    "value": "#58a700",
+    "usage": "新增底边：编号圆底边、刻度描边、纸上的下划线。"
+   },
+   {
+    "name": "diff-ins-ink",
+    "value": {
+     "light": "#3c6b00",
+     "dark": "#a5ed6e"
+    },
+    "usage": "新增墨色：纸上被标记的文字、检查器里的摘录。"
+   },
+   {
+    "name": "diff-ins-hl",
+    "value": {
+     "light": "#d7ffb8",
+     "dark": "#26401a"
+    },
+    "usage": "新增文中高亮：纸上差异文字的底色。"
+   },
+   {
+    "name": "diff-ins-bg",
+    "value": {
+     "light": "#effde4",
+     "dark": "#1a2b14"
+    },
+    "usage": "新增浅底：整段新增时段落的底色、审阅栏摘录底。"
+   },
+   {
+    "name": "diff-ins-glyph",
+    "value": "#2b4d00",
+    "usage": "新增亮面上的符号颜色（编号、＋、−）。"
+   },
+   {
+    "name": "diff-fmt",
+    "value": "#2b70c9",
+    "usage": "格式（Humpback）亮面：8px 圆点、22px 编号圆、地图刻度。界面里不做大面积。"
+   },
+   {
+    "name": "diff-fmt-lip",
+    "value": "#1f5ba8",
+    "usage": "格式底边：编号圆底边、刻度描边、纸上的虚线下划线。"
+   },
+   {
+    "name": "diff-fmt-ink",
+    "value": {
+     "light": "#1f5ba8",
+     "dark": "#8ab8f2"
+    },
+    "usage": "格式墨色：纸上被标记的文字、检查器里的摘录。"
+   },
+   {
+    "name": "diff-fmt-hl",
+    "value": {
+     "light": "#dbe7f8",
+     "dark": "#1f3554"
+    },
+    "usage": "格式文中高亮：纸上差异文字的底色。"
+   },
+   {
+    "name": "diff-fmt-bg",
+    "value": {
+     "light": "#eef4fc",
+     "dark": "#17263a"
+    },
+    "usage": "格式浅底：整段格式时段落的底色、审阅栏摘录底。"
+   },
+   {
+    "name": "diff-fmt-glyph",
+    "value": "#ffffff",
+    "usage": "格式亮面上的符号颜色（编号、＋、−）。"
+   },
+   {
+    "name": "diff-move",
+    "value": "#ce82ff",
+    "usage": "移动（Beetle）亮面：8px 圆点、22px 编号圆、地图刻度。界面里不做大面积。"
+   },
+   {
+    "name": "diff-move-lip",
+    "value": "#a560e8",
+    "usage": "移动底边：编号圆底边、刻度描边、纸上的双下划线。"
+   },
+   {
+    "name": "diff-move-ink",
+    "value": {
+     "light": "#7a2fc4",
+     "dark": "#e0b3ff"
+    },
+    "usage": "移动墨色：纸上被标记的文字、检查器里的摘录。"
+   },
+   {
+    "name": "diff-move-hl",
+    "value": {
+     "light": "#f3e3ff",
+     "dark": "#3d2852"
+    },
+    "usage": "移动文中高亮：纸上差异文字的底色。"
+   },
+   {
+    "name": "diff-move-bg",
+    "value": {
+     "light": "#faf3ff",
+     "dark": "#2a1e38"
+    },
+    "usage": "移动浅底：整段移动时段落的底色、审阅栏摘录底。"
+   },
+   {
+    "name": "diff-move-glyph",
+    "value": "#3d1a66",
+    "usage": "移动亮面上的符号颜色（编号、＋、−）。"
+   }
+  ]
+ },
+ "type": {
+  "fonts": [],
+  "families": {
+   "ui": "Nunito, \"Source Han Sans SC\", \"Noto Sans SC\", \"PingFang SC\", \"Microsoft YaHei\", system-ui, sans-serif",
+   "doc": "\"Times New Roman\", \"Songti SC\", \"Noto Serif SC\", SimSun, serif"
+  },
+  "groups": [
+   {
+    "name": "界面",
+    "family": "ui",
+    "styles": [
+     {
+      "name": "display",
+      "fontSize": "32px",
+      "lineHeight": 1.15,
+      "fontWeight": 900,
+      "sample": "找出每一处不同",
+      "usage": "首页标题、完成页。一个界面最多一处。"
+     },
+     {
+      "name": "title",
+      "fontSize": "22px",
+      "lineHeight": 1.25,
+      "fontWeight": 900,
+      "sample": "导出审阅结果",
+      "usage": "页面和弹窗标题。"
+     },
+     {
+      "name": "section",
+      "fontSize": "13px",
+      "lineHeight": 1.4,
+      "fontWeight": 800,
+      "sample": "差异",
+      "usage": "区块标题，颜色 text-2；英文全大写 +0.06em。永远不带图标。"
+     },
+     {
+      "name": "body-strong",
+      "fontSize": "15px",
+      "lineHeight": 1.5,
+      "fontWeight": 700,
+      "sample": "富文本 · 只看有变化的段落",
+      "usage": "行文字、导航项、弹出层标题（900）。"
+     },
+     {
+      "name": "body",
+      "fontSize": "15px",
+      "lineHeight": 1.5,
+      "fontWeight": 400,
+      "sample": "PDF 的文字是从版面推断的，段落和表格可能被拆开。",
+      "usage": "说明段落、提示正文。"
+     },
+     {
+      "name": "button",
+      "fontSize": "15px",
+      "lineHeight": 1.2,
+      "fontWeight": 800,
+      "sample": "开始比较",
+      "usage": "48 / 36 高的按钮；英文全大写 +0.06em。"
+     },
+     {
+      "name": "button-sm",
+      "fontSize": "13px",
+      "lineHeight": 1.2,
+      "fontWeight": 800,
+      "sample": "复制摘要",
+      "usage": "30 高的按钮、筛选片。"
+     },
+     {
+      "name": "caption",
+      "fontSize": "13px",
+      "lineHeight": 1.4,
+      "fontWeight": 700,
+      "sample": "2 分钟前 · 张三",
+      "usage": "行尾信息、时间、作者，颜色 text-2。"
+     },
+     {
+      "name": "group",
+      "fontSize": "12px",
+      "lineHeight": 1.4,
+      "fontWeight": 800,
+      "sample": "第二条 费用与支付",
+      "usage": "分组标题，颜色 text-2，吸顶。"
+     },
+     {
+      "name": "number",
+      "fontSize": "15px",
+      "lineHeight": 1.2,
+      "fontWeight": 900,
+      "sample": "19 · 7 / 19 · 120 → 198",
+      "usage": "计数和金额，等宽数字（tabular-nums）。"
+     }
+    ]
+   },
+   {
+    "name": "文档",
+    "family": "doc",
+    "styles": [
+     {
+      "name": "doc",
+      "fontSize": "15px",
+      "lineHeight": 1.85,
+      "fontWeight": 400,
+      "sample": "服务总费用为人民币 198,000 元。",
+      "usage": "纸上的正文，颜色 doc-ink。"
+     },
+     {
+      "name": "doc-heading",
+      "fontSize": "18px",
+      "lineHeight": 1.5,
+      "fontWeight": 700,
+      "sample": "第二条 费用与支付",
+      "usage": "文档自身的标题，按原文层级缩放。"
+     }
+    ]
+   }
+  ]
+ },
+ "spacing": {
+  "note": "8pt 网格，最小单位 4。",
+  "tokens": [
+   {
+    "name": "space-1",
+    "value": "4px",
+    "usage": "图标与文字之间、计数胶囊内边距。"
+   },
+   {
+    "name": "space-2",
+    "value": "8px",
+    "usage": "组内元素间距、分组之间。"
+   },
+   {
+    "name": "space-3",
+    "value": "12px",
+    "usage": "行内左右内边距、按钮内图标间距。"
+   },
+   {
+    "name": "space-4",
+    "value": "16px",
+    "usage": "栏的左右内边距（侧栏与检查器一致）、卡片内边距。"
+   },
+   {
+    "name": "space-6",
+    "value": "24px",
+    "usage": "组与组之间、弹出层内边距。"
+   },
+   {
+    "name": "space-8",
+    "value": "32px",
+    "usage": "纸的内边距、首页区块间距。"
+   },
+   {
+    "name": "space-12",
+    "value": "48px",
+    "usage": "首页、空状态的大段留白。"
+   }
+  ]
+ },
+ "radius": {
+  "tokens": [
+   {
+    "name": "radius-s",
+    "value": "8px",
+    "usage": "键位、类型徽标、计数胶囊以外的小标签。"
+   },
+   {
+    "name": "radius-m",
+    "value": "12px",
+    "usage": "行、文件片、输入框、小按钮。"
+   },
+   {
+    "name": "radius-l",
+    "value": "16px",
+    "usage": "按钮、纸、卡片。"
+   },
+   {
+    "name": "radius-float",
+    "value": "18px",
+    "usage": "弹出层、审阅栏。"
+   },
+   {
+    "name": "radius-xl",
+    "value": "20px",
+    "usage": "弹窗、首页放置区。"
+   },
+   {
+    "name": "radius-pill",
+    "value": "999px",
+    "usage": "筛选片、计数胶囊、进度条。"
+   }
+  ]
+ },
+ "shadow": {
+  "tokens": [
+   {
+    "name": "shadow-float",
+    "value": {
+     "light": "0 4px 10px rgba(0,0,0,0.12)",
+     "dark": "0 6px 16px rgba(0,0,0,0.5)"
+    },
+    "usage": "只给浮层（弹出层、审阅栏、弹窗）。其他平面一律无阴影。"
+   }
+  ]
+ },
+ "size": {
+  "note": "结构尺寸。三栏共用 56 和 96 两条水平线。",
+  "tokens": [
+   {
+    "name": "toolbar-h",
+    "value": "56px",
+    "usage": "工具栏高度；第一条贯穿三栏的水平线。"
+   },
+   {
+    "name": "header-line",
+    "value": "96px",
+    "usage": "区块标题底边；第二条水平线（56 + 40）。"
+   },
+   {
+    "name": "sidebar-w",
+    "value": "232px",
+    "usage": "侧栏宽度；窄于 1180px 时收成 72 的图标栏。"
+   },
+   {
+    "name": "inspector-w",
+    "value": "320px",
+    "usage": "检查器宽度；窄于 1180px 时变抽屉。"
+   },
+   {
+    "name": "paper-max",
+    "value": "860px",
+    "usage": "纸的最大宽度。"
+   },
+   {
+    "name": "row-h",
+    "value": "40px",
+    "usage": "行、区块标题、菜单项的高度。"
+   },
+   {
+    "name": "control-l",
+    "value": "48px",
+    "usage": "大按钮（首页、弹窗主操作）。"
+   },
+   {
+    "name": "control-m",
+    "value": "36px",
+    "usage": "工具栏按钮、文件片。"
+   },
+   {
+    "name": "control-s",
+    "value": "30px",
+    "usage": "小按钮。"
+   },
+   {
+    "name": "chip-h",
+    "value": "28px",
+    "usage": "筛选片。"
+   },
+   {
+    "name": "border",
+    "value": "2px",
+    "usage": "所有边框。文档表格线例外（1px）。"
+   },
+   {
+    "name": "lip",
+    "value": "4px",
+    "usage": "立体底边；按下变 2px 并下沉 2px。30 高按钮用 3px。"
+   },
+   {
+    "name": "dot",
+    "value": "8px",
+    "usage": "差异色点。"
+   },
+   {
+    "name": "badge",
+    "value": "22px",
+    "usage": "编号圆、计数胶囊高度。"
+   }
+  ]
+ },
+ "duration": {
+  "note": "缓动 cubic-bezier(.2,.8,.2,1)；弹出带一次轻微过冲。系统开启“减少动态效果”时全部为 0。",
+  "tokens": [
+   {
+    "name": "dur-press",
+    "value": "100ms",
+    "usage": "按下下沉。"
+   },
+   {
+    "name": "dur-hover",
+    "value": "150ms",
+    "usage": "悬停、选中弹一下。"
+   },
+   {
+    "name": "dur-advance",
+    "value": "220ms",
+    "usage": "做出决定后跳到下一处的延迟。"
+   },
+   {
+    "name": "dur-pop",
+    "value": "250ms",
+    "usage": "弹出层、审阅栏结论弹出。"
+   },
+   {
+    "name": "dur-flash",
+    "value": "600ms",
+    "usage": "纸上对应处闪一次。"
+   },
+   {
+    "name": "dur-toast",
+    "value": "3200ms",
+    "usage": "“过半了！”等提示的停留时间。"
+   }
+  ]
+ }
+}

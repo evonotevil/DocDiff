@@ -20,7 +20,7 @@ const MENU_EN = {
   文件: 'File', '打开原始文档…': 'Open original…', '打开修改后文档…': 'Open revised…', 交换左右: 'Swap sides',
   新建比较: 'New comparison', 关闭窗口: 'Close window', 退出: 'Quit', 编辑: 'Edit', 视图: 'View',
   富文本: 'Rich text', 纯文本: 'Plain text', 修订审阅: 'Review changes', 图像: 'Image', 'OCR 文本': 'OCR text', 文件详情: 'File details',
-  '下一处差异（J）': 'Next difference (J)', '上一处差异（K）': 'Previous difference (K)',
+  '下一处差异（J）': 'Next difference (J)', '上一处差异（K）': 'Previous difference (K)', '收起 / 展开侧栏': 'Toggle sidebar', '收起 / 展开检查器': 'Toggle inspector',
   重新加载: 'Reload', 开发者工具: 'Developer tools', 实际大小: 'Actual size', 放大: 'Zoom in', 缩小: 'Zoom out',
   全屏: 'Full screen', 窗口: 'Window', 文档: 'Documents', 所有文件: 'All files',
 };
@@ -39,7 +39,7 @@ const PLATFORM = {
   useOverlay,
   // macOS 用隐藏标题栏 + 红绿灯；Win11 / Linux 用隐藏标题栏 + 系统按钮覆盖层；Win10 用系统标题栏
   windowChrome: (dark) => isMac
-    ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 18, y: 18 } }
+    ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 20, y: 20 } }
     : useOverlay
       ? { titleBarStyle: 'hidden', titleBarOverlay: overlayFor(dark) }
       : {},
@@ -60,7 +60,7 @@ function restoreBounds() {
   });
   return visible ? b : { width: b.width || 1440, height: b.height || 920 };
 }
-const overlayFor = (dark) => ({ color: dark ? '#131f24' : '#ffffff', symbolColor: dark ? '#f1f7fb' : '#4b4b4b', height: 52 });
+const overlayFor = (dark) => ({ color: dark ? '#131f24' : '#ffffff', symbolColor: dark ? '#f1f7fb' : '#4b4b4b', height: 56 });
 
 function createWindow() {
   const bounds = restoreBounds();
@@ -121,6 +121,9 @@ function buildMenu() {
         { type: 'separator' },
         { label: L('下一处差异（J）'), accelerator: 'F7', click: () => send('menu', 'next') },
         { label: L('上一处差异（K）'), accelerator: 'Shift+F7', click: () => send('menu', 'prev') },
+        { type: 'separator' },
+        { label: L('收起 / 展开侧栏'), accelerator: isMac ? 'Ctrl+Cmd+S' : 'Ctrl+Alt+S', click: () => send('menu', 'toggle-nav') },
+        { label: L('收起 / 展开检查器'), accelerator: isMac ? 'Alt+Cmd+I' : 'Ctrl+Alt+I', click: () => send('menu', 'toggle-aside') },
         { type: 'separator' },
         ...(app.isPackaged ? [] : [{ role: 'reload', label: L('重新加载') }, { role: 'toggleDevTools', label: L('开发者工具') }, { type: 'separator' }]),
         { role: 'resetZoom', label: L('实际大小') },

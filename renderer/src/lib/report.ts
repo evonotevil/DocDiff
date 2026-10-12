@@ -74,7 +74,7 @@ export function summaryMarkdown(x: Ctx): string {
     });
   }
   if (res.changes.length) {
-    L.push('', t('### 变更明细'));
+    L.push('', t('### 差异明细'));
     let k = 0;
     for (const g of groupChanges(res.changes, clauses)) {
       L.push('', `#### ${g.title}`, '');
@@ -176,13 +176,13 @@ export function reportHtml(x: Ctx, blocksA: Block[], blocksB: Block[]): string {
   .muted { color: #6b776f; font-size: 8.5pt; }
   .num { width: 26px; color: #6b776f; }
   .tag, .kind { font-size: 8.5pt; font-weight: 700; padding: 0 5px; border-radius: 4px; background: #fff4cc; color: #8a6200; white-space: nowrap; }
-  .k-del { background: #feebe9; color: #c0061e; } .k-ins { background: #daf8ec; color: #016f55; } .k-mod { background: #eceeec; color: #4c5a51; } .k-fmt { background: #e9f1fe; color: #0056d7; } .k-move { background: #ffe8fb; color: #ab00a5; }
+  .k-del { background: #ffdfe0; color: #c41e1e; } .k-ins { background: #d7ffb8; color: #3c6b00; } .k-mod { background: #eceeec; color: #4b4b4b; } .k-fmt { background: #dbe7f8; color: #1f5ba8; } .k-move { background: #f3e3ff; color: #7a2fc4; }
   tr.grp td { background: #fafbf8; font-weight: 700; padding-top: 9px; }
   .rl { font-family: "Times New Roman", "Songti SC", SimSun, serif; font-size: 10.5pt; }
   .rl p, .rl h2, .rl h3, .rl h4 { margin: 0 0 6px; border: 0; } .rl h2 { font-size: 13pt; } .rl h3 { font-size: 11.5pt; }
   .rl .sec { margin: 14px 0 6px; font: 700 8.5pt sans-serif; color: #6b776f; letter-spacing: .05em; border-top: 1px dashed #c9cfcc; padding-top: 6px; }
-  .rl del { color: #c0061e; text-decoration: line-through; } .rl ins { color: #016f55; text-decoration: underline; }
-  .rl .mv { color: #ab00a5; text-decoration-style: double; } .rl .fmt { text-decoration: underline dashed #0056d7; }
+  .rl del { color: #c41e1e; text-decoration: line-through #ea2b2b; } .rl ins { color: #3c6b00; text-decoration: underline #58a700; }
+  .rl .mv { color: #7a2fc4; text-decoration-style: double; } .rl .fmt { text-decoration: underline dashed #1f5ba8; }
   .rl .mk { display: inline-block; min-width: 18px; color: #6b776f; }
   .rl table.rt { margin: 0 0 -1px; } .rl table.rt td { border: 1px solid #c9cfcc; }
   .foot { margin-top: 18px; color: #6b776f; font-size: 8.5pt; }
@@ -199,7 +199,7 @@ export function reportHtml(x: Ctx, blocksA: Block[], blocksB: Block[]): string {
     <tr><th>${esc(t('比较条件'))}</th><td>${esc(scope.conditions.join(sep()))}</td></tr>
     <tr><th>${esc(t('对齐方式'))}</th><td>${esc(scope.alignment)}</td></tr>
   </tbody></table>
-  ${res.changes.length ? `<h2>${esc(t('变更明细'))}</h2>
+  ${res.changes.length ? `<h2>${esc(t('差异明细'))}</h2>
   <table class="fixed"><colgroup><col style="width:5%"><col style="width:9%"><col style="width:46%"><col style="width:9%"><col style="width:31%"></colgroup><thead><tr><th>#</th><th>${esc(t('类型'))}</th><th>${esc(t('原文 → 修改后'))}</th><th>${esc(t('结论'))}</th><th>${esc(t('审阅人 · 时间 · 备注'))}</th></tr></thead><tbody>${groups}</tbody></table>` : ''}
   ${res.changes.length ? `<h2 class="pb">${esc(t('附：修订全文'))}</h2><p class="muted">${esc(t('删除线 = 删除，下划线 = 新增，双线 = 移动，虚线 = 格式变化。'))}</p><div class="rl">${redlineHtml(res, blocksA, blocksB)}</div>` : ''}
   <p class="foot">${esc(t('由 DocDiff 在本机生成，文档没有上传。'))} ${esc(A.file.name)} → ${esc(B.file.name)}</p>

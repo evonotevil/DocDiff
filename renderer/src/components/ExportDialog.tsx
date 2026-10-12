@@ -16,9 +16,9 @@ export function ExportDialog({ total, undecided, risks, author, setAuthor, revie
 }) {
   const [kind, setKind] = useState<ExportKind>('redline');
   const opts: [ExportKind, string, string][] = [
-    ['redline', t('Word 修订稿 · 带审阅批注'), t('所有改动保持为 Word 修订，你的每个决定是一条批注。给律师或对方，在 Word 里继续逐条接受或拒绝。')],
+    ['redline', t('Word 修订稿 · 带审阅批注'), t('所有差异保持为 Word 修订，你的每个决定是一条批注。给律师或对方，在 Word 里继续逐条接受或拒绝。')],
     ['final', t('Word 审阅后定稿 · 保留记录'), t('接受的写成正文，拒绝的恢复原文，待议的仍是修订；所有批注保留。用来存档或作为下一轮的基础。')],
-    ['report', t('比对报告 PDF'), t('需要留意的条款、比对凭证、按条款分组的变更表和每一条的结论，最后附修订全文。')],
+    ['report', t('比对报告 PDF'), t('需要留意的条款、比对凭证、按条款分组的差异表和每一条的结论，最后附修订全文。')],
   ];
   const blockFinal = kind === 'final' && undecided > 0;
   return (

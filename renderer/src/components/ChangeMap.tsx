@@ -119,7 +119,7 @@ export function ChangeMap({ changes, filter = [], selCid, onSel, dep, bottom = 6
       title={t('差异地图：拖动滚动，点击跳到附近的差异')} aria-label={t('差异地图')}>
       {dense
         ? buckets.map((b, i) => b.n > 0 && <div key={i} className={`cm-tick k-${b.kind}`} style={{ top: `${(i / BUCKETS) * 100}%`, height: `${100 / BUCKETS}%`, opacity: level(b.n) }} />)
-        : ticks.map((tk) => <div key={tk.id} className={`cm-tick k-${tk.kind} ${tk.id === selCid ? 'on' : ''} ${pass(tk.kind) ? '' : 'dim'}`} style={{ top: `${tk.top}%`, height: `max(3px, ${tk.h}%)` }} />)}
+        : ticks.map((tk) => <div key={tk.id} data-tick={tk.id} className={`cm-tick k-${tk.kind} ${tk.id === selCid ? 'on' : ''} ${pass(tk.kind) ? '' : 'dim'}`} style={{ top: `${tk.top}%`, height: `max(3px, ${tk.h}%)` }} />)}
       <div className="cm-view" style={{ top: `${view.top}%`, height: `${Math.max(3, view.h)}%` }} />
     </div>
   );
