@@ -31,16 +31,16 @@
 
 ## 下载与安装
 
-当前版本：**v1.6.2**。支持 macOS 11 及以上、Windows 10 / 11（64 位）。
+当前版本：**v1.7.0**。支持 macOS 11 及以上、Windows 10 / 11（64 位）。
 
 | 你的电脑 | 下载文件 | 安装方式 |
 |---|---|---|
-| Mac，Apple 芯片 | [mac-arm64.dmg](https://github.com/evonotevil/DocDiff/releases/download/v1.6.2/DocDiff-1.6.2-mac-arm64.dmg) | 打开镜像，将 DocDiff 拖入“应用程序” |
-| Mac，Intel 芯片 | [mac-x64.dmg](https://github.com/evonotevil/DocDiff/releases/download/v1.6.2/DocDiff-1.6.2-mac-x64.dmg) | 同上 |
-| Windows 安装版 | [DocDiff-Setup-1.6.2.exe](https://github.com/evonotevil/DocDiff/releases/download/v1.6.2/DocDiff-Setup-1.6.2.exe) | 双击安装，可选择安装位置 |
-| Windows 免安装版 | [DocDiff-1.6.2-win-x64.zip](https://github.com/evonotevil/DocDiff/releases/download/v1.6.2/DocDiff-1.6.2-win-x64.zip) | 解压后运行 `DocDiff.exe` |
+| Mac，Apple 芯片 | [mac-arm64.dmg](https://github.com/evonotevil/DocDiff/releases/download/v1.7.0/DocDiff-1.7.0-mac-arm64.dmg) | 打开镜像，将 DocDiff 拖入“应用程序” |
+| Mac，Intel 芯片 | [mac-x64.dmg](https://github.com/evonotevil/DocDiff/releases/download/v1.7.0/DocDiff-1.7.0-mac-x64.dmg) | 同上 |
+| Windows 安装版 | [DocDiff-Setup-1.7.0.exe](https://github.com/evonotevil/DocDiff/releases/download/v1.7.0/DocDiff-Setup-1.7.0.exe) | 双击安装，可选择安装位置 |
+| Windows 免安装版 | [DocDiff-1.7.0-win-x64.zip](https://github.com/evonotevil/DocDiff/releases/download/v1.7.0/DocDiff-1.7.0-win-x64.zip) | 解压后运行 `DocDiff.exe` |
 
-不确定 Mac 的芯片类型？点屏幕左上角苹果菜单，选择“关于本机”查看。下载文件无法打开或提示损坏时，先从 [Release 页面](https://github.com/evonotevil/DocDiff/releases/tag/v1.6.2)重新下载，并用该版本的 `SHA256SUMS.txt` 核对文件。
+不确定 Mac 的芯片类型？点屏幕左上角苹果菜单，选择“关于本机”查看。下载文件无法打开或提示损坏时，先从 [Release 页面](https://github.com/evonotevil/DocDiff/releases/tag/v1.7.0)重新下载，并用该版本的 `SHA256SUMS.txt` 核对文件。
 
 ## 三步开始比较
 
@@ -67,7 +67,7 @@ DOCX、PDF、TXT 可以任意组合。比较时可设置忽略空白、忽略全
 - **处理修订：** 按 `A` 接受、`R` 拒绝、`H` 标为待议、`N` 写备注、`U` 撤销最近一次决定。审阅记录自动保存在本机，可导出 Word 修订稿、定稿或 PDF 报告。
 - **继续工作：** Word 文件修改并保存后，点击应用内的“重新比较”；“最近比较”可重新打开之前的文件组合。
 - **分享结果：** 点击“复制摘要”，将变更整理成 Markdown，粘贴到邮件、聊天或文档中。
-- **调整界面：** 左右侧边栏可以折叠；在“设置”中切换中文 / English、浅色 / 深色界面，并查看全部快捷键。设置中的“关于与更新”可检查新版本、查看更新日志并打开下载页。
+- **调整界面：** 侧栏可收成图标栏，差异检查器可以隐藏；在“设置”中切换中文 / English、浅色 / 深色界面，并查看全部快捷键。设置中的“关于与更新”可检查新版本、查看更新日志并打开下载页。
 
 ## 常见问题
 
