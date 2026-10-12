@@ -39,7 +39,7 @@ const block = [
   END,
 ].join('\n');
 
-const css = readFileSync(cssPath, 'utf8');
+const css = readFileSync(cssPath, 'utf8').replace(/\r\n/g, '\n');
 const a = css.indexOf(START.slice(0, 16)), b = css.indexOf(END);
 const next = a >= 0 && b > a ? css.slice(0, a) + block + css.slice(b + END.length) : block + '\n' + css;
 if (process.argv.includes('--check')) {
