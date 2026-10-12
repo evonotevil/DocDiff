@@ -9,7 +9,7 @@ import * as I from './icons';
  * · grow 面板（变更列表、页面列表）吃满剩余高度，自己滚动
  */
 const KEY = 'panels-v1';
-const DEFAULT_CLOSED = new Set(['scope', 'settings']);
+const DEFAULT_CLOSED = new Set(['scope', 'settings', 'batch']);
 
 type Ctx = { isOpen: (id: string) => boolean; toggle: (id: string) => void; focus: string | null; setFocus: (id: string | null) => void };
 const PanelCtx = createContext<Ctx | null>(null);

@@ -10,17 +10,34 @@ export const KIND_ORDER: ChangeKind[] = ['del', 'ins', 'mod', 'fmt', 'move'];
 const KIND_NAME: Record<ChangeKind, string> = { del: '删除', ins: '新增', mod: '修改', fmt: '格式', move: '移动' };
 const KIND_HINT: Record<ChangeKind, string> = { del: '删除线', ins: '下划线', mod: '删除线 + 下划线', fmt: '虚线下划线', move: '双线' };
 
-/** 差异概览：五类各一格（数字 + 名称，左侧色条与变更列表一致），点一下只看这一类（再点取消）。 */
+const KIND_ICON: Record<ChangeKind | 'all', React.ReactNode> = {
+  all: <path d="M5 6h10M5 10h10M5 14h6" />,
+  del: <path d="M5 10h10" />,
+  ins: <path d="M5 10h10M10 5v10" />,
+  mod: <path d="M12.5 4.5l3 3L8 15H5v-3z" />,
+  fmt: <path d="M7 4.5h4a2.6 2.6 0 0 1 0 5.2H7zM7 9.7h4.6a2.9 2.9 0 0 1 0 5.8H7z" />,
+  move: <path d="M7 4.5v11M4.5 7L7 4.5 9.5 7M13 15.5v-11M10.5 13l2.5 2.5 2.5-2.5" />,
+};
+const KindIcon = ({ k }: { k: ChangeKind | 'all' }) => (
+  <span className={`kind-ic k-${k}`} aria-hidden="true"><svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">{KIND_ICON[k]}</svg></span>
+);
+
+/** 差异概览（1.6.2）：两列三行，彩色图标块 + 大号数字；“全部”一格清除筛选。点一格只看这一类（再点取消）。 */
 export function Overview({ stats, filter, setFilter, compact }: { stats: Record<ChangeKind, number>; filter: ChangeKind[]; setFilter: (f: ChangeKind[]) => void; compact?: boolean }) {
   const toggle = (k: ChangeKind) => setFilter(filter.includes(k) ? filter.filter((x) => x !== k) : [...filter, k]);
+  const total = KIND_ORDER.reduce((n, k) => n + (stats[k] || 0), 0);
   return (
     <div className={`kinds ${compact ? 'compact' : ''}`} role="group" aria-label={t('按类型筛选')}>
+      {!compact && (
+        <button type="button" className={`kind-tile k-all ${filter.length ? 'dim' : 'on'}`} aria-pressed={!filter.length} onClick={() => setFilter([])} title={t('显示全部')}>
+          <KindIcon k="all" /><span className="kt"><b>{total}</b><span className="lbl">{t('全部')}</span></span>
+        </button>
+      )}
       {KIND_ORDER.map((k) => (
         <button key={k} type="button" className={`kind-tile k-${k} ${filter.length && !filter.includes(k) ? 'dim' : ''} ${filter.includes(k) ? 'on' : ''}`}
           aria-pressed={filter.includes(k)} disabled={!stats[k]} onClick={() => toggle(k)}
           title={t('{k}：{h}。点一下只看这一类', { k: t(KIND_NAME[k]), h: t(KIND_HINT[k]) })}>
-          <b>{stats[k]}</b>
-          <span className="lbl">{t(KIND_NAME[k])}</span>
+          <KindIcon k={k} /><span className="kt"><b>{stats[k]}</b><span className="lbl">{t(KIND_NAME[k])}</span></span>
         </button>
       ))}
     </div>

@@ -73,7 +73,7 @@ export function ChangeList({ changes, all, sel, onSel, decisions, clauses, risks
             return (
               <button key={c.id} data-chg={c.id} className={`chg k-${c.kind} ${c.id === sel ? 'on' : ''} ${d?.v ? 'done-' + d.v : ''}`} onClick={() => onSel(c.id)} aria-current={c.id === sel}
                 title={`${t('第 {i} 处', { i: order.get(c.id) ?? 0 })} · ${KIND_LABEL[c.kind]}`} aria-label={`${KIND_LABEL[c.kind]}：${plain(c)}`}>
-                <span className={`chg-bar k-${c.kind}`} aria-hidden="true" />
+                <span className={`chg-dot k-${c.kind}`} aria-hidden="true">{d?.v === 'a' ? '✓' : d?.v === 'r' ? '✕' : order.get(c.id)}</span>
                 <span className="chg-body">
                   <span className="txt">
                     {c.kind === 'fmt' ? (<><em>{noteText(c)}</em>{short(c.before, 60) || t('（段落）')}</>) :

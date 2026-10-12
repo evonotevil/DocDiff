@@ -398,4 +398,8 @@ export const EN_DICT: Record<string, string> = {
   '{n} 个决定对不上了。': '{n} decisions no longer match.', '比较设置改过了。这些决定已经保存，改回原来的设置就会回来。': 'Compare settings changed. The decisions are saved and come back when you restore the previous settings.',
   '还有 {n} 处没有处理。': '{n} changes are still undecided.', '修订稿中它们保持为修订、不加批注。': 'They stay as tracked changes without comments.', '报告里显示为“—”。': 'They show as “—” in the report.',
   '没读到文字，可能是扫描件。': 'No text found. This may be a scan.', '比较后用「OCR 文本」或「图像」模式。': 'After comparing, use OCR text or Image mode.',
+  // 1.6.2
+  '全部': 'All', '已审完': 'All reviewed', '很好，再放一份进来。': 'Great, now add the other one.',
+  '把合同的两个版本拖进来，我帮你一处处找。': 'Drop in two versions and I will find every change.',
+  '两份都到齐了！按 Enter 就能开始。': 'Both are here! Press Enter to start.', '过半了！还剩 {n} 处': 'Halfway there! {n} to go',
 };

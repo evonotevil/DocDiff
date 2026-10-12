@@ -34,13 +34,14 @@ import { useDiff } from './lib/useDiff';
 const api = (window as any).api;
 type Side = 0 | 1;
 const sideLabel = (s: Side) => t(s ? '修改后文档' : '原始文档');
+// 每个模式有自己的颜色（1.6.2）：左栏选中态、首页功能图标都用它
 const MODES = [
-  { label: '富文本', icon: <I.ModeRich /> },
-  { label: '纯文本', icon: <I.ModePlain /> },
-  { label: '修订审阅', icon: <I.ModeRedline /> },
-  { label: '图像', icon: <I.ModeImage /> },
-  { label: 'OCR 文本', icon: <I.ModeOcr /> },
-  { label: '文件详情', icon: <I.ModeDetails /> },
+  { label: '富文本', icon: <I.ModeRich />, c: 'macaw' },
+  { label: '纯文本', icon: <I.ModePlain />, c: 'wolf' },
+  { label: '修订审阅', icon: <I.ModeRedline />, c: 'bee' },
+  { label: '图像', icon: <I.ModeImage />, c: 'feather' },
+  { label: 'OCR 文本', icon: <I.ModeOcr />, c: 'beetle' },
+  { label: '文件详情', icon: <I.ModeDetails />, c: 'fox' },
 ];
 
 // ---------- 设置持久化 ----------
@@ -165,8 +166,8 @@ function DropZone({ side, doc, loading, error, onOpen, onFiles, onClear, onPaste
           <div className="title">{t('拖入{s}', { s: sideLabel(side) })}</div>
           <div className="hint">{t('支持 Word（.docx）、PDF、TXT')}</div>
           <div className="acts">
-            <button className="btn" onClick={onOpen}><I.IconUpload />{t('选择文件')}</button>
-            <button className="btn plain" onClick={onPaste}><I.IconPaste />{t('粘贴文字')}</button>
+            <button className="btn blue" onClick={onOpen}><I.IconUpload />{t('选择文件')}</button>
+            <button className="btn" onClick={onPaste}><I.IconPaste />{t('粘贴文字')}</button>
           </div>
         </>
       )}
@@ -510,6 +511,9 @@ export default function App() {
     if (prefs.sound) chime(v === 'a' ? 'ok' : v === 'r' ? 'no' : 'hold');
     setTimeout(() => setFeedback(null), 700);
     const all = changes.every((c) => next[c.id]?.v);
+    // 过半时鼓励一句（1.6.2）：只在这一次决定让进度越过一半时出现
+    const before = changes.filter((c) => decisions[c.id]?.v).length, after = changes.filter((c) => next[c.id]?.v).length;
+    if (!all && changes.length >= 6 && before * 2 < changes.length && after * 2 >= changes.length) flash(t('过半了！还剩 {n} 处', { n: changes.length - after }));
     if (all && changes.length) {
       setTimeout(() => { setDoneOpen(true); if (prefs.sound) chime('done'); }, 450);
     } else {
@@ -712,12 +716,16 @@ export default function App() {
         <div className="home-scroll">
           <div className="home-inner">
             <div className="hero">
-              <Mascot mood={A && B ? 'cheer' : A || B ? 'happy' : 'think'} size={124} className="mascot-bob" />
-              <div>
+              <Mascot mood={A && B ? 'cheer' : A || B ? 'happy' : 'happy'} size={124} className="mascot-bob" />
+              <div className="hero-text">
                 <h1>{t(A && B ? '准备好了，开始比较吧' : '找出两份文档的每一处不同')}</h1>
                 <p>{t('Word、PDF、TXT 任意组合 · 所有处理都在这台电脑上完成，不会上传')}</p>
-                {!A && !B && <button className="btn sm sample-btn" onClick={trySample}><I.ModeRich />{t('用示例合同试一下')}</button>}
+                <div className="feats">
+                  {MODES.slice(0, 5).map((m) => <span key={m.label} className={`feat mc-${m.c}`}>{m.icon}{t(m.label)}</span>)}
+                  {!A && !B && <button className="btn sm sample-btn" onClick={trySample}>{t('用示例合同试一下')}</button>}
+                </div>
               </div>
+              <div className="bubble" aria-hidden="true">{t(A && B ? '两份都到齐了！按 Enter 就能开始。' : A || B ? '很好，再放一份进来。' : '把合同的两个版本拖进来，我帮你一处处找。')}</div>
             </div>
             <div className="drops">
               <DropZone side={0} doc={A} loading={busy[0]} error={errs[0]} onOpen={() => open(0)} onFiles={(f) => onFiles(0, f)} onClear={() => setDocs((d) => [null, d[1]])} onPaste={() => setPasteSide(0)} />
@@ -736,7 +744,7 @@ export default function App() {
                       <div key={i} className="recent-item" role="button" tabIndex={0} onClick={() => openRecent(r)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openRecent(r); } }}>
                         <div className="row"><span className={`badge ${r.a.ext}`}>{r.a.ext.toUpperCase()}</span><span className="name" title={r.a.name}>{midEllipsis(r.a.name)}</span></div>
                         <div className="row"><span className={`badge ${r.b.ext}`}>{r.b.ext.toUpperCase()}</span><span className="name" title={r.b.name}>{midEllipsis(r.b.name)}</span></div>
-                        <div className="time">{timeAgo(r.time)}{prog && <span className={`tag sm ${prog.decided >= prog.total ? 'brand' : 'hold'}`}>{t('已审 {d}/{n}', { d: prog.decided, n: prog.total })}</span>}</div>
+                        <div className="time">{timeAgo(r.time)}{prog && <><span className="mini-prog" aria-hidden="true"><i style={{ width: `${prog.total ? (prog.decided / prog.total) * 100 : 0}%` }} /></span><span className={`tag ${prog.decided >= prog.total ? 'brand' : 'hold'}`}>{prog.decided >= prog.total ? t('已审完') : t('已审 {d}/{n}', { d: prog.decided, n: prog.total })}</span></>}</div>
                         <button className="btn sm icon x" title={t('从列表移除')} aria-label={t('从列表移除')} onClick={(e) => { e.stopPropagation(); api.recentRemove(i).then(setRecent); }}><I.IconX /></button>
                       </div>
                     );
@@ -749,7 +757,7 @@ export default function App() {
         <div className="home-cta">
           {canCompare
             ? <><span className="hint">{t('也可以直接按')} <Kbd>Enter</Kbd></span><button className="btn primary big" onClick={startCompare}>{t('开始比较')}</button></>
-            : <span className="cta-wait">{busy[0] || busy[1] ? t('正在读取文档…') : t('还差 {n} 个文档，放进来就能开始比较', { n: missing })}</span>}
+            : <><span className="hint">{busy[0] || busy[1] ? t('正在读取文档…') : t('还差 {n} 个文档', { n: missing })}</span><button className="btn primary big" disabled>{t('开始比较')}</button></>}
         </div>
         {modals}
       </div>
@@ -817,6 +825,7 @@ export default function App() {
   const sameText = <div className="same-text">{t('在已比较的范围内未发现差异。')}{scope?.notCompared.length ? <small>{t('未比较：{x}', { x: scope.notCompared.join(t('、')) })}</small> : null}</div>;
   if (needsDiff && diffJob.running) body = (
     <div className="empty-state">
+      <Mascot mood="think" size={96} />
       <h2>{t('正在比较…')}</h2>
       <div>{t('这份文档比较大，正在后台算，界面不会卡住。')}</div>
       <div className="progress indeterminate"><div /></div>
@@ -825,6 +834,7 @@ export default function App() {
   );
   else if (needsDiff && diffJob.cancelled) body = (
     <div className="empty-state">
+      <Mascot mood="sleepy" size={96} />
       <h2>{t('已取消比较')}</h2>
       <div>{t('可以调整一下比较设置再来一次。')}</div>
       <button className="btn primary" onClick={diffJob.retry}>{t('重新比较')}</button>
@@ -832,22 +842,24 @@ export default function App() {
   );
   else if (needsDiff && diffJob.error) body = (
     <div className="empty-state">
+      <Mascot mood="oops" size={96} />
       <h2>{t('比较过程出错了')}</h2>
       <Notice tone="err" title={diffJob.error} />
       <button className="btn primary" onClick={diffJob.retry}>{t('重新比较')}</button>
     </div>
   );
   else if (tab === 0 && richRes && RA && RB) body = richRes.rows.length ? <RichView A={RA} B={RB} res={richRes} selCid={selCid} onSel={setSelCid} hideUnchanged={prefs.hideRich} />
-    : <div className="empty-state"><h2>{t('没找到可以比较的文字')}</h2><div>{t((A.type === 'pdf' || B.type === 'pdf') ? '如果是扫描件，试试「OCR 文本」或「图像」模式。' : '两份文档好像都是空的。')}</div></div>;
+    : <div className="empty-state"><Mascot mood="oops" size={96} /><h2>{t('没找到可以比较的文字')}</h2><div>{t((A.type === 'pdf' || B.type === 'pdf') ? '如果是扫描件，试试「OCR 文本」或「图像」模式。' : '两份文档好像都是空的。')}</div></div>;
   else if (tab === 1 && plainRes && plainBlocks) body = <PlainView A={plainBlocks[0]} B={plainBlocks[1]} res={plainRes} selCid={selCid} onSel={setSelCid} layout={prefs.layout} wrap={prefs.wrap} hideUnchanged={prefs.hidePlain} />;
   else if (tab === 2 && richRes && RA && RB) body = changes.length ? <RedlineView A={RA} B={RB} res={richRes} selCid={selCid} onSel={setSelCid} decisions={decisions} innerRef={redlineRef} />
-    : <div className="empty-state"><h2>{t('没有需要审阅的修订')}</h2>{sameText}</div>;
+    : <div className="empty-state"><Mascot mood="cheer" size={96} /><h2>{t('没有需要审阅的修订')}</h2>{sameText}</div>;
   else if (tab === 3) body = <ImageView state={imgState} mode={prefs.imgMode} zoom={zoom} fade={fade} setFade={setFade} slider={slider} setSlider={setSlider} showBoxes={prefs.showBoxes} onlyDiff={onlyDiffPages} scrollRef={imgScroll} />;
   else if (tab === 4) {
     if (ocrRes && ocrBlocks) body = <PlainView A={ocrBlocks[0]} B={ocrBlocks[1]} res={ocrRes} selCid={selCid} onSel={setSelCid} layout={prefs.layout} wrap={prefs.wrap} hideUnchanged={prefs.hidePlain} lowWords={lowWords} />;
-    else if (ocr.status === 'running') body = <div className="empty-state"><h2>{t('正在识别文字…')}</h2><div>{ocr.msg}</div><div className="progress"><div style={{ width: `${ocr.pct || 0}%` }} /></div><button className="btn sm plain" onClick={cancelOcr}>{t('取消')}</button></div>;
+    else if (ocr.status === 'running') body = <div className="empty-state"><Mascot mood="think" size={96} /><h2>{t('正在识别文字…')}</h2><div>{ocr.msg}</div><div className="progress"><div style={{ width: `${ocr.pct || 0}%` }} /></div><button className="btn sm plain" onClick={cancelOcr}>{t('取消')}</button></div>;
     else body = (
       <div className="empty-state">
+        <Mascot mood="sleepy" size={96} />
         <h2>{t('先识别，再比较')}</h2>
         <div>{t('把两份文档的每一页当成图片来识别文字。适合扫描件、截图型 PDF。')}<br />{t('每页大约 3–5 秒，完全离线。')}</div>
         {ocr.status === 'error' && <Notice tone="err" title={t('识别失败')}>{ocr.msg}</Notice>}
@@ -991,7 +1003,7 @@ export default function App() {
         {MODES.map((m, i) => {
           const n = navCount(i);
           return (
-            <button key={i} className={`nav-item ${tab === i ? 'on' : ''}`} onClick={() => setTab(i)} title={`${t(m.label)}（${kbd(`mod+${i + 1}`)}）${n ? ' · ' + n[1] : ''}`} aria-current={tab === i ? 'page' : undefined}>
+            <button key={i} className={`nav-item mc-${m.c} ${tab === i ? 'on' : ''}`} onClick={() => setTab(i)} title={`${t(m.label)}（${kbd(`mod+${i + 1}`)}）${n ? ' · ' + n[1] : ''}`} aria-current={tab === i ? 'page' : undefined}>
               {m.icon}<span>{t(m.label)}</span>{n !== undefined && <span className="count">{n[0]}</span>}
             </button>
           );
@@ -1096,6 +1108,7 @@ export default function App() {
               <div className="overlay-bg">
                 {prefs.celebrate && <Confetti />}
                 <div className="done-card" role="dialog" aria-label={t('审阅完成')}>
+                  <Mascot mood="cheer" size={120} className="mascot-pop" />
                   <h2>{t('审阅完成')}</h2>
                   <div className="muted">{t('{n} 处修订全部处理完毕', { n: changes.length })}</div>
                   <div className="done-stats">

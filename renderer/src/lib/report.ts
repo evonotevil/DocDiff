@@ -175,14 +175,14 @@ export function reportHtml(x: Ctx, blocksA: Block[], blocksB: Block[]): string {
   .mono { font: 8.5pt ui-monospace, Menlo, Consolas, monospace; color: #4c5a51; word-break: break-all; }
   .muted { color: #6b776f; font-size: 8.5pt; }
   .num { width: 26px; color: #6b776f; }
-  .tag, .kind { font-size: 8.5pt; font-weight: 700; padding: 0 5px; border-radius: 4px; background: #fff3cf; color: #7a5600; white-space: nowrap; }
-  .k-del { background: #fdebe8; color: #b3261e; } .k-ins { background: #e1f5ee; color: #0b7558; } .k-mod { background: #eceeec; color: #4c5a51; } .k-fmt { background: #e7eefb; color: #2459a8; } .k-move { background: #f6e8f5; color: #8a2f86; }
+  .tag, .kind { font-size: 8.5pt; font-weight: 700; padding: 0 5px; border-radius: 4px; background: #fff4cc; color: #8a6200; white-space: nowrap; }
+  .k-del { background: #feebe9; color: #c0061e; } .k-ins { background: #daf8ec; color: #016f55; } .k-mod { background: #eceeec; color: #4c5a51; } .k-fmt { background: #e9f1fe; color: #0056d7; } .k-move { background: #ffe8fb; color: #ab00a5; }
   tr.grp td { background: #fafbf8; font-weight: 700; padding-top: 9px; }
   .rl { font-family: "Times New Roman", "Songti SC", SimSun, serif; font-size: 10.5pt; }
   .rl p, .rl h2, .rl h3, .rl h4 { margin: 0 0 6px; border: 0; } .rl h2 { font-size: 13pt; } .rl h3 { font-size: 11.5pt; }
   .rl .sec { margin: 14px 0 6px; font: 700 8.5pt sans-serif; color: #6b776f; letter-spacing: .05em; border-top: 1px dashed #c9cfcc; padding-top: 6px; }
-  .rl del { color: #b3261e; text-decoration: line-through; } .rl ins { color: #0b7558; text-decoration: underline; }
-  .rl .mv { color: #8a2f86; text-decoration-style: double; } .rl .fmt { text-decoration: underline dashed #2459a8; }
+  .rl del { color: #c0061e; text-decoration: line-through; } .rl ins { color: #016f55; text-decoration: underline; }
+  .rl .mv { color: #ab00a5; text-decoration-style: double; } .rl .fmt { text-decoration: underline dashed #0056d7; }
   .rl .mk { display: inline-block; min-width: 18px; color: #6b776f; }
   .rl table.rt { margin: 0 0 -1px; } .rl table.rt td { border: 1px solid #c9cfcc; }
   .foot { margin-top: 18px; color: #6b776f; font-size: 8.5pt; }
