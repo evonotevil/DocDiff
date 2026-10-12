@@ -42,7 +42,7 @@ try {
     assert.ok(!r.exceptionDetails, JSON.stringify(r.exceptionDetails)); return r.result.value;
   };
   let ready = false;
-  for (let i = 0; i < 40; i++) { ready = await evaluate('!!window.api && document.body.innerText.includes("DocDiff")'); if (ready) break; await delay(250); }
+  for (let i = 0; i < 40; i++) { ready = await evaluate('!!window.api && !!document.body && document.body.innerText.includes("DocDiff")'); if (ready) break; await delay(250); }
   assert.ok(ready, 'DocDiff UI did not render');
   const fonts = await evaluate(`(async () => {
     const results = [];
