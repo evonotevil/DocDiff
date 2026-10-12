@@ -20,18 +20,27 @@
 
 ![界面 5](screenshots/DocDiff-商店图-5.png)
 
+## 1.6 新增功能
+
+- **审阅记录自动保存**：支持接受、拒绝、待议和备注，记录审阅人及处理进度，下次打开可继续审阅。
+- **Word 导出与 PDF 报告**：导出带署名批注的 Word 修订稿、审阅后定稿，以及包含变更和审阅记录的比对报告。
+- **离线风险摘要**：突出金额、付款、日期和期限的变化，支持自定义关注关键词。
+- **比较范围更完整**：页眉、页脚和脚注参与比较，跨格式比对和未比较内容有明确提示。
+- **差异更容易定位**：按条款分组，支持按变更类型筛选，滚动条中可查看差异分布并点击跳转。
+- **界面与操作优化**：窄窗口布局、深色模式、分组设置和键盘操作更完善，新增内置示例合同。
+
 ## 下载与安装
 
-当前版本：**v1.5.1**。支持 macOS 11 及以上、Windows 10 / 11（64 位）。
+当前版本：**v1.6.0**。支持 macOS 11 及以上、Windows 10 / 11（64 位）。
 
 | 你的电脑 | 下载文件 | 安装方式 |
 |---|---|---|
-| Mac，Apple 芯片 | [mac-arm64.dmg](https://github.com/evonotevil/DocDiff/releases/download/v1.5.1/DocDiff-1.5.1-mac-arm64.dmg) | 打开镜像，将 DocDiff 拖入“应用程序” |
-| Mac，Intel 芯片 | [mac-x64.dmg](https://github.com/evonotevil/DocDiff/releases/download/v1.5.1/DocDiff-1.5.1-mac-x64.dmg) | 同上 |
-| Windows 安装版 | [DocDiff-Setup-1.5.1.exe](https://github.com/evonotevil/DocDiff/releases/download/v1.5.1/DocDiff-Setup-1.5.1.exe) | 双击安装，可选择安装位置 |
-| Windows 免安装版 | [DocDiff-1.5.1-win-x64.zip](https://github.com/evonotevil/DocDiff/releases/download/v1.5.1/DocDiff-1.5.1-win-x64.zip) | 解压后运行 `DocDiff.exe` |
+| Mac，Apple 芯片 | [mac-arm64.dmg](https://github.com/evonotevil/DocDiff/releases/download/v1.6.0/DocDiff-1.6.0-mac-arm64.dmg) | 打开镜像，将 DocDiff 拖入“应用程序” |
+| Mac，Intel 芯片 | [mac-x64.dmg](https://github.com/evonotevil/DocDiff/releases/download/v1.6.0/DocDiff-1.6.0-mac-x64.dmg) | 同上 |
+| Windows 安装版 | [DocDiff-Setup-1.6.0.exe](https://github.com/evonotevil/DocDiff/releases/download/v1.6.0/DocDiff-Setup-1.6.0.exe) | 双击安装，可选择安装位置 |
+| Windows 免安装版 | [DocDiff-1.6.0-win-x64.zip](https://github.com/evonotevil/DocDiff/releases/download/v1.6.0/DocDiff-1.6.0-win-x64.zip) | 解压后运行 `DocDiff.exe` |
 
-不确定 Mac 的芯片类型？点屏幕左上角苹果菜单，选择“关于本机”查看。下载文件无法打开或提示损坏时，先从 [Release 页面](https://github.com/evonotevil/DocDiff/releases/tag/v1.5.1)重新下载，并用该版本的 `SHA256SUMS.txt` 核对文件。
+不确定 Mac 的芯片类型？点屏幕左上角苹果菜单，选择“关于本机”查看。下载文件无法打开或提示损坏时，先从 [Release 页面](https://github.com/evonotevil/DocDiff/releases/tag/v1.6.0)重新下载，并用该版本的 `SHA256SUMS.txt` 核对文件。
 
 ## 三步开始比较
 
@@ -55,7 +64,7 @@ DOCX、PDF、TXT 可以任意组合。比较时可设置忽略空白、忽略全
 ## 日常使用
 
 - **定位变化：** 点击右侧变更列表或差异地图，跳到对应内容；在富文本里点击一行，还能对齐两侧文档。
-- **处理修订：** 按 `A` 接受、`R` 拒绝、`U` 撤销最近一次决定。全部处理后可导出文档。
+- **处理修订：** 按 `A` 接受、`R` 拒绝、`H` 标为待议、`N` 写备注、`U` 撤销最近一次决定。审阅记录自动保存在本机，可导出 Word 修订稿、定稿或 PDF 报告。
 - **继续工作：** Word 文件修改并保存后，点击应用内的“重新比较”；“最近比较”可重新打开之前的文件组合。
 - **分享结果：** 点击“复制摘要”，将变更整理成 Markdown，粘贴到邮件、聊天或文档中。
 - **调整界面：** 左右侧边栏可以折叠；在“设置”中切换中文 / English、浅色 / 深色界面，并查看全部快捷键。设置中的“关于与更新”可检查新版本、查看更新日志并打开下载页。
