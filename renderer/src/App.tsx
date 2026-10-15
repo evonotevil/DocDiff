@@ -177,6 +177,16 @@ function DropZone({ side, doc, loading, error, onOpen, onFiles, onClear, onPaste
   );
 }
 
+/** 文件名拆成两段：开头可以被省略号截掉，结尾（扩展名前 6 个字 + 扩展名）永远完整显示（1.7.1） */
+function splitName(name: string): [string, string] {
+  const dot = name.lastIndexOf('.');
+  const ext = dot > 0 && name.length - dot <= 6 ? name.slice(dot) : '';
+  const stem = ext ? name.slice(0, dot) : name;
+  const chars = Array.from(stem);
+  if (chars.length <= 10) return [stem, ext];
+  return [chars.slice(0, -6).join(''), chars.slice(-6).join('') + ext];
+}
+
 /** 文件片（规范 3.0）：工具栏左侧，高 36。点一下换文件，也可以直接把文件拖上来替换 */
 function FilePill({ side, doc, onOpen, onFiles, changed }: { side: Side; doc: DocModel; onOpen: () => void; onFiles: (f: FileInfo[]) => void; changed: boolean }) {
   const d = useDrop(onFiles);
@@ -185,7 +195,7 @@ function FilePill({ side, doc, onOpen, onFiles, changed }: { side: Side; doc: Do
       title={`${doc.file.path || doc.file.name}\n${t('点一下换一个文件，也可以直接拖进来')}`} aria-label={`${sideLabel(side)}：${doc.file.name}。${t('换一个文件')}`}>
       <span className={`badge ${doc.type}`}>{doc.type.toUpperCase()}</span>
       <span className="who">{t(side ? '修改后' : '原始')}</span>
-      <span className="name">{midEllipsis(doc.file.name, 28)}</span>
+      <span className="name">{(() => { const [h, tl] = splitName(doc.file.name); return <><span className="fn-h">{h}</span><span className="fn-t">{tl}</span></>; })()}</span>
       {changed && <span className="chg-dot" title={t('已更新')} />}
     </button>
   );
@@ -654,6 +664,7 @@ export default function App() {
     else if (cmd === 'tab' && a.compared) a.setTab(arg);
     else if (cmd === 'next') a.go(1);
     else if (cmd === 'prev') a.go(-1);
+    else if (cmd === 'fullscreen') document.documentElement.dataset.fullscreen = arg ? '1' : '';
     else if (cmd === 'toggle-nav' && a.compared) a.toggleNav();
     else if (cmd === 'toggle-aside' && a.compared) a.toggleAside();
   }), []);
@@ -973,12 +984,13 @@ export default function App() {
   return (
     <div className={`app shell ${navOpen ? '' : 'nav-mini'} ${hasInsp && inspOpen && !narrow ? '' : 'insp-off'} ${narrow ? 'narrow' : ''}`}>
       <nav className="nav" aria-label={t('比较模式')}>
-        <div className="nav-h drag">
-          {navOpen && !isMac && <Wordmark size={26} />}
-          <span className="grow" />
-          {(navOpen || !isMac) && <button type="button" className="ibtn" onClick={toggleNav} title={toggleTitle(navOpen, '侧栏', navKey)} aria-label={t(navOpen ? '收起侧栏' : '展开侧栏')} aria-expanded={navOpen}><I.IconPanelLeft /></button>}
-        </div>
-        {!navOpen && isMac && <button type="button" className="ibtn rail-toggle" onClick={toggleNav} title={toggleTitle(false, '侧栏', navKey)} aria-label={t('展开侧栏')} aria-expanded={false}><I.IconPanelLeft /></button>}
+        {navOpen && (
+          <div className="nav-h drag">
+            {!isMac && <Wordmark size={26} />}
+            <span className="grow" />
+            <button type="button" className="ibtn" onClick={toggleNav} title={toggleTitle(true, '侧栏', navKey)} aria-label={t('收起侧栏')} aria-expanded={true}><I.IconPanelLeft /></button>
+          </div>
+        )}
         <div className="sh"><span className="t">{t('比较模式')}</span></div>
         <div className="nav-list">
           {MODES.map((m, i) => {
@@ -999,6 +1011,7 @@ export default function App() {
       </nav>
 
       <header className="tbar drag">
+        {!navOpen && <button type="button" className="ibtn tb-nav" onClick={toggleNav} title={toggleTitle(false, '侧栏', navKey)} aria-label={t('展开侧栏')} aria-expanded={false}><I.IconPanelLeft /></button>}
         <FilePill side={0} doc={A} onOpen={() => open(0)} onFiles={(f) => onFiles(0, f)} changed={changedSides.includes(0)} />
         <button type="button" className="ibtn" title={t('交换左右（{k}）', { k: kbd('mod+shift+S') })} aria-label={t('交换左右')} onClick={swap}><I.IconSwap /></button>
         <FilePill side={1} doc={B} onOpen={() => open(1)} onFiles={(f) => onFiles(1, f)} changed={changedSides.includes(1)} />
@@ -1018,7 +1031,7 @@ export default function App() {
           ) : null}
         </div>
         {tab !== 5 && <button ref={gearRef} type="button" className="ibtn" onClick={() => setPop(pop === 'settings' ? null : 'settings')} title={t('比较设置')} aria-label={t('比较设置')} aria-expanded={pop === 'settings'}><I.IconGear /></button>}
-        {curRes && <button type="button" className="btn" onClick={copySummary} title={t('复制为 Markdown，可粘贴到邮件 / 飞书 / 文档')}><I.IconCopy />{t('复制摘要')}</button>}
+        {curRes && <button type="button" className="btn tb-copy" onClick={copySummary} title={t('复制为 Markdown，可粘贴到邮件 / 飞书 / 文档')} aria-label={t('复制摘要')}><I.IconCopy /><span className="lbl">{t('复制摘要')}</span></button>}
         {richRes && isRichTab && <button type="button" className={`btn ${tab === 2 ? '' : 'primary'}`} onClick={openExport}><I.IconExport />{t('导出')}</button>}
         {hasInsp && <button type="button" className="ibtn" onClick={toggleAside} title={toggleTitle(inspOpen, '检查器', inspKey)} aria-label={t(inspOpen ? '收起检查器' : '展开检查器')} aria-expanded={inspOpen}><I.IconPanelRight /></button>}
       </header>

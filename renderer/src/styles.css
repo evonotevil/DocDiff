@@ -491,10 +491,7 @@ select.sel { height: 36px; border-radius: var(--r-m); border: 2px solid var(--bo
 .mi.mc-macaw { background: var(--macaw); } .mi.mc-wolf { background: var(--wolf); } .mi.mc-bee { background: var(--bee); color: var(--title); }
 .mi.mc-feather { background: var(--feather); } .mi.mc-beetle { background: var(--beetle); } .mi.mc-fox { background: var(--fox); }
 /* 收起：72 宽图标栏，模式图标保留，名称进提示 */
-.nav-mini .nav-h { padding: 0; justify-content: center; }
-.nav-mini .nav-h .grow { display: none; }
-[data-platform='mac'] .nav-mini .nav-h { padding: 0; }
-.nav-mini .rail-toggle { margin: 0 auto 4px; }
+.nav-mini .nav { grid-row: 2; padding-top: var(--space-2); }
 .nav-mini .nav .sh { display: none; }
 .nav-mini .nav-list, .nav-mini .nav-foot { align-items: center; padding: 0 var(--space-2); }
 .nav-mini .nav-item { width: 48px; justify-content: center; padding: 0; gap: 0; }
@@ -503,16 +500,23 @@ select.sel { height: 36px; border-radius: var(--r-m); border: 2px solid var(--bo
 /* ---------- 工具栏 ---------- */
 .tbar { grid-row: 1; grid-column: 2 / 4; display: flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-3) 0 var(--space-4); background: var(--surface); border-bottom: 2px solid var(--swan); min-width: 0; }
 [data-chrome='overlay'] .tbar { padding-right: 150px; }
-[data-platform='mac'] .nav-mini ~ .tbar, [data-platform='mac'] .shell.nav-mini .tbar { padding-left: 40px; }
+/* 侧栏收起（1.7.1）：工具栏铺满整个窗口宽度，开关是它的第一个按钮；macOS 给红绿灯留 84px，全屏时不留 */
+.shell.nav-mini .tbar { grid-column: 1 / 4; padding-left: 10px; }
+[data-platform='mac'] .shell.nav-mini .tbar { padding-left: 84px; }
+[data-platform='mac'][data-fullscreen='1'] .shell.nav-mini .tbar { padding-left: 10px; }
+[data-platform='mac'][data-fullscreen='1'] .nav-h { padding-left: var(--space-4); }
+.tbar .tb-nav { margin-right: 2px; }
 .tbar .btn { flex: none; }
-.filechip { flex: 0 1 240px; min-width: 96px; display: flex; align-items: center; gap: var(--space-2); height: var(--control-m); padding: 0 var(--space-3) 0 6px; border: 2px solid var(--swan); border-radius: var(--radius-m); background: var(--surface); cursor: pointer; position: relative; }
+.filechip { flex: 0 1 280px; min-width: 120px; display: flex; align-items: center; gap: var(--space-2); height: var(--control-m); padding: 0 var(--space-3) 0 6px; border: 2px solid var(--swan); border-radius: var(--radius-m); background: var(--surface); cursor: pointer; position: relative; }
 .filechip:hover { background: var(--hover); }
 .filechip.over { border-color: var(--macaw); background: var(--macaw-tint); }
-.filechip .badge { min-width: 0; height: 22px; padding: 0 6px; border-radius: 6px; }
+.filechip .badge { flex: none; min-width: 0; height: 22px; padding: 0 6px; border-radius: 6px; }
 .filechip .who { flex: none; font-size: 12px; font-weight: 800; color: var(--text-2); }
-.filechip .name { min-width: 0; font-size: 13px; font-weight: 700; color: var(--eel); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.filechip .name { min-width: 0; overflow: hidden; display: flex; font-size: 13px; font-weight: 700; color: var(--eel); white-space: nowrap; }
+.filechip .fn-h { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.filechip .fn-t { flex: none; }
 .filechip .chg-dot { position: absolute; top: -4px; right: -4px; width: 10px; height: 10px; border-radius: 50%; background: var(--macaw); box-shadow: 0 0 0 2px var(--surface); }
-.tb-mid { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; gap: var(--space-1); }
+.tb-mid { flex: 1 0 auto; display: flex; align-items: center; justify-content: center; gap: var(--space-1); }
 .tb-pos { font-size: 13px; font-weight: 800; color: var(--text-2); font-variant-numeric: tabular-nums; white-space: nowrap; padding: 0 4px; }
 .tb-prog { width: 200px; max-width: 30vw; height: 12px; border-radius: var(--radius-pill); background: var(--swan); overflow: hidden; margin-right: 6px; }
 .tb-prog i { display: block; height: 100%; background: var(--feather); border-radius: inherit; box-shadow: inset 0 3px 0 #ffffff4d; transition: width .3s var(--ease); }
@@ -662,7 +666,8 @@ select.sel { height: 36px; border-radius: var(--r-m); border: 2px solid var(--bo
 .shell.narrow { grid-template-columns: var(--navw) minmax(0, 1fr) 0; }
 .shell.narrow .insp.drawer { position: absolute; grid-row: auto; grid-column: auto; top: var(--toolbar-h); right: 0; bottom: 0; width: min(var(--inspector-w), 86vw); z-index: 45; box-shadow: var(--shadow-float); }
 .drawer-scrim { position: absolute; inset: var(--toolbar-h) 0 0 0; z-index: 44; background: #0000001f; }
-.shell.narrow .filechip { flex-basis: 180px; }
+.shell.narrow .tbar .tb-copy { width: var(--control-m); padding: 0; }
+.shell.narrow .tbar .tb-copy .lbl { display: none; }
 .shell.narrow .tbar .btn { padding: 0 10px; }
 
 /* 完成页 */
@@ -934,3 +939,4 @@ select.sel { height: 36px; border-radius: var(--r-m); border: 2px solid var(--bo
 }
 :lang(en) .sh, :lang(en) .ch { text-transform: uppercase; letter-spacing: .06em; }
 .filechip .badge { font-size: 12px; }
+.shell.narrow .filechip .who { display: none; }

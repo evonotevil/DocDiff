@@ -103,11 +103,15 @@ try {
   await delay(200);
   assert.ok(await evaluate(`!!document.querySelector('.insp .drow[data-chg]')`), 'Inspector must reopen');
   const navBefore = await evaluate(`document.querySelector('.app.shell').classList.contains('nav-mini')`);
-  await evaluate(`document.querySelector('nav button[aria-expanded]').click()`);
+  await evaluate(`document.querySelector('button[aria-label="收起侧栏"], button[aria-label="展开侧栏"], button[aria-label="Hide sidebar"], button[aria-label="Show sidebar"]').click()`);
   await delay(200);
   assert.notEqual(await evaluate(`document.querySelector('.app.shell').classList.contains('nav-mini')`), navBefore, 'Sidebar must toggle');
-  await evaluate(`document.querySelector('nav button[aria-expanded]').click()`);
+  await evaluate(`document.querySelector('button[aria-label="收起侧栏"], button[aria-label="展开侧栏"], button[aria-label="Hide sidebar"], button[aria-label="Show sidebar"]').click()`);
   await delay(200);
+  assert.ok(await evaluate(`Array.from(document.querySelectorAll('.filechip')).length === 2 && Array.from(document.querySelectorAll('.filechip')).every(chip => chip.querySelector('.badge')?.innerText === 'DOCX' && chip.querySelector('.fn-t')?.innerText.endsWith('.docx'))`), 'File type and filename suffix must remain visible');
+  if (await evaluate(`document.querySelector('.app.shell').classList.contains('nav-mini')`)) {
+    assert.ok(await evaluate(`Math.abs(document.querySelector('.tbar').getBoundingClientRect().left - document.querySelector('.app.shell').getBoundingClientRect().left) < 2`), 'Collapsed sidebar toolbar must span window width');
+  }
   const sample = await call('Page.captureScreenshot', { format: 'png' });
   fs.writeFileSync(path.join(out, 'sample-comparison.png'), Buffer.from(sample.data, 'base64'));
   assert.ok(!/remote_font_face_source.*NOTREACHED|NOTREACHED.*remote_font_face_source/i.test(log), 'Native font assertion: ' + log);

@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 824 852">
+  <!-- 立体底边 -->
+  <rect x="0" y="28" width="824" height="824" rx="190" fill="#58a700"/>
+  <!-- 主体 -->
+  <rect x="0" y="0" width="824" height="824" rx="190" fill="#58cc02"/>
+  <path d="M190 0 h444 a190 190 0 0 1 190 190 v40 C640 150 330 120 0 230 v-40 A190 190 0 0 1 190 0z" fill="#ffffff" opacity=".10"/>
+  <!-- 后面那张纸 -->
+  <g transform="rotate(-11 300 420)">
+    <rect x="150" y="190" width="330" height="430" rx="52" fill="#46a302"/>
+    <rect x="150" y="178" width="330" height="430" rx="52" fill="#d7ffb8"/>
+    <rect x="205" y="262" width="150" height="30" rx="15" fill="#9ee35a"/>
+    <rect x="205" y="322" width="210" height="30" rx="15" fill="#9ee35a"/>
+  </g>
+  <!-- 前面那张纸（带表情） -->
+  <g transform="rotate(6 520 440)">
+    <rect x="318" y="218" width="372" height="472" rx="58" fill="#e5e5e5"/>
+    <path d="M376 204 h214 l100 100 v328 a58 58 0 0 1 -58 58 h-256 a58 58 0 0 1 -58 -58 v-370 a58 58 0 0 1 58 -58z" fill="#ffffff"/>
+    <path d="M590 204 v62 a38 38 0 0 0 38 38 h62 z" fill="#89e219"/>
+    <!-- 眼睛 -->
+    <ellipse cx="440" cy="392" rx="42" ry="50" fill="#4b4b4b"/>
+    <ellipse cx="572" cy="392" rx="42" ry="50" fill="#4b4b4b"/>
+    <circle cx="454" cy="372" r="15" fill="#ffffff"/>
+    <circle cx="586" cy="372" r="15" fill="#ffffff"/>
+    <!-- 微笑 -->
+    <path d="M466 470 q40 36 80 0" stroke="#4b4b4b" stroke-width="20" fill="none" stroke-linecap="round"/>
+    <!-- 红 / 绿 差异条 -->
+    <rect x="392" y="540" width="112" height="36" rx="18" fill="#ff4b4b"/>
+    <rect x="522" y="540" width="112" height="36" rx="18" fill="#58cc02"/>
+    <rect x="392" y="596" width="176" height="28" rx="14" fill="#e5e5e5"/>
+  </g>
+</svg>

@@ -85,6 +85,11 @@ function createWindow() {
   const saveBounds = () => { if (!mainWin || mainWin.isDestroyed()) return; store.write('window.json', { ...mainWin.getNormalBounds(), maximized: mainWin.isMaximized() }); };
   mainWin.on('close', saveBounds);
   mainWin.on('closed', () => { mainWin = null; });
+  // 全屏时 macOS 红绿灯隐藏，工具栏不再给它留位置（1.7.1）
+  const sendFs = (v) => { if (mainWin && !mainWin.isDestroyed()) mainWin.webContents.send('menu', 'fullscreen', v); };
+  mainWin.on('enter-full-screen', () => sendFs(true));
+  mainWin.on('leave-full-screen', () => sendFs(false));
+  mainWin.webContents.on('did-finish-load', () => sendFs(mainWin.isFullScreen()));
   mainWin.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:/.test(url)) shell.openExternal(url);
     return { action: 'deny' };
