@@ -1,11 +1,11 @@
 {
-  "version": "1.7.0",
-  "pubDate": "2026-10-13",
-  "notes": "· 重整结果页：工具栏、模式侧栏、文档画布和差异检查器分工更清晰。\n· 筛选、差异清单、文档高亮和差异地图联动，定位修改更方便。\n· 侧栏可收成图标栏，检查器可隐藏；窄窗口自动适配并记住布局。\n· 文件可点击或拖入替换，审阅操作与快捷键更直观。\n· 优化差异配色、文字对比度和界面用词，PDF 报告同步更新。",
+  "version": "1.7.1",
+  "pubDate": "2026-10-15",
+  "notes": "· 修复 macOS 收起侧栏时红绿灯与分隔线重叠的问题。\n· 优化长文件名显示，保留文件名末尾和扩展名，文件类型标签完整可见。\n· 改进窄窗口工具栏布局，差异导航按钮不再被挤压。\n· 优化全屏与侧栏切换时的窗口按钮区布局。",
   "downloads": {
-    "mac-arm64": "https://github.com/evonotevil/DocDiff/releases/download/v1.7.0/DocDiff-1.7.0-mac-arm64.dmg",
-    "mac-x64": "https://github.com/evonotevil/DocDiff/releases/download/v1.7.0/DocDiff-1.7.0-mac-x64.dmg",
-    "win-exe": "https://github.com/evonotevil/DocDiff/releases/download/v1.7.0/DocDiff-Setup-1.7.0.exe",
-    "page": "https://github.com/evonotevil/DocDiff/releases/tag/v1.7.0"
+    "mac-arm64": "https://github.com/evonotevil/DocDiff/releases/download/v1.7.1/DocDiff-1.7.1-mac-arm64.dmg",
+    "mac-x64": "https://github.com/evonotevil/DocDiff/releases/download/v1.7.1/DocDiff-1.7.1-mac-x64.dmg",
+    "win-exe": "https://github.com/evonotevil/DocDiff/releases/download/v1.7.1/DocDiff-Setup-1.7.1.exe",
+    "page": "https://github.com/evonotevil/DocDiff/releases/tag/v1.7.1"
   }
 }
