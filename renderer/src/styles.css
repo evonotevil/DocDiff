@@ -940,3 +940,10 @@ select.sel { height: 36px; border-radius: var(--r-m); border: 2px solid var(--bo
 :lang(en) .sh, :lang(en) .ch { text-transform: uppercase; letter-spacing: .06em; }
 .filechip .badge { font-size: 12px; }
 .shell.narrow .filechip .who { display: none; }
+
+/* 兜底错误页（1.7.2） */
+.app.crash { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-3); padding: var(--space-8); text-align: center; background: var(--surface); }
+.app.crash h1 { font-size: 22px; font-weight: 900; }
+.app.crash p { margin: 0; color: var(--text-2); font-weight: 700; max-width: 420px; }
+.app.crash details { margin-top: var(--space-4); max-width: 640px; color: var(--text-2); font-size: 12px; text-align: left; }
+.app.crash pre { white-space: pre-wrap; user-select: text; font: 11px var(--mono); }

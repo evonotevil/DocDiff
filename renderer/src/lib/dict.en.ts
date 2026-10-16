@@ -428,4 +428,6 @@ export const EN_DICT: Record<string, string> = {
   '命中金额、期限、关键词规则的差异': 'Differences that hit the amount, deadline or keyword rules',
   '{c} · {n} 项未比较': '{c} · {n} not compared',
   '收起 / 展开侧栏': 'Show / hide sidebar', '收起 / 展开检查器': 'Show / hide inspector',
+  // 1.7.2
+  '界面出了点问题': 'Something went wrong', '你的文件、设置和审阅决定都还在。重新载入后再比较一次就好。': 'Your files, settings and review decisions are safe. Reload and compare again.', '重新载入': 'Reload', '技术信息': 'Technical details',
 };

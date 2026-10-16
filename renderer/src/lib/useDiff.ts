@@ -84,7 +84,10 @@ export function useDiff(task: DiffTask | null): DiffState {
   }, [task?.key, state.key, gen]);
 
   return {
-    res: task && state.key === task.key ? state.res : (state.running ? null : state.res),
+    // 只返回“这一个任务”的结果。换了文档后、新结果算出来之前，绝不能把上一次的结果交出去：
+    // 旧结果里的段落下标对应的是旧文档，拿去画新文档会越界（1.7.2 白屏的原因）。
+    // 任务为空（例如切到别的模式）时保留上一次结果，切回来是瞬时的。
+    res: task ? (state.key === task.key ? state.res : null) : (state.running ? null : state.res),
     running: state.running,
     heavy,
     error: state.error,
