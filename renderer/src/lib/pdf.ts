@@ -288,24 +288,24 @@ function pdfDate(s?: string): string {
 // ---------- 页面渲染（图像 / OCR 模式） ----------
 export interface PageImage { width: number; height: number; canvas: HTMLCanvasElement }
 
-export async function renderPdfPages(data: Uint8Array, opts: { scale: number; password?: string; onProgress?: (i: number, n: number) => void; maxPages?: number }): Promise<PageImage[]> {
-  const pdf = await openPdf(data, opts.password);
-  const n = Math.min(pdf.numPages, opts.maxPages || 500);
-  const out: PageImage[] = [];
-  for (let i = 1; i <= n; i++) {
-    const page = await pdf.getPage(i);
-    const vp = page.getViewport({ scale: opts.scale });
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.ceil(vp.width);
-    canvas.height = Math.ceil(vp.height);
-    const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    await page.render({ canvasContext: ctx, viewport: vp }).promise;
-    out.push({ width: canvas.width, height: canvas.height, canvas });
-    page.cleanup();
-    opts.onProgress?.(i, n);
-  }
-  await pdf.destroy();
-  return out;
+/** 渲染一页（从 1 开始）。调用方用完要 releasePage，否则每页一张几 MB 的画布会一直占着内存。 */
+export async function renderPdfPage(pdf: any, i: number, scale: number): Promise<PageImage> {
+  const page = await pdf.getPage(i);
+  const vp = page.getViewport({ scale });
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.ceil(vp.width);
+  canvas.height = Math.ceil(vp.height);
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  await page.render({ canvasContext: ctx, viewport: vp }).promise;
+  page.cleanup();
+  return { width: canvas.width, height: canvas.height, canvas };
+}
+
+/** 释放画布占用的显存 / 内存 */
+export function releasePage(p?: PageImage) {
+  if (!p) return;
+  p.canvas.width = 0;
+  p.canvas.height = 0;
 }

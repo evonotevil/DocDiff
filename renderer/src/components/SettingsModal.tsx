@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { t, Lang } from '../lib/i18n';
 import { isMac, kbd } from '../lib/platform';
-import { initialsOf } from '../lib/review';
+import { initialsOf, refreshReviewIndex } from '../lib/review';
+import { fmtBytes, fmtDate } from '../lib/model';
 import { DEFAULT_KEYWORDS } from '../lib/insight';
 import { Modal } from './Modal';
 import { Switch, Opt, Seg, Kbd } from './ui';
@@ -107,6 +108,49 @@ function KeywordEditor({ value, onChange }: { value: string[]; onChange: (v: str
   );
 }
 
+
+/** 审阅记录的占用与手动清理（1.7.3）：不再自动删除，由用户决定 */
+const DAY = 86400000;
+function ReviewStorage() {
+  const [u, setU] = useState<{ count: number; bytes: number; oldest: number } | null>(null);
+  const [ask, setAsk] = useState<null | 'old' | 'all'>(null);
+  const [msg, setMsg] = useState('');
+  const load = () => api.reviewUsage?.().then(setU).catch(() => setU(null));
+  useEffect(() => { load(); }, []);
+  if (!api.reviewUsage) return null;
+  const ix: Record<string, { updated: number }> = (() => { try { return api.reviewIndex() || {}; } catch { return {}; } })();
+  const cutoff = Date.now() - 90 * DAY;
+  const oldN = Object.values(ix).filter((x) => (x.updated || 0) < cutoff).length;
+  const run = async (kind: 'old' | 'all') => {
+    const r = await api.reviewClean(kind === 'all' ? { all: true } : { olderThan: cutoff });
+    setAsk(null);
+    refreshReviewIndex();
+    if (r?.ok) { setU(r.usage); setMsg(t('已删除 {n} 组审阅记录', { n: r.n })); } else setMsg(t('没能删除：{e}', { e: r?.error || '' }));
+  };
+  return (
+    <div className="field review-storage">
+      <label>{t('审阅记录')}</label>
+      <div className="rs-usage">
+        {u ? (u.count ? t('本机保存了 {n} 组比较的审阅结论，共 {s}；最早一组在 {d}。', { n: u.count, s: fmtBytes(u.bytes), d: fmtDate(u.oldest) }) : t('本机还没有保存审阅结论。')) : t('正在读取…')}
+      </div>
+      <small>{t('结论按两份文件的内容保存在本机应用数据目录，不会自动删除。')}</small>
+      {u && u.count > 0 && (ask ? (
+        <div className="rs-ask" role="alert">
+          <span>{ask === 'all' ? t('删除全部 {n} 组审阅记录？删除后不能恢复。', { n: u.count }) : t('删除 90 天前的 {n} 组审阅记录？删除后不能恢复。', { n: oldN })}</span>
+          <button className="btn sm plain" onClick={() => setAsk(null)}>{t('取消')}</button>
+          <button className="btn sm red" onClick={() => run(ask)}>{t('删除')}</button>
+        </div>
+      ) : (
+        <div className="rs-acts">
+          <button className="btn sm" disabled={!oldN} onClick={() => { setMsg(''); setAsk('old'); }}>{t('清理 90 天前的记录（{n} 组）', { n: oldN })}</button>
+          <button className="btn sm danger-outline" onClick={() => { setMsg(''); setAsk('all'); }}>{t('全部清空…')}</button>
+        </div>
+      ))}
+      {msg && <small role="status">{msg}</small>}
+    </div>
+  );
+}
+
 export function SettingsModal({ v, set, onClose, upd, initialTab = 'general' }: {
   v: SettingsValues; set: <K extends keyof SettingsValues>(k: K, val: SettingsValues[K]) => void; onClose: () => void;
   upd: Omit<React.ComponentProps<typeof UpdateSection>, 'auto' | 'setAuto'>; initialTab?: Tab;
@@ -149,6 +193,7 @@ export function SettingsModal({ v, set, onClose, upd, initialTab = 'general' }: 
                 <small>{t('Word 里的修订记的是“谁改了文字”，也就是对方。导出时还可以针对每份文件单独修改。')}</small>
               </div>
               <Opt label={t('接受的修订也加批注')} hint={t('关掉后，只有拒绝和待议带批注')}><Switch on={v.commentAccepted} onChange={(x) => set('commentAccepted', x)} label={t('接受的修订也加批注')} /></Opt>
+              <ReviewStorage />
             </>
           )}
           {tab === 'risk' && (

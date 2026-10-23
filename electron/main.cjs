@@ -45,12 +45,17 @@ const PLATFORM = {
       : {},
 };
 
-// ---------- 持久化：窗口位置 / 最近比较 ----------
-const store = {
-  file: (n) => path.join(app.getPath('userData'), n),
-  read(n, def) { try { return JSON.parse(fs.readFileSync(this.file(n), 'utf8')); } catch { return def; } },
-  write(n, v) { try { fs.writeFileSync(this.file(n), JSON.stringify(v, null, 2)); } catch {} },
-};
+// ---------- 持久化：窗口位置 / 最近比较 / 审阅记录 / 设置（1.7.3 起原子写入，失败会告诉界面） ----------
+const { createStore, createReviewStore } = require('./persist.cjs');
+const store = createStore(() => app.getPath('userData'));
+const reviews = createReviewStore(store);
+/** 写失败时通知界面（非阻塞警告）；成功时也通知，界面据此收起警告 */
+function reportPersist(kind, err) {
+  try { if (mainWin && !mainWin.isDestroyed()) mainWin.webContents.send('persist-status', { kind, ok: !err, error: err ? String(err.message || err) : '' }); } catch {}
+}
+function safeWrite(kind, n, v) {
+  try { store.write(n, v); reportPersist(kind, null); return true; } catch (e) { reportPersist(kind, e); return false; }
+}
 function restoreBounds() {
   const b = store.read('window.json', null);
   if (!b) return { width: 1440, height: 920 };
@@ -82,7 +87,7 @@ function createWindow() {
   });
   mainWin.loadURL('app://local/index.html');
   mainWin.once('ready-to-show', () => { if (bounds.maximized) mainWin.maximize(); mainWin.show(); });
-  const saveBounds = () => { if (!mainWin || mainWin.isDestroyed()) return; store.write('window.json', { ...mainWin.getNormalBounds(), maximized: mainWin.isMaximized() }); };
+  const saveBounds = () => { if (!mainWin || mainWin.isDestroyed()) return; store.tryWrite('window.json', { ...mainWin.getNormalBounds(), maximized: mainWin.isMaximized() }); };
   mainWin.on('close', saveBounds);
   mainWin.on('closed', () => { mainWin = null; });
   // 全屏时 macOS 红绿灯隐藏，工具栏不再给它留位置（1.7.1）
@@ -261,12 +266,35 @@ ipcMain.handle('recent-add', (_e, entry) => {
   let list = store.read('recent.json', []);
   const key = (r) => `${r.a.path}|${r.b.path}`;
   list = [{ ...entry, time: Date.now() }, ...list.filter((r) => key(r) !== key(entry))].slice(0, 12);
-  store.write('recent.json', list);
+  safeWrite('recent', 'recent.json', list);
   for (const f of [entry.a, entry.b]) if (f.path && fs.existsSync(f.path)) app.addRecentDocument(f.path);
   return list;
 });
-ipcMain.handle('recent-clear', () => { store.write('recent.json', []); try { app.clearRecentDocuments(); } catch {} return []; });
-ipcMain.handle('recent-remove', (_e, idx) => { const l = store.read('recent.json', []); l.splice(idx, 1); store.write('recent.json', l); return l; });
+ipcMain.handle('recent-clear', () => { safeWrite('recent', 'recent.json', []); try { app.clearRecentDocuments(); } catch {} return []; });
+ipcMain.handle('recent-remove', (_e, idx) => { const l = store.read('recent.json', []); l.splice(idx, 1); safeWrite('recent', 'recent.json', l); return l; });
+
+// 审阅记录（1.7.3）：以前存在渲染进程的 localStorage 里，超过 120 组静默删除最旧的，写失败也不吭声
+ipcMain.on('review-get', (e, pk) => { try { e.returnValue = reviews.get(pk); } catch { e.returnValue = null; } });
+ipcMain.on('review-index', (e) => { try { e.returnValue = reviews.index(); } catch { e.returnValue = {}; } });
+ipcMain.handle('review-save', (_e, pk, data) => {
+  try { reviews.save(pk, data); return { ok: true }; } catch (err) { return { ok: false, error: String(err.message || err) }; }
+});
+ipcMain.on('review-import', (e, all) => {
+  try { e.returnValue = { ok: true, n: reviews.importAll(all) }; } catch (err) { e.returnValue = { ok: false, error: String(err.message || err) }; }
+});
+ipcMain.handle('review-usage', () => reviews.usage());
+ipcMain.handle('review-clean', (_e, opts) => {
+  try { const n = reviews.clean(opts || {}); return { ok: true, n, usage: reviews.usage() }; } catch (err) { return { ok: false, error: String(err.message || err) }; }
+});
+
+// 设置（偏好、主题、语言）：同步读、异步写，写失败回报界面
+ipcMain.on('settings-get', (e) => { e.returnValue = store.read('settings.json', null); });
+let settingsCache = null;
+ipcMain.handle('settings-set', (_e, key, value) => {
+  if (!settingsCache) settingsCache = store.read('settings.json', {}) || {};
+  settingsCache[key] = value;
+  try { store.write('settings.json', settingsCache); return { ok: true }; } catch (err) { return { ok: false, error: String(err.message || err) }; }
+});
 ipcMain.handle('exists', (_e, p) => !!p && fs.existsSync(p));
 
 // 监测文件变化（在 Word 里保存后提示重新比较）

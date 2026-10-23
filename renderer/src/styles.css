@@ -392,8 +392,8 @@ select.sel { height: 36px; border-radius: var(--r-m); border: 2px solid var(--bo
 .recent-item .time { font-size: 12px; font-weight: 800; color: var(--text-3); display: flex; gap: 10px; align-items: center; }
 .mini-prog { flex: 0 1 110px; height: 10px; border-radius: 999px; background: var(--surface-3); overflow: hidden; }
 .mini-prog i { display: block; height: 100%; border-radius: 999px; background: var(--brand); }
-.recent-item .x { position: absolute; top: 8px; right: 8px; opacity: 0; }
-.recent-item:hover .x { opacity: 1; }
+.recent-item .x { position: absolute; top: 8px; right: 8px; color: var(--text-3); }
+.recent-item:hover .x, .recent-item .x:focus-visible { color: var(--text); }
 
 /* ---------- 标签（1.6.2）：仍是一个组件；胶囊形、800 字重，色调换成多邻国色板 ---------- */
 .tag { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 10px; border-radius: 999px; font-size: var(--fs-12); font-weight: 900; line-height: 1; white-space: nowrap; flex: none; background: var(--surface-2); color: var(--text-2); font-variant-numeric: tabular-nums; }
@@ -947,3 +947,37 @@ select.sel { height: 36px; border-radius: var(--r-m); border: 2px solid var(--bo
 .app.crash p { margin: 0; color: var(--text-2); font-weight: 700; max-width: 420px; }
 .app.crash details { margin-top: var(--space-4); max-width: 640px; color: var(--text-2); font-size: 12px; text-align: left; }
 .app.crash pre { white-space: pre-wrap; user-select: text; font: 11px var(--mono); }
+
+/* ---------- 1.7.3：大文件页码范围、范围说明 ---------- */
+.range-gate .gate-actions { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-top: 4px; }
+.range-gate .gate-or { font-size: 12px; font-weight: 800; color: var(--text-3); }
+.range-gate .gate-range { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center; color: var(--text); }
+.range-gate .gate-range label { font-weight: 700; }
+.range-gate small { font-size: 12px; color: var(--text-2); }
+.inp { border-radius: var(--r-m); border: 2px solid var(--border); background: var(--surface-2); color: var(--text); height: 36px; padding: 0 10px; font: 700 14px var(--round); outline: none; user-select: text; }
+.inp:focus { border-color: var(--accent); }
+.inp.num { width: 84px; font-variant-numeric: tabular-nums; text-align: center; }
+.range-line { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 8px 16px; font-size: 13px; font-weight: 800; color: var(--text-2); }
+.range-line.partial { color: var(--text); }
+.range-line .rl-warn { color: var(--bee-lip); font-size: 14px; }
+
+/* ---------- 1.7.3：批量操作确认、可撤销的提示 ---------- */
+.toast.undo { display: flex; align-items: center; gap: 12px; padding: 8px 8px 8px 20px; }
+.toast .toast-btn { border: 0; background: transparent; color: var(--feather); font: 900 14px var(--round); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; padding: 6px 8px; border-radius: var(--r-m); }
+.toast .toast-btn:hover { background: #ffffff1f; }
+.toast .toast-btn .kbd { color: inherit; border-color: currentColor; background: transparent; height: 18px; min-width: 18px; font-size: 10px; border-bottom-width: 2px; }
+.toast .toast-x { border: 0; background: transparent; color: inherit; opacity: .7; width: 28px; height: 28px; border-radius: var(--r-m); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+.toast .toast-x:hover { opacity: 1; background: #ffffff1f; }
+.toast .toast-x svg { width: 16px; height: 16px; }
+.bulk-lines { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-weight: 700; }
+.bulk-note { margin: 16px 0 0; font-size: 13px; font-weight: 700; color: var(--text-2); }
+:root[data-theme='dark'] .toast .toast-btn { color: var(--l-feather-ink); }
+:root[data-theme='dark'] .toast .toast-btn:hover, :root[data-theme='dark'] .toast .toast-x:hover { background: #0000001a; }
+
+/* ---------- 1.7.3：保存失败警告、审阅记录清理 ---------- */
+.persist-err { display: block; margin-top: 4px; font-size: 12px; color: var(--text-3); font-weight: 700; word-break: break-all; }
+.rb-unsaved { margin-left: 8px; padding: 1px 8px; border-radius: var(--r-pill, 999px); background: var(--cardinal-tint); color: var(--cardinal-ink); font-size: 11px; font-weight: 900; }
+.review-storage { margin-top: 16px; }
+.review-storage .rs-usage { font-size: 14px; font-weight: 700; color: var(--text); }
+.review-storage .rs-acts, .review-storage .rs-ask { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 6px; }
+.review-storage .rs-ask span { font-size: 13px; font-weight: 800; color: var(--danger-ink); }

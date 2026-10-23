@@ -1,4 +1,5 @@
 import { EN_DICT } from './dict.en';
+import { getSetting, setSetting } from './persist';
 // 中英文切换：以中文原文作为 key，英文在下面的词典里。t('…{n}…', { n }) 支持占位符。
 export type Lang = 'zh' | 'en';
 
@@ -8,13 +9,13 @@ export const isEn = () => LANG === 'en';
 
 export function setLang(l: Lang) {
   LANG = l;
-  try { localStorage.setItem('lang', l); } catch {}
+  setSetting('lang', l);
   document.documentElement.lang = l === 'en' ? 'en' : 'zh-CN';
   document.documentElement.dataset.lang = l;
 }
 export function initLang(): Lang {
   let l: Lang = /^zh\b/i.test(navigator.language) ? 'zh' : 'en';
-  try { const s = localStorage.getItem('lang'); if (s === 'zh' || s === 'en') l = s; } catch {}
+  const s = getSetting('lang'); if (s === 'zh' || s === 'en') l = s;
   setLang(l);
   return l;
 }

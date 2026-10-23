@@ -5,12 +5,14 @@ import { loadDoc } from './lib/load';
 import { NeedPassword } from './lib/pdf';
 import { linesToBlocks, DiffOptions, DiffResult, Change, ChangeKind } from './lib/engine';
 import { buildDocx } from './lib/exportDocx';
-import { getPages } from './lib/pages';
+import { forEachPage, getPageCount, PageRange, BIG_PAGES, fullRange, rangeKey } from './lib/pages';
+import { PageRangeGate, RangeLine } from './components/PageRangeGate';
 import { kbd, modPressed, isMac } from './lib/platform';
 import { t, setLang, initLang, Lang } from './lib/i18n';
 import { clauseMap, detectRisks, DEFAULT_KEYWORDS, Risk } from './lib/insight';
 import { DecMap, Dec, Verdict, pairKey, loadDecisions, saveDecisions, reviewProgress, initialsOf } from './lib/review';
 import { scopeInfo } from './lib/scope';
+import { getSetting, setSetting as saveSetting, usePersistStatus } from './lib/persist';
 import { summaryMarkdown, reportHtml } from './lib/report';
 import { ChangeList, KIND_LABEL, short } from './components/ChangeList';
 import { ChangeMap } from './components/ChangeMap';
@@ -71,7 +73,7 @@ const DEFAULT_PREFS: Prefs = {
   paperFollowTheme: false, celebrate: false,
 };
 function loadPrefs(): Prefs {
-  try { return { ...DEFAULT_PREFS, ...JSON.parse(localStorage.getItem('prefs-v2') || '{}') }; } catch { return DEFAULT_PREFS; }
+  try { const v = getSetting('prefs-v2'); return { ...DEFAULT_PREFS, ...(typeof v === 'string' ? JSON.parse(v) : v || {}) }; } catch { return DEFAULT_PREFS; }
 }
 
 // ---------- 音效（很轻的提示音，可在设置里关闭） ----------
@@ -183,7 +185,7 @@ function splitName(name: string): [string, string] {
   const ext = dot > 0 && name.length - dot <= 6 ? name.slice(dot) : '';
   const stem = ext ? name.slice(0, dot) : name;
   const chars = Array.from(stem);
-  if (chars.length <= 10) return [stem, ext];
+  if (chars.length <= 6) return ['', stem + ext]; // 1.7.3：短文件名整个放在结尾段，不会被截成只剩扩展名
   return [chars.slice(0, -6).join(''), chars.slice(-6).join('') + ext];
 }
 
@@ -264,7 +266,7 @@ export default function App() {
   const [compared, setCompared] = useState(false);
   const [tab, setTab] = useState(0);
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    try { const t = localStorage.getItem('theme'); if (t === 'light' || t === 'dark') return t; } catch {}
+    const t = getSetting('theme'); if (t === 'light' || t === 'dark') return t;
     return matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   });
   const [toast, setToast] = useState<string | null>(null);
@@ -278,8 +280,14 @@ export default function App() {
   const [decisions, setDecisions] = useState<DecMap>({});
   const [feedback, setFeedback] = useState<Verdict | null>(null);
   const [doneOpen, setDoneOpen] = useState(false);
+  // 批量操作先确认，做完可撤销（1.7.3）
+  const [bulkAsk, setBulkAsk] = useState<null | 'a' | 'r' | 'reset'>(null);
+  const [undoToast, setUndoToast] = useState<null | { msg: string; undo: () => void }>(null);
+  const undoTimer = useRef<any>(0);
   const [dismissDegraded, setDismissDegraded] = useState(false);
   const [dismissCross, setDismissCross] = useState('');
+  const persist = usePersistStatus();
+  const [hideSetWarn, setHideSetWarn] = useState('');
   const [lostBanner, setLostBanner] = useState<{ n: number; restore: () => void } | null>(null);
   const [upd, setUpd] = useState<UpdInfo | null>(null);
   const [checkingUpd, setCheckingUpd] = useState(false);
@@ -297,6 +305,9 @@ export default function App() {
   const [onlyDiffPages, setOnlyDiffPages] = useState(false);
   const [ocr, setOcr] = useState<OcrState>({ status: 'idle' });
   const ocrRun = useRef(0);
+  // 图像 / OCR 的页码范围（1.7.3）：按“两份文件”记住用户的选择；超过 300 页时先确认
+  const [pageRanges, setPageRanges] = useState<Record<string, PageRange>>({});
+  const [pageCounts, setPageCounts] = useState<{ key: string; a: number; b: number } | null>(null);
   const decideOrder = useRef<number[]>([]);
   const imgScroll = useRef<HTMLDivElement>(null);
   const redlineRef = useRef<HTMLDivElement>(null);
@@ -307,9 +318,9 @@ export default function App() {
   const toggleNav = () => (narrow ? setNavWide((v) => !v) : setPrefs((p) => ({ ...p, navOpen: !p.navOpen })));
   const toggleAside = () => (narrow ? setDrawer((v) => !v) : setPrefs((p) => ({ ...p, asideOpen: !p.asideOpen })));
 
-  useEffect(() => { document.documentElement.dataset.theme = theme; try { localStorage.setItem('theme', theme); } catch {} api.setTheme?.(theme); }, [theme]);
+  useEffect(() => { document.documentElement.dataset.theme = theme; saveSetting('theme', theme); api.setTheme?.(theme); }, [theme]);
   useEffect(() => { document.documentElement.dataset.paper = prefs.paperFollowTheme ? 'theme' : 'light'; }, [prefs.paperFollowTheme]);
-  useEffect(() => { try { localStorage.setItem('prefs-v2', JSON.stringify(prefs)); } catch {} }, [prefs]);
+  useEffect(() => { saveSetting('prefs-v2', prefs); }, [prefs]);
   useEffect(() => { api.setLang?.(lang); }, []);
   useEffect(() => { api.recentGet?.().then(setRecent); }, [compared]);
   const toastTimer = useRef<any>(0);
@@ -432,7 +443,27 @@ export default function App() {
   const plain = useDiff(plainTask);
   const plainRes = plain.res;
 
-  const ocrKey = A && B ? `${A.sha256}|${B.sha256}|${prefs.ocrLang}` : '';
+  // ---------- 页面模式的页数与范围 ----------
+  const pairSha = A && B ? `${A.sha256 || A.file.path}|${B.sha256 || B.file.path}` : '';
+  const pageTab = tab === 3 || tab === 4;
+  useEffect(() => {
+    if (!compared || !pageTab || !A || !B || pageCounts?.key === pairSha) return;
+    let alive = true;
+    Promise.all([getPageCount(A), getPageCount(B)])
+      .then(([a, b]) => { if (alive) setPageCounts({ key: pairSha, a, b }); })
+      .catch(() => { if (alive) setPageCounts({ key: pairSha, a: 0, b: 0 }); });
+    return () => { alive = false; };
+  }, [compared, pageTab, pairSha]);
+  const counts = pageCounts?.key === pairSha ? pageCounts : null;
+  const totalPages = counts ? Math.max(counts.a, counts.b) : 0;
+  const chosenRange = pageRanges[pairSha];
+  const pageRange: PageRange | null = !counts ? null : chosenRange || (totalPages > BIG_PAGES ? null : fullRange(totalPages));
+  const needGate = !!counts && !chosenRange && totalPages > BIG_PAGES;
+  const setPageRange = (r: PageRange) => setPageRanges((m) => ({ ...m, [pairSha]: r }));
+  const changePageRange = () => setPageRanges((m) => { const n = { ...m }; delete n[pairSha]; return n; });
+  const rangeHead = pageRange && counts ? <RangeLine range={pageRange} total={totalPages} onChange={totalPages > BIG_PAGES ? changePageRange : undefined} /> : null;
+
+  const ocrKey = A && B && pageRange ? `${A.sha256}|${B.sha256}|${prefs.ocrLang}|${rangeKey(pageRange)}` : '';
   const ocrBlocks = useMemo(() => (ocr.status === 'done' && ocr.key === ocrKey ? [linesToBlocks(ocr.a!), linesToBlocks(ocr.b!)] : null), [ocr, ocrKey]);
   const ocrTask = useMemo(() => (ocrBlocks && tab === 4
     ? { key: `ocr|${ocrKey}|${optKey}`, blocksA: ocrBlocks[0], blocksB: ocrBlocks[1], opts: { ...opts, formatting: false, keepEmpty: true } }
@@ -440,7 +471,7 @@ export default function App() {
   const ocrDiff = useDiff(ocrTask);
   const ocrRes = ocrDiff.res;
   const diffJob = tab === 1 ? plain : tab === 4 ? ocrDiff : rich;
-  const imgState = useImagePages(tab === 3 && compared && A && B ? A : (null as any), tab === 3 && compared && A && B ? B : (null as any), prefs.threshold);
+  const imgState = useImagePages(tab === 3 && compared && A && B ? A : (null as any), tab === 3 && compared && A && B ? B : (null as any), prefs.threshold, tab === 3 ? pageRange : null);
 
   // ---------- 解读：条款、风险、比较范围 ----------
   const clauses = useMemo(() => (richRes && RA && RB ? clauseMap(richRes, RA.blocks, RB.blocks) : new Map<number, string | null>()), [richRes, RA, RB]);
@@ -561,6 +592,37 @@ export default function App() {
     if (!onlyPending && changes.length) { setDoneOpen(true); if (prefs.sound) chime('done'); }
   };
 
+  /** 批量决定的影响：总数、会被改掉的已有结论数、会被清空的结论数 */
+  const bulkImpact = (kind: 'a' | 'r' | 'reset') => {
+    const withV = changes.filter((c) => decisions[c.id]?.v);
+    if (kind === 'reset') return { total: changes.length, overwrite: 0, clear: withV.length, same: 0 };
+    const overwrite = withV.filter((c) => decisions[c.id]!.v !== kind).length;
+    const same = withV.length - overwrite;
+    return { total: changes.length, overwrite, clear: 0, same };
+  };
+  const runBulk = (kind: 'a' | 'r' | 'reset') => {
+    const snap = { decisions, order: decideOrder.current.slice(), sel: selCid };
+    const imp = bulkImpact(kind);
+    decideAll(kind === 'reset' ? null : kind);
+    setBulkAsk(null);
+    clearTimeout(undoTimer.current);
+    const msg = kind === 'reset' ? t('已清空 {n} 个结论', { n: imp.clear })
+      : t(kind === 'a' ? '已全部接受（{n} 处）' : '已全部拒绝（{n} 处）', { n: imp.total });
+    setUndoToast({
+      msg,
+      undo: () => {
+        clearTimeout(undoTimer.current);
+        decideOrder.current = snap.order;
+        setDecisions(snap.decisions);
+        setSelCid(snap.sel);
+        setDoneOpen(false);
+        setUndoToast(null);
+        flash(t('已撤销，结论恢复到操作前'));
+      },
+    });
+    undoTimer.current = setTimeout(() => setUndoToast(null), 10000);
+  };
+
   // ---------- 导出 ----------
   const baseName = B ? B.file.name.replace(/\.[^.]+$/, '') : 'document';
   const defaultAuthor = () => prefs.authorName.trim() || B?.meta['最后修改者'] || B?.meta['作者'] || t('修改方');
@@ -598,9 +660,10 @@ export default function App() {
   };
 
   // ---------- OCR ----------
-  const runOcr = async () => {
-    if (!A || !B) return;
-    const key = ocrKey;
+  const runOcr = async (r?: PageRange) => {
+    const range = r || pageRange;
+    if (!A || !B || !range) return;
+    const key = `${A.sha256}|${B.sha256}|${prefs.ocrLang}|${rangeKey(range)}`;
     const run = ++ocrRun.current;
     const alive = () => { if (ocrRun.current !== run) throw new Cancelled(); };
     const langs = prefs.ocrLang.split('+');
@@ -609,28 +672,39 @@ export default function App() {
     try {
       const texts: string[] = [];
       const confs: number[][] = [], lows: Map<number, Set<number>>[] = [];
+      // 逐页渲染、每 6 页送去识别一次：内存里只放这一小批图片（1.7.2 以前一次渲染全部页，只好截到 300 页）
+      const BATCH = 6;
       for (const [si, d] of [[0, A], [1, B]] as [number, DocModel][]) {
-        const pages = await getPages(d, 2, (i, n) => { if (ocrRun.current === run) setOcr((o) => ({ ...o, msg: t('正在准备{s}的第 {i}/{n} 页', { s: sideLabel(si as Side), i, n }) })); });
+        const total = Math.max(0, Math.min(range.to, await getPageCount(d)) - range.from + 1);
         alive();
-        const imgs: Uint8Array[] = [];
-        for (const p of pages) {
-          const blob: Blob = await new Promise((r) => p.canvas.toBlob((b) => r(b!), 'image/png'));
-          imgs.push(new Uint8Array(await blob.arrayBuffer()));
-          alive();
-        }
+        const pagesOut: { page: number; text: string; conf: number; words: [string, number][] }[] = [];
+        let base = 0;
         off?.();
-        off = api.onOcrProgress(({ page, progress, run: r }: any) => {
-          if (r !== undefined && r !== run) return;
-          const total = pages.length;
-          const pct = ((si * total + page + progress) / (2 * total)) * 100;
+        off = api.onOcrProgress(({ page, progress, run: rr }: any) => {
+          if (rr !== undefined && rr !== run) return;
+          const done = base + page + progress;
+          const pct = ((si * total + done) / (2 * Math.max(1, total))) * 100;
           api.setProgress?.(pct / 100);
-          setOcr((o) => (o.status === 'running' && ocrRun.current === run ? { ...o, pct, msg: t('正在识别{s}：第 {i}/{n} 页', { s: sideLabel(si as Side), i: page + 1, n: total }) } : o));
+          setOcr((o) => (o.status === 'running' && ocrRun.current === run ? { ...o, pct, msg: t('正在识别{s}：第 {i}/{n} 页', { s: sideLabel(si as Side), i: Math.min(total, base + page + 1), n: total }) } : o));
         });
-        setOcr((o) => ({ ...o, msg: t('正在加载识别模型…') }));
-        const res: any[] = await api.ocr({ images: imgs, langs, run });
+        let batch: { page: number; img: Uint8Array }[] = [];
+        const flush = async () => {
+          if (!batch.length) return;
+          const res: any[] = await api.ocr({ images: batch.map((x) => x.img), langs, run });
+          alive();
+          res.forEach((x, k) => pagesOut.push({ page: batch[k].page, ...(typeof x === 'string' ? { text: x, conf: -1, words: [] } : x) }));
+          base += batch.length;
+          batch = [];
+        };
+        await forEachPage(d, 2, range, async (p, i) => {
+          alive();
+          const blob: Blob = await new Promise((rs) => p.canvas.toBlob((bb) => rs(bb!), 'image/png'));
+          batch.push({ page: i, img: new Uint8Array(await blob.arrayBuffer()) });
+          if (batch.length >= BATCH) await flush();
+        }, () => ocrRun.current === run);
         alive();
-        const pagesOut: { text: string; conf: number; words: [string, number][] }[] = res.map((x) => (typeof x === 'string' ? { text: x, conf: -1, words: [] } : x));
-        const full = pagesOut.map((x, i) => (pagesOut.length > 1 ? `—— ${t('第 {n} 页', { n: i + 1 })} ——\n` : '') + cleanOcr(x.text)).join('\n\n');
+        await flush();
+        const full = pagesOut.map((x) => (total > 1 || range.from > 1 ? `—— ${t('第 {n} 页', { n: x.page })} ——\n` : '') + cleanOcr(x.text)).join('\n\n');
         texts.push(full);
         confs.push(pagesOut.map((x) => x.conf));
         lows.push(lowPositions(full, pagesOut.flatMap((x) => x.words || [])));
@@ -654,7 +728,7 @@ export default function App() {
   const clearAll = () => { setDocs([null, null]); setCompared(false); setErrs([null, null]); ocrRun.current++; setOcr({ status: 'idle' }); setChangedSides([]); setLostBanner(null); lastLoaded.current = null; };
   const swap = () => { setDocs(([a, b]) => [b, a]); ocrRun.current++; setOcr({ status: 'idle' }); };
   const actions = useRef<any>({});
-  actions.current = { open, swap, clearAll, go, decide, setTab, startCompare, toggleNav, toggleAside, compared, tab, selCid, modal: !!(pwd || pasteSide !== null || showSettings || exportOpen || pop) };
+  actions.current = { open, swap, clearAll, go, decide, setTab, startCompare, toggleNav, toggleAside, compared, tab, selCid, undoBulk: undoToast?.undo, modal: !!(pwd || pasteSide !== null || showSettings || exportOpen || pop || bulkAsk) };
   useEffect(() => api.onMenu((cmd: string, arg?: any) => {
     const a = actions.current;
     if (cmd === 'open-left') a.open(0);
@@ -681,7 +755,7 @@ export default function App() {
         if (k === 'a' || k === 'y') a.decide(a.selCid, 'a');
         else if (k === 'r') a.decide(a.selCid, 'r');
         else if (k === 'h') a.decide(a.selCid, 'h');
-        else if (k === 'u') a.decide(a.selCid, null);
+        else if (k === 'u') { if (a.undoBulk) a.undoBulk(); else a.decide(a.selCid, null); }
         else if (k === 'n') { e.preventDefault(); noteRef.current?.focus(); }
         else if (e.key === 'ArrowRight') a.go(1);
         else if (e.key === 'ArrowLeft') a.go(-1);
@@ -718,7 +792,35 @@ export default function App() {
           hasSections={richRes.rows.some((r) => r.sec && r.sec !== 'body')}
           onExport={doExport} onHoldPending={() => decideAll('h', true)} onClose={() => setExportOpen(false)} busy={exportBusy} />
       )}
-      {toast && <div className="toast" role="status" aria-live="polite">{toast}</div>}
+      {toast && !undoToast && <div className="toast" role="status" aria-live="polite">{toast}</div>}
+      {undoToast && (
+        <div className="toast undo" role="status" aria-live="polite">
+          <span>{undoToast.msg}</span>
+          <button type="button" className="toast-btn" onClick={undoToast.undo}>{t('撤销')} <Kbd>U</Kbd></button>
+          <button type="button" className="toast-x" aria-label={t('关闭')} onClick={() => { clearTimeout(undoTimer.current); setUndoToast(null); }}><I.IconX /></button>
+        </div>
+      )}
+      {bulkAsk && (() => {
+        const imp = bulkImpact(bulkAsk);
+        const title = bulkAsk === 'a' ? t('全部接受 {n} 处修订？', { n: imp.total }) : bulkAsk === 'r' ? t('全部拒绝 {n} 处修订？', { n: imp.total }) : t('清空所有审阅结论？');
+        const lines = bulkAsk === 'reset'
+          ? [t('{n} 个结论会被清空，回到“未决定”。', { n: imp.clear }), t('备注会保留。')]
+          : [
+              imp.overwrite ? t('其中 {n} 处已有其他结论，会被覆盖。', { n: imp.overwrite }) : null,
+              imp.same ? t('{n} 处本来就是这个结论，不变。', { n: imp.same }) : null,
+              imp.total - imp.overwrite - imp.same ? t('{n} 处还没决定，会一起设好。', { n: imp.total - imp.overwrite - imp.same }) : null,
+              t('结论署名为 {r}，时间为现在。', { r: reviewer }),
+            ].filter(Boolean) as string[];
+        return (
+          <Modal title={title} onClose={() => setBulkAsk(null)} className="bulk-ask"
+            footer={<><button className="btn plain" onClick={() => setBulkAsk(null)}>{t('取消')}</button>
+              <button className={`btn ${bulkAsk === 'a' ? 'primary' : bulkAsk === 'r' ? 'red' : 'danger'}`} autoFocus onClick={() => runBulk(bulkAsk)}>
+                {bulkAsk === 'a' ? t('全部接受') : bulkAsk === 'r' ? t('全部拒绝') : t('清空结论')}</button></>}>
+            <ul className="bulk-lines">{lines.map((l, i) => <li key={i}>{l}</li>)}</ul>
+            <p className="bulk-note">{t('做完 10 秒内可以撤销，回到操作前的全部结论。')}</p>
+          </Modal>
+        );
+      })()}
     </>
   );
 
@@ -827,7 +929,7 @@ export default function App() {
       <option value="chi_sim+eng">{t('中文 + 英文')}</option><option value="chi_sim">{t('仅中文')}</option><option value="eng">{t('仅英文')}</option>
     </select>
     {ocr.status === 'running' ? <button className="btn sm" onClick={cancelOcr}>{t('取消识别')}</button>
-      : ocrRes ? <button className="btn sm" onClick={runOcr}>{t('重新识别')}</button> : null}
+      : ocrRes ? <button className="btn sm" onClick={() => runOcr()}>{t('重新识别')}</button> : null}
   </>);
   const canvasTitle = t(tab === 2 ? '修改后文档' : '原始文档 · 修改后文档');
 
@@ -865,9 +967,11 @@ export default function App() {
   else if (tab === 1 && plainRes && plainBlocks) body = <PlainView A={plainBlocks[0]} B={plainBlocks[1]} res={plainRes} selCid={selCid} onSel={setSelCid} layout={prefs.layout} wrap={prefs.wrap} hideUnchanged={prefs.hidePlain} />;
   else if (tab === 2 && richRes && RA && RB) body = changes.length ? <RedlineView A={RA} B={RB} res={richRes} selCid={selCid} onSel={setSelCid} decisions={decisions} innerRef={redlineRef} />
     : <div className="empty-state"><Mascot mood="cheer" size={96} /><h2>{t('没有需要审阅的修订')}</h2>{sameText}</div>;
-  else if (tab === 3) body = <ImageView state={imgState} mode={prefs.imgMode} zoom={zoom} fade={fade} setFade={setFade} slider={slider} setSlider={setSlider} showBoxes={prefs.showBoxes} onlyDiff={onlyDiffPages} scrollRef={imgScroll} />;
+  else if (tab === 3 && needGate && counts) body = <PageRangeGate mode="image" pagesA={counts.a} pagesB={counts.b} initial={pageRanges[pairSha]} onConfirm={setPageRange} />;
+  else if (tab === 3) body = <ImageView head={rangeHead} state={imgState} mode={prefs.imgMode} zoom={zoom} fade={fade} setFade={setFade} slider={slider} setSlider={setSlider} showBoxes={prefs.showBoxes} onlyDiff={onlyDiffPages} scrollRef={imgScroll} />;
   else if (tab === 4) {
     if (ocrRes && ocrBlocks) body = <PlainView A={ocrBlocks[0]} B={ocrBlocks[1]} res={ocrRes} selCid={selCid} onSel={setSelCid} layout={prefs.layout} wrap={prefs.wrap} hideUnchanged={prefs.hidePlain} lowWords={lowWords} />;
+    else if (ocr.status !== 'running' && needGate && counts) body = <PageRangeGate mode="ocr" pagesA={counts.a} pagesB={counts.b} onConfirm={(r) => { setPageRange(r); runOcr(r); }} />;
     else if (ocr.status === 'running') body = <div className="empty-state"><Mascot mood="think" size={96} /><h2>{t('正在识别文字…')}</h2><div>{ocr.msg}</div><div className="progress"><div style={{ width: `${ocr.pct || 0}%` }} /></div><button className="btn sm plain" onClick={cancelOcr}>{t('取消')}</button></div>;
     else body = (
       <div className="empty-state">
@@ -875,7 +979,8 @@ export default function App() {
         <h2>{t('先识别，再比较')}</h2>
         <div>{t('把两份文档的每一页当成图片来识别文字。适合扫描件、截图型 PDF。')}<br />{t('每页大约 3–5 秒，完全离线。')}</div>
         {ocr.status === 'error' && <Notice tone="err" title={t('识别失败')}>{ocr.msg}</Notice>}
-        <button className="btn primary big" onClick={runOcr}>{t('开始识别')}</button>
+        {rangeHead}
+        <button className="btn primary big" onClick={() => runOcr()} disabled={!pageRange}>{counts ? t('开始识别') : t('正在统计页数…')}</button>
       </div>
     );
   } else if (tab === 5) body = <DetailsView A={A} B={B} />;
@@ -916,7 +1021,7 @@ export default function App() {
       <>
         <div className="sh"><span className="t">{t('页面')}</span>{imgState.diffs.length > 0 && <span className="cnt">{imgState.diffs.length}</span>}</div>
         <div className="insp-sum">
-          {imgState.loading && !imgState.diffs.length ? imgState.loading
+          {needGate ? t('等你选择要比较的页码范围') : !pageRange ? t('正在统计页数…') : imgState.loading && !imgState.diffs.length ? imgState.loading
             : diffPages ? t('{d} 页有差异 · {s} 页相同', { d: diffPages, s: imgState.diffs.length - diffPages })
             : imgState.diffs.length ? t('每一页在视觉上都没有发现差异。') : null}
         </div>
@@ -924,7 +1029,7 @@ export default function App() {
           {imgState.diffs.map((d, i) => (
             <button key={i} type="button" className="drow" onClick={() => document.getElementById(`page-${i}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
               <span className={`pdot ${d.pct < 0.001 && !d.aMissing && !d.bMissing ? 'same' : 'diff'}`} aria-hidden="true" />
-              <span className="tx">{t('第 {n} 页', { n: i + 1 })}</span>
+              <span className="tx">{t('第 {n} 页', { n: d.page ?? i + 1 })}</span>
               <span className="meta">{d.aMissing || d.bMissing ? t('缺页') : d.pct < 0.001 ? t('相同') : `${d.pct < 0.01 ? '<0.01' : d.pct.toFixed(2)}%`}</span>
             </button>
           ))}
@@ -954,10 +1059,11 @@ export default function App() {
         {tab === 4 && ocr.status === 'done' && ocr.conf && (
           <div className="insp-block">
             <div className="sh"><span className="t">{t('识别质量')}</span></div>
+            {rangeHead}
             {[0, 1].map((s) => (
               <div className="conf-row" key={s}>
                 <span>{sideLabel(s as Side)}</span>
-                <span className="conf-pages">{ocr.conf![s].map((c, i) => <span key={i} className={`conf-pg ${c < 0 ? '' : c < 80 ? 'low' : 'ok'}`} title={t('第 {n} 页：{c}%', { n: i + 1, c: c < 0 ? '—' : Math.round(c) })} />)}</span>
+                <span className="conf-pages">{ocr.conf![s].map((c, i) => <span key={i} className={`conf-pg ${c < 0 ? '' : c < 80 ? 'low' : 'ok'}`} title={t('第 {n} 页：{c}%', { n: (pageRange?.from ?? 1) + i, c: c < 0 ? '—' : Math.round(c) })} />)}</span>
                 <b>{avg(ocr.conf![s]) < 0 ? '—' : `${avg(ocr.conf![s])}%`}</b>
               </div>
             ))}
@@ -1052,6 +1158,17 @@ export default function App() {
             {t('比较设置改过了。这些决定已经保存，改回原来的设置就会回来。')}
           </Notice>
         )}
+        {persist.review && (
+          <Notice tone="warn" className="bar persist-warn" role="alert" title={t('审阅结论没能保存到本机。')}
+            action={<button className="btn sm" onClick={() => { if (richRes && decFor.current === richRes) saveDecisions(pk, richRes.changes, decisions); }}>{t('重试保存')}</button>}>
+            {t('结论还在这个窗口里，没有丢；关闭窗口前可以先导出 Word 修订稿或比对报告。下一次保存成功后，这条提示会自动消失。')}<small className="persist-err">{persist.review}</small>
+          </Notice>
+        )}
+        {(persist.settings || persist.recent) && hideSetWarn !== (persist.settings || persist.recent) && (
+          <Notice tone="warn" className="bar persist-warn" title={t(persist.settings ? '设置没能保存到本机。' : '“最近比较”没能保存到本机。')} onClose={() => setHideSetWarn(persist.settings || persist.recent || '')}>
+            {t('这次的改动下次打开可能就没有了。请检查磁盘空间和应用数据目录的写入权限。')}<small className="persist-err">{persist.settings || persist.recent}</small>
+          </Notice>
+        )}
         {crossFormat && (
           <Notice className="bar" role="note" title={t('跨格式比对。')}
             action={!formatting && <button className="btn sm" onClick={() => setFormatting(true)}>{t('检测格式差异')}</button>} onClose={() => setDismissCross(docSig)}>
@@ -1100,6 +1217,7 @@ export default function App() {
                   {' · '}{KIND_LABEL[cur.kind]}{' · '}{t('第 {i} / {n} 处', { i: curIdx + 1, n: changes.length })}
                   {riskById.get(cur.id) && <span className="rk">⚠<span>{riskTag(riskById.get(cur.id)!)}</span></span>}
                   {curDec?.v && <span className="rb-dec">{t(VERDICT_SHORT[curDec.v])}{curDec.by ? ` · ${curDec.by}` : ''}</span>}
+                  {persist.review && <span className="rb-unsaved" title={persist.review}>{t('未保存')}</span>}
                 </span>
               ) : <span className="rb-where">{t('点文中任意一处修订开始审阅')}</span>}
               {cur && <div className="rb-diff">{cur.kind === 'mod' ? <><del>{short(cur.before, 60)}</del><span className="arrow">→</span><ins>{short(cur.after, 60)}</ins></> : cur.kind === 'ins' ? <ins>{short(cur.after, 120)}</ins> : cur.kind === 'del' ? <del>{short(cur.before, 120)}</del> : cur.kind === 'fmt' ? <>{short(cur.before, 60)}<em>（{noteText(cur)}）</em></> : <>{short(cur.before, 100)}<em>（{t('整段移动')}）</em></>}</div>}
@@ -1142,9 +1260,9 @@ export default function App() {
       <Popover anchor={gearRef} open={pop === 'settings'} onClose={closePop} title={t('比较设置')}>{compareSettings}</Popover>
       <Popover anchor={scopeRef} open={pop === 'scope'} onClose={closePop} title={t('比较范围')} width={360} align="end">{scope && <ScopeBody scope={scope} />}</Popover>
       <Popover anchor={moreRef} open={pop === 'more'} onClose={closePop} width={240}>
-        <MenuItem icon={<I.IconCheck />} onClick={() => { closePop(); decideAll('a'); }}>{t('全部接受')}</MenuItem>
-        <MenuItem icon={<I.IconX />} tone="danger" onClick={() => { closePop(); decideAll('r'); }}>{t('全部拒绝')}</MenuItem>
-        {decidedCount > 0 && <MenuItem icon={<I.IconRefresh />} onClick={() => { closePop(); decideAll(null); }}>{t('重置所有决定')}</MenuItem>}
+        <MenuItem icon={<I.IconCheck />} onClick={() => { closePop(); setBulkAsk('a'); }}>{t('全部接受…')}</MenuItem>
+        <MenuItem icon={<I.IconX />} tone="danger" onClick={() => { closePop(); setBulkAsk('r'); }}>{t('全部拒绝…')}</MenuItem>
+        {decidedCount > 0 && <MenuItem icon={<I.IconRefresh />} onClick={() => { closePop(); setBulkAsk('reset'); }}>{t('重置所有决定…')}</MenuItem>}
       </Popover>
       {modals}
     </div>
