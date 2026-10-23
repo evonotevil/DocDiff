@@ -1,11 +1,11 @@
 {
-  "version": "1.7.2",
-  "pubDate": "2026-10-17",
-  "notes": "· 修复「新建比较」、直接替换文件或交换左右文档后偶发白屏的问题。\n· 新增界面异常兜底保护，出现渲染异常时支持一键重新载入，不丢失文件、设置与审阅决定。",
+  "version": "1.7.3",
+  "pubDate": "2026-10-23",
+  "notes": "· 图像与 OCR 改为逐页流式渲染，突破 300 页上限，并支持超长文档指定页码范围比较。\n· 「全部接受」「全部拒绝」「重置所有决定」新增确认提示与 10 秒内一键撤销（快捷键 U）。\n· 审阅记录与设置改用本机数据目录原子写入与自动备份，不再自动淘汰旧记录。\n· 修复短文件名截断问题，恢复「最近比较」单条删除按钮常显。",
   "downloads": {
-    "mac-arm64": "https://github.com/evonotevil/DocDiff/releases/download/v1.7.2/DocDiff-1.7.2-mac-arm64.dmg",
-    "mac-x64": "https://github.com/evonotevil/DocDiff/releases/download/v1.7.2/DocDiff-1.7.2-mac-x64.dmg",
-    "win-exe": "https://github.com/evonotevil/DocDiff/releases/download/v1.7.2/DocDiff-Setup-1.7.2.exe",
-    "page": "https://github.com/evonotevil/DocDiff/releases/tag/v1.7.2"
+    "mac-arm64": "https://github.com/evonotevil/DocDiff/releases/download/v1.7.3/DocDiff-1.7.3-mac-arm64.dmg",
+    "mac-x64": "https://github.com/evonotevil/DocDiff/releases/download/v1.7.3/DocDiff-1.7.3-mac-x64.dmg",
+    "win-exe": "https://github.com/evonotevil/DocDiff/releases/download/v1.7.3/DocDiff-Setup-1.7.3.exe",
+    "page": "https://github.com/evonotevil/DocDiff/releases/tag/v1.7.3"
   }
 }
