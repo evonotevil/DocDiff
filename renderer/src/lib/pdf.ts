@@ -1,17 +1,23 @@
 import * as pdfjs from 'pdfjs-dist';
 // @ts-ignore
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-import type { Block, Run, DocModel, FileInfo } from './model';
+import type { Block, Run, DocModel, FileInfo, ReadIssue } from './model';
 import { isPageNumberText } from './model';
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 
 export class NeedPassword extends Error { constructor(public wrong: boolean) { super(wrong ? '密码错误' : '需要密码'); this.name = 'NeedPassword'; } }
 
+// pdf.js 的字符映射表（CMap）和标准字体数据（1.7.4）。
+// 很多中文 PDF 用不嵌入的 CID 字体（如 STSong-Light），文字编码要靠预置 CMap（UniGB-UCS2-H 等）才能解出来；
+// 以前没给 pdf.js 这两样资源，这类字体加载失败，文字提取和页面渲染都会整段丢掉，比较时就“看不见”这些内容。
+const RES_BASE = (() => { try { return new URL('./pdfjs/', document.baseURI).href; } catch { return './pdfjs/'; } })();
+export const PDF_RESOURCES = { cMapUrl: RES_BASE + 'cmaps/', cMapPacked: true, standardFontDataUrl: RES_BASE + 'standard_fonts/' };
+
 export async function openPdf(data: Uint8Array, password?: string) {
   try {
     // pdfjs 会转移 buffer，传副本
-    return await pdfjs.getDocument({ data: data.slice(), password, isEvalSupported: false, useSystemFonts: true }).promise;
+    return await pdfjs.getDocument({ data: data.slice(), password, isEvalSupported: false, useSystemFonts: true, ...PDF_RESOURCES }).promise;
   } catch (e: any) {
     if (e?.name === 'PasswordException') throw new NeedPassword(e.code === 2);
     throw e;
@@ -26,11 +32,38 @@ export async function parsePdf(file: FileInfo, password?: string): Promise<DocMo
   const pdf = await openPdf(file.data, password);
   const lines: Line[] = [];
   const pageH: number[] = [];
+  const issues: ReadIssue[] = [];
+  const issueSeen = new Set<string>();
+  let issueRuns = 0;
   for (let p = 1; p <= pdf.numPages; p++) {
     const page = await pdf.getPage(p);
     try { pageH[p] = page.getViewport({ scale: 1 }).height; } catch { pageH[p] = 842; }
     const tc = await page.getTextContent();
-    try { await page.getOperatorList(); } catch {}
+    // 读取检查（1.7.4）：页面里画了字、但字体没能解析的，记下来。
+    // 这些字既提取不到文字，也画不到图上；不检查的话，两边都缺同一段时会得出“没有差异”。
+    try {
+      const ol = await page.getOperatorList();
+      const O = (pdfjs as any).OPS;
+      let curFont = '';
+      for (let i = 0; i < ol.fnArray.length; i++) {
+        const fn = ol.fnArray[i];
+        if (fn === O.setFont) { curFont = ol.argsArray[i][0]; continue; }
+        if (fn !== O.showText && fn !== O.showSpacedText) continue;
+        let f: any = null;
+        try { if (page.commonObjs.has(curFont)) f = page.commonObjs.get(curFont); } catch {}
+        const glyphs: any[] = Array.isArray(ol.argsArray[i][0]) ? ol.argsArray[i][0] : [];
+        if (!f || typeof f !== 'object' || f.error) {
+          const why = typeof f === 'string' ? f : f?.error || '';
+          const key = `${p}|${curFont}`;
+          if (!issueSeen.has(key)) { issueSeen.add(key); issues.push({ page: p, kind: 'font', detail: String(why).slice(0, 160) }); }
+          issueRuns++;
+        } else if (glyphs.length && glyphs.every((g) => g && !g.isSpace && !g.unicode)) {
+          const key = `${p}|${curFont}|nounicode`;
+          if (!issueSeen.has(key)) { issueSeen.add(key); issues.push({ page: p, kind: 'nounicode', detail: String(f.name || '') }); }
+          issueRuns++;
+        }
+      }
+    } catch {}
     const fontInfo = (name: string) => {
       let f: any = null;
       try { if (page.commonObjs.has(name)) f = page.commonObjs.get(name); } catch {}
@@ -250,6 +283,7 @@ export async function parsePdf(file: FileInfo, password?: string): Promise<DocMo
   const multi = nPages >= 2;
   return {
     file, type: 'pdf', blocks, meta, pageCount, pdfPassword: password,
+    readIssues: issues.length ? { pages: [...new Set(issues.map((x) => x.page))], runs: issueRuns, kinds: [...new Set(issues.map((x) => x.kind))], detail: issues[0].detail } : undefined,
     secBlocks: { header, footer, footnote: notes },
     secInfo: {
       header: header.length ? 'found' : multi ? 'none' : 'unknown',

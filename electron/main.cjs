@@ -332,6 +332,8 @@ ipcMain.on('notify', (_e, { title, body }) => {
 ipcMain.on('copy-text', (_e, t) => clipboard.writeText(t));
 
 ipcMain.handle('reveal', (_e, p) => shell.showItemInFolder(p));
+// 用系统默认的 PDF 阅读器打开原文件（读取有问题时人工核对，1.7.4）。只允许打开存在的 PDF / DOCX / TXT
+ipcMain.handle('open-external-file', async (_e, p) => { if (!p || !fs.existsSync(p) || !EXT_OK.includes(path.extname(p).slice(1).toLowerCase())) return 'not-allowed'; return shell.openPath(p); });
 
 // ---------- 把 DOCX / TXT 渲染成 PDF（用于“图像”和“OCR”模式） ----------
 function withHiddenWindow(fn) {

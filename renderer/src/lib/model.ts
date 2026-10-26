@@ -39,6 +39,10 @@ export interface FileInfo {
   data: Uint8Array;
 }
 
+/** 读取时发现的问题（1.7.4）：页面上有字，但没能读出来 */
+export interface ReadIssue { page: number; kind: 'font' | 'nounicode'; detail: string }
+export interface ReadIssues { pages: number[]; runs: number; kinds: ReadIssue['kind'][]; detail: string }
+
 export interface DocModel {
   file: FileInfo;
   type: 'docx' | 'pdf' | 'txt';
@@ -48,6 +52,8 @@ export interface DocModel {
   sha256?: string;
   encoding?: string;
   pdfPassword?: string;
+  /** 有些文字没能读出来（字体解析失败、没有字符映射）；这些内容不参与比较 */
+  readIssues?: ReadIssues;
   /** 正文以外的区段；blocks 仍然只有正文（图像 / OCR / 文件详情都按正文工作） */
   secBlocks?: { header: Block[]; footer: Block[]; footnote: Block[] };
   /** 区段识别情况，用来写“比较范围” */

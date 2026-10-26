@@ -36,6 +36,7 @@ contextBridge.exposeInMainWorld('api', {
   ocrCancel: (run) => ipcRenderer.invoke('ocr-cancel', run),
   userName: () => { try { const u = os.userInfo(); return u.username || ''; } catch { return ''; } },
   reveal: (p) => ipcRenderer.invoke('reveal', p),
+  openExternalFile: (p) => ipcRenderer.invoke('open-external-file', p),
   renderToPdf: (job) => ipcRenderer.invoke('render-to-pdf', job),
   htmlToPdf: (opts) => ipcRenderer.invoke('html-to-pdf', opts),
   ocr: (opts) => ipcRenderer.invoke('ocr', opts),

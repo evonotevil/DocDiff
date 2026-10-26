@@ -6,6 +6,76 @@ const DENSE = 200;   // 超过这么多处差异，改画密度条
 const BUCKETS = 120;
 const RANK: Record<string, number> = { del: 5, mod: 4, ins: 3, move: 2, fmt: 1 };  // 数量相同时按这个顺序取色
 
+type Tick = { id: number; kind: string; top: number; h: number };
+/** 切回同一个视图时，版面尺寸没变就直接用上次量好的刻度 */
+const CACHE = new WeakMap<object, { key: string; dep: any; ticks: Tick[] }>();
+function shallowSame(a: any, b: any) {
+  if (a === b) return true;
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+  return a.every((x, i) => x === b[i]);
+}
+
+/**
+ * 量出每处差异在滚动内容里的位置（百分比）。
+ * 一次 querySelectorAll 建好 差异 id / 行号 → 元素 的索引，不再按差异逐个在整棵树里查找。
+ * 差异很多（> DENSE，画成密度条）时只量每一行的第一格：同一行的差异共用一个位置，量的次数从“差异数”降到“行数”。
+ * 带 content-visibility: auto 的行逐个取矩形会逐行触发布局（1.5.0 的教训），这时按行号等距估算。
+ */
+function locate(sc: HTMLElement, changes: Change[]): Tick[] {
+  const H = sc.scrollHeight || 1;
+  const byCid = new Map<number, HTMLElement>();
+  const byRow = new Map<number, HTMLElement>();
+  const rowOrder: number[] = [];
+  const phs: { first: number; last: number; el: HTMLElement }[] = [];   // 正文按需挂载时没挂上的块（占位）
+  sc.querySelectorAll<HTMLElement>('[data-cid],[data-row],[data-rows]').forEach((el) => {
+    const c = el.dataset.cid, r = el.dataset.row;
+    if (el.dataset.rows) { const [f, l] = el.dataset.rows.split('-').map(Number); phs.push({ first: f, last: l, el }); return; }
+    if (c !== undefined && !byCid.has(+c)) byCid.set(+c, el);
+    if (r !== undefined && !byRow.has(+r)) { byRow.set(+r, el); rowOrder.push(+r); }
+  });
+  const out: Tick[] = [];
+  const sample = byRow.get(rowOrder[rowOrder.length >> 1]);
+  const skipped = !!sample && getComputedStyle(sample).contentVisibility === 'auto';
+  if (skipped && changes.length > 60) {
+    const idx = new Map<number, number>();
+    rowOrder.forEach((r, i) => idx.set(r, i));
+    const n = rowOrder.length || 1;
+    const h = Math.max(0.4, 100 / n);
+    for (const c of changes) { const i = idx.get(c.row); if (i !== undefined) out.push({ id: c.id, kind: c.kind, top: (i / n) * 100, h }); }
+    return out;
+  }
+  const base = sc.getBoundingClientRect().top - sc.scrollTop;
+  const dense = changes.length > DENSE;
+  const rowPos = new Map<number, { top: number; h: number } | null>();
+  const pos = (el: HTMLElement) => { const r = el.getBoundingClientRect(); return { top: ((r.top - base) / H) * 100, h: Math.max(0.4, (r.height / H) * 100) }; };
+  // 没挂载的行：在占位块里按行号比例估算
+  const inPh = (row: number) => {
+    let lo = 0, hi = phs.length - 1;
+    while (lo <= hi) { const m = (lo + hi) >> 1; const x = phs[m]; if (row < x.first) hi = m - 1; else if (row > x.last) lo = m + 1; else {
+      const r = x.el.getBoundingClientRect(); const n = x.last - x.first + 1;
+      return { top: ((r.top - base + (r.height * (row - x.first)) / n) / H) * 100, h: Math.max(0.4, (r.height / n / H) * 100) };
+    } }
+    return null;
+  };
+  for (const c of changes) {
+    let p: { top: number; h: number } | null | undefined;
+    if (c.row2 !== undefined) {
+      // 移动：两处都有同一个 id，和以前一样取文档里靠前的那一处
+      const r0 = Math.min(c.row, c.row2);
+      const el = byRow.get(r0);
+      p = el ? pos(el) : inPh(r0);
+    } else if (dense) {
+      p = rowPos.get(c.row);
+      if (p === undefined) { const el = byRow.get(c.row) || byCid.get(c.id); p = el ? pos(el) : inPh(c.row); rowPos.set(c.row, p); }
+    } else {
+      const el = byCid.get(c.id) || byRow.get(c.row);
+      p = el ? pos(el) : inPh(c.row);
+    }
+    if (p) out.push({ id: c.id, kind: c.kind, ...p });
+  }
+  return out;
+}
+
 /**
  * 差异地图兼滚动条：中间区域的原生滚动条隐藏掉，由它来显示位置、拖动和跳转。
  * 每处差异一条彩色刻度（修改 = 左红右绿）；可见区域只画描边，不盖住刻度。
@@ -15,52 +85,40 @@ const RANK: Record<string, number> = { del: 5, mod: 4, ins: 3, move: 2, fmt: 1 }
 export function ChangeMap({ changes, filter = [], selCid, onSel, dep, bottom = 6 }: { changes: Change[]; filter?: string[]; selCid: number | null; onSel: (id: number) => void; dep: any; bottom?: number }) {
   const pass = (k: string) => !filter.length || filter.includes(k);
   const ref = useRef<HTMLDivElement>(null);
-  const [ticks, setTicks] = useState<{ id: number; kind: string; top: number; h: number }[]>([]);
+  const [ticks, setTicks] = useState<Tick[]>(() => []);
   const [view, setView] = useState({ top: 0, h: 100 });
   const scroller = () => ref.current?.parentElement?.querySelector('.scroll') as HTMLElement | null;
+  // dep 由调用方每次渲染新建数组；这里按元素浅比较，内容没变就不重新测量（1.7.3 每次选中差异都会重测一遍）
+  const depRef = useRef<{ dep: any; v: number }>({ dep: undefined, v: 0 });
+  if (!shallowSame(depRef.current.dep, dep)) depRef.current = { dep, v: depRef.current.v + 1 };
+  const depV = depRef.current.v;
   useEffect(() => {
     const sc = scroller();
     if (!sc) return;
+    const sig = () => `${sc.scrollHeight}x${sc.clientWidth}`;
+    let last = '';
     const measure = () => {
-      const H = sc.scrollHeight || 1;
-      const rowEls = Array.from(sc.querySelectorAll('[data-row]')) as HTMLElement[];
-      const idxOf = new Map<number, number>();
-      rowEls.forEach((el, i) => idxOf.set(Number(el.dataset.row), i));
-      // 带 content-visibility: auto 的行逐个取矩形会逐行触发布局（1.5.0 的教训），差异多时按行号等距估算
-      const sample = rowEls[Math.floor(rowEls.length / 2)];
-      const skipped = !!sample && getComputedStyle(sample).contentVisibility === 'auto';
-      const exact = !skipped || changes.length <= 60;
-      const out: { id: number; kind: string; top: number; h: number }[] = [];
-      if (exact) {
-        const base = sc.getBoundingClientRect().top - sc.scrollTop;
-        for (const c of changes) {
-          const el = (sc.querySelector(`[data-cid="${c.id}"]`) || sc.querySelector(`[data-row="${c.row}"]`)) as HTMLElement | null;
-          if (!el) continue;
-          const r = el.getBoundingClientRect();
-          out.push({ id: c.id, kind: c.kind, top: ((r.top - base) / H) * 100, h: Math.max(0.4, (r.height / H) * 100) });
-        }
-      } else {
-        const n = rowEls.length || 1;
-        const h = Math.max(0.4, 100 / n);
-        for (const c of changes) {
-          const i = idxOf.get(c.row);
-          if (i === undefined) continue;
-          out.push({ id: c.id, kind: c.kind, top: (i / n) * 100, h });
-        }
-      }
+      const key = sig();
+      if (key === last) return;           // 版面没变，不用再量
+      last = key;
+      const hit = CACHE.get(changes);
+      if (hit && hit.key === key && shallowSame(hit.dep, depRef.current.dep)) { setTicks(hit.ticks); onScroll(); return; }
+      const out = locate(sc, changes);
+      CACHE.set(changes, { key, dep: depRef.current.dep, ticks: out });
       setTicks(out);
-      setView({ top: (sc.scrollTop / H) * 100, h: (sc.clientHeight / H) * 100 });
+      onScroll();
     };
     const onScroll = () => { const H = sc.scrollHeight || 1; setView({ top: (sc.scrollTop / H) * 100, h: (sc.clientHeight / H) * 100 }); };
     let pending = 0, timer: any = 0;
     const schedule = () => { clearTimeout(timer); timer = setTimeout(() => { cancelAnimationFrame(pending); pending = requestAnimationFrame(measure); }, 120); };
-    const t1 = setTimeout(measure, 60), t2 = setTimeout(measure, 600);
+    // 先画一次（有缓存就直接用），之后只在尺寸真的变化时再量
+    pending = requestAnimationFrame(measure);
     const ro = new ResizeObserver(schedule);
     ro.observe(sc);
     if (sc.firstElementChild) ro.observe(sc.firstElementChild);
     sc.addEventListener('scroll', onScroll, { passive: true });
-    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(timer); cancelAnimationFrame(pending); ro.disconnect(); sc.removeEventListener('scroll', onScroll); };
-  }, [changes, dep]);
+    return () => { clearTimeout(timer); cancelAnimationFrame(pending); ro.disconnect(); sc.removeEventListener('scroll', onScroll); };
+  }, [changes, depV]);
 
   // 拖动视口框 = 拖动滚动条；在空白处按下 = 跳到那里（或选中附近的差异）
   const drag = useRef<{ y0: number; top0: number } | null>(null);

@@ -981,3 +981,10 @@ select.sel { height: 36px; border-radius: var(--r-m); border: 2px solid var(--bo
 .review-storage .rs-usage { font-size: 14px; font-weight: 700; color: var(--text); }
 .review-storage .rs-acts, .review-storage .rs-ask { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 6px; }
 .review-storage .rs-ask span { font-size: 13px; font-weight: 800; color: var(--danger-ink); }
+
+/* 1.7.4 正文按需挂载：每块是一个两栏网格，没挂上的块用同样高度的占位代替 */
+.rich.chunked { display: block; }
+.rich.chunked > .rich-head, .rich.chunked > .rich-chunk, .rich.chunked > .rich-ph { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 18px; }
+.rich.chunked > .rich-head { position: sticky; top: 0; z-index: 3; background: var(--doc-bg); }
+.rich.chunked .colhead { position: static; }
+.rich-ph > .cell.vspace { padding: 0; min-height: 0; cursor: default; }

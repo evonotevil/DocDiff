@@ -5,13 +5,13 @@ import { loadDoc } from './lib/load';
 import { NeedPassword } from './lib/pdf';
 import { linesToBlocks, DiffOptions, DiffResult, Change, ChangeKind } from './lib/engine';
 import { buildDocx } from './lib/exportDocx';
-import { forEachPage, getPageCount, PageRange, BIG_PAGES, fullRange, rangeKey } from './lib/pages';
-import { PageRangeGate, RangeLine } from './components/PageRangeGate';
+import { forEachPage, getPageCount, PageRange, BIG_PAGES, fullRange, rangeKey, clearPageCaches } from './lib/pages';
+import { PageRangeGate, RangeLine, RangeProgress } from './components/PageRangeGate';
 import { kbd, modPressed, isMac } from './lib/platform';
 import { t, setLang, initLang, Lang } from './lib/i18n';
 import { clauseMap, detectRisks, DEFAULT_KEYWORDS, Risk } from './lib/insight';
 import { DecMap, Dec, Verdict, pairKey, loadDecisions, saveDecisions, reviewProgress, initialsOf } from './lib/review';
-import { scopeInfo } from './lib/scope';
+import { scopeInfo, pageList } from './lib/scope';
 import { getSetting, setSetting as saveSetting, usePersistStatus } from './lib/persist';
 import { summaryMarkdown, reportHtml } from './lib/report';
 import { ChangeList, KIND_LABEL, short } from './components/ChangeList';
@@ -226,7 +226,7 @@ function PasteModal({ side, onOk, onCancel }: { side: Side; onOk: (t: string) =>
 
 // ---------- OCR ----------
 type OcrLang = 'chi_sim+eng' | 'eng' | 'chi_sim';
-interface OcrState { status: 'idle' | 'running' | 'done' | 'error'; msg?: string; pct?: number; a?: string; b?: string; key?: string; conf?: [number[], number[]]; low?: [Map<number, Set<number>>, Map<number, Set<number>>] }
+interface OcrState { status: 'idle' | 'running' | 'done' | 'error'; msg?: string; pct?: number; done?: number; n?: number; stopped?: boolean; a?: string; b?: string; key?: string; conf?: [number[], number[]]; low?: [Map<number, Set<number>>, Map<number, Set<number>>] }
 function cleanOcr(t: string) {
   return t
     .replace(/([　-〿㐀-鿿＀-￯])[ \t]+(?=[　-〿㐀-鿿＀-￯])/g, '$1')
@@ -288,6 +288,7 @@ export default function App() {
   const [dismissCross, setDismissCross] = useState('');
   const persist = usePersistStatus();
   const [hideSetWarn, setHideSetWarn] = useState('');
+  const [hideReadWarn, setHideReadWarn] = useState('');
   const [lostBanner, setLostBanner] = useState<{ n: number; restore: () => void } | null>(null);
   const [upd, setUpd] = useState<UpdInfo | null>(null);
   const [checkingUpd, setCheckingUpd] = useState(false);
@@ -427,20 +428,23 @@ export default function App() {
   const opts: DiffOptions = { ignoreCase: prefs.ignoreCase, ignoreWhitespace: prefs.ignoreWs, precision: prefs.precision, formatting, detectMoves: prefs.detectMoves, normPunct: prefs.normPunct };
   const optKey = JSON.stringify(opts);
   const docSig = A && B ? `${A.sha256 || A.file.path}|${B.sha256 || B.file.path}` : '';
+  const readIssueDocs = ([[0, A], [1, B]] as [number, DocModel | null][]).filter(([, d]) => d?.readIssues) as [number, DocModel][];
+  // 有读不出文字的页：图像里这些页也可能缺字，不能当成“相同”
+  const suspectPages = useMemo(() => new Set(readIssueDocs.flatMap(([, d]) => d.readIssues!.pages)), [A, B]);
   // 富文本 / 修订审阅：正文 + 页眉 + 页脚 + 脚注
   const RA = useMemo(() => (A ? { ...A, blocks: compareBlocks(A) } : null), [A]);
   const RB = useMemo(() => (B ? { ...B, blocks: compareBlocks(B) } : null), [B]);
   const richTask = useMemo(() => (compared && RA && RB
     ? { key: `rich|${docSig}|${optKey}`, blocksA: RA.blocks, blocksB: RB.blocks, opts: { ...opts, mergeParas: true } }
     : null), [compared, docSig, optKey, RA, RB]);
-  const rich = useDiff(richTask);
+  const rich = useDiff(richTask, docSig);
   const richRes = rich.res;
 
   const plainBlocks = useMemo(() => (A && B ? [linesToBlocks(docPlainText(A)), linesToBlocks(docPlainText(B))] : null), [A, B]);
   const plainTask = useMemo(() => (compared && plainBlocks && tab === 1
     ? { key: `plain|${docSig}|${optKey}`, blocksA: plainBlocks[0], blocksB: plainBlocks[1], opts: { ...opts, formatting: false, keepEmpty: true } }
     : null), [compared, plainBlocks, docSig, optKey, tab]);
-  const plain = useDiff(plainTask);
+  const plain = useDiff(plainTask, docSig);
   const plainRes = plain.res;
 
   // ---------- 页面模式的页数与范围 ----------
@@ -461,17 +465,24 @@ export default function App() {
   const needGate = !!counts && !chosenRange && totalPages > BIG_PAGES;
   const setPageRange = (r: PageRange) => setPageRanges((m) => ({ ...m, [pairSha]: r }));
   const changePageRange = () => setPageRanges((m) => { const n = { ...m }; delete n[pairSha]; return n; });
-  const rangeHead = pageRange && counts ? <RangeLine range={pageRange} total={totalPages} onChange={totalPages > BIG_PAGES ? changePageRange : undefined} /> : null;
 
   const ocrKey = A && B && pageRange ? `${A.sha256}|${B.sha256}|${prefs.ocrLang}|${rangeKey(pageRange)}` : '';
   const ocrBlocks = useMemo(() => (ocr.status === 'done' && ocr.key === ocrKey ? [linesToBlocks(ocr.a!), linesToBlocks(ocr.b!)] : null), [ocr, ocrKey]);
   const ocrTask = useMemo(() => (ocrBlocks && tab === 4
     ? { key: `ocr|${ocrKey}|${optKey}`, blocksA: ocrBlocks[0], blocksB: ocrBlocks[1], opts: { ...opts, formatting: false, keepEmpty: true } }
     : null), [ocrBlocks, ocrKey, optKey, tab]);
-  const ocrDiff = useDiff(ocrTask);
+  const ocrDiff = useDiff(ocrTask, docSig);
   const ocrRes = ocrDiff.res;
   const diffJob = tab === 1 ? plain : tab === 4 ? ocrDiff : rich;
   const imgState = useImagePages(tab === 3 && compared && A && B ? A : (null as any), tab === 3 && compared && A && B ? B : (null as any), prefs.threshold, tab === 3 ? pageRange : null);
+  // 范围那一行：选了哪些页 + 做到哪一步（1.7.4 起分开说）
+  const rangeProgress: RangeProgress = tab === 3
+    ? { phase: imgState.status, done: imgState.done, n: imgState.n || undefined, onResume: imgState.resume }
+    : ocr.status === 'running' ? { phase: 'running', done: ocr.done || 0, n: ocr.n, ocr: true }
+    : ocr.status === 'done' ? { phase: 'done', ocr: true }
+    : ocr.status === 'error' ? { phase: 'error', done: ocr.done || 0, n: ocr.n, ocr: true }
+    : { phase: ocr.stopped ? 'stopped' : 'pending', done: ocr.done || 0, n: ocr.n, ocr: true };
+  const rangeHead = pageRange && counts ? <RangeLine range={pageRange} total={totalPages} onChange={totalPages > BIG_PAGES ? changePageRange : undefined} progress={rangeProgress} /> : null;
 
   // ---------- 解读：条款、风险、比较范围 ----------
   const clauses = useMemo(() => (richRes && RA && RB ? clauseMap(richRes, RA.blocks, RB.blocks) : new Map<number, string | null>()), [richRes, RA, RB]);
@@ -685,7 +696,7 @@ export default function App() {
           const done = base + page + progress;
           const pct = ((si * total + done) / (2 * Math.max(1, total))) * 100;
           api.setProgress?.(pct / 100);
-          setOcr((o) => (o.status === 'running' && ocrRun.current === run ? { ...o, pct, msg: t('正在识别{s}：第 {i}/{n} 页', { s: sideLabel(si as Side), i: Math.min(total, base + page + 1), n: total }) } : o));
+          setOcr((o) => (o.status === 'running' && ocrRun.current === run ? { ...o, pct, done: si * total + base + page, n: 2 * total, msg: t('正在识别{s}：第 {i}/{n} 页', { s: sideLabel(si as Side), i: Math.min(total, base + page + 1), n: total }) } : o));
         });
         let batch: { page: number; img: Uint8Array }[] = [];
         const flush = async () => {
@@ -716,16 +727,16 @@ export default function App() {
     } catch (e: any) {
       if (ocrRun.current !== run) return; // 已被取消：取消时已经把状态复位了，别再写回
       const m = String(e?.message || e);
-      setOcr(/取消/.test(m) ? { status: 'idle' } : { status: 'error', msg: m, key });
+      setOcr((o) => (/取消/.test(m) ? { status: 'idle', stopped: true, done: o.done, n: o.n } : { status: 'error', msg: m, key, done: o.done, n: o.n }));
     } finally { off?.(); if (ocrRun.current === run) api.setProgress?.(-1); }
   };
-  const cancelOcr = () => { const run = ocrRun.current; ocrRun.current++; api.ocrCancel?.(run); api.setProgress?.(-1); setOcr({ status: 'idle' }); flash(t('已取消识别')); };
+  const cancelOcr = () => { const run = ocrRun.current; ocrRun.current++; api.ocrCancel?.(run); api.setProgress?.(-1); setOcr((o) => ({ status: 'idle', stopped: true, done: o.done, n: o.n })); flash(t('已取消识别')); };
   const lowWords = ocr.low;
 
   // ---------- 菜单 & 键盘 ----------
   const canCompare = !!(A && B) && !busy[0] && !busy[1];
   const startCompare = () => { if (canCompare) { setCompared(true); setTab(0); setChangedSides([]); } };
-  const clearAll = () => { setDocs([null, null]); setCompared(false); setErrs([null, null]); ocrRun.current++; setOcr({ status: 'idle' }); setChangedSides([]); setLostBanner(null); lastLoaded.current = null; };
+  const clearAll = () => { clearPageCaches(); setDocs([null, null]); setCompared(false); setErrs([null, null]); ocrRun.current++; setOcr({ status: 'idle' }); setChangedSides([]); setLostBanner(null); lastLoaded.current = null; };
   const swap = () => { setDocs(([a, b]) => [b, a]); ocrRun.current++; setOcr({ status: 'idle' }); };
   const actions = useRef<any>({});
   actions.current = { open, swap, clearAll, go, decide, setTab, startCompare, toggleNav, toggleAside, compared, tab, selCid, undoBulk: undoToast?.undo, modal: !!(pwd || pasteSide !== null || showSettings || exportOpen || pop || bulkAsk) };
@@ -968,11 +979,11 @@ export default function App() {
   else if (tab === 2 && richRes && RA && RB) body = changes.length ? <RedlineView A={RA} B={RB} res={richRes} selCid={selCid} onSel={setSelCid} decisions={decisions} innerRef={redlineRef} />
     : <div className="empty-state"><Mascot mood="cheer" size={96} /><h2>{t('没有需要审阅的修订')}</h2>{sameText}</div>;
   else if (tab === 3 && needGate && counts) body = <PageRangeGate mode="image" pagesA={counts.a} pagesB={counts.b} initial={pageRanges[pairSha]} onConfirm={setPageRange} />;
-  else if (tab === 3) body = <ImageView head={rangeHead} state={imgState} mode={prefs.imgMode} zoom={zoom} fade={fade} setFade={setFade} slider={slider} setSlider={setSlider} showBoxes={prefs.showBoxes} onlyDiff={onlyDiffPages} scrollRef={imgScroll} />;
+  else if (tab === 3) body = <ImageView head={rangeHead} suspect={suspectPages} state={imgState} mode={prefs.imgMode} zoom={zoom} fade={fade} setFade={setFade} slider={slider} setSlider={setSlider} showBoxes={prefs.showBoxes} onlyDiff={onlyDiffPages} scrollRef={imgScroll} />;
   else if (tab === 4) {
     if (ocrRes && ocrBlocks) body = <PlainView A={ocrBlocks[0]} B={ocrBlocks[1]} res={ocrRes} selCid={selCid} onSel={setSelCid} layout={prefs.layout} wrap={prefs.wrap} hideUnchanged={prefs.hidePlain} lowWords={lowWords} />;
     else if (ocr.status !== 'running' && needGate && counts) body = <PageRangeGate mode="ocr" pagesA={counts.a} pagesB={counts.b} onConfirm={(r) => { setPageRange(r); runOcr(r); }} />;
-    else if (ocr.status === 'running') body = <div className="empty-state"><Mascot mood="think" size={96} /><h2>{t('正在识别文字…')}</h2><div>{ocr.msg}</div><div className="progress"><div style={{ width: `${ocr.pct || 0}%` }} /></div><button className="btn sm plain" onClick={cancelOcr}>{t('取消')}</button></div>;
+    else if (ocr.status === 'running') body = <div className="empty-state"><Mascot mood="think" size={96} /><h2>{t('正在识别文字…')}</h2>{rangeHead}<div>{ocr.msg}</div><div className="progress"><div style={{ width: `${ocr.pct || 0}%` }} /></div><button className="btn sm plain" onClick={cancelOcr}>{t('取消')}</button></div>;
     else body = (
       <div className="empty-state">
         <Mascot mood="sleepy" size={96} />
@@ -1017,20 +1028,21 @@ export default function App() {
   let insp: React.ReactNode = null;
   if (tab === 3) {
     const diffPages = imgState.diffs.filter((d) => d.pct >= 0.001).length;
+    const susPages = imgState.diffs.filter((d, i) => d.pct < 0.001 && suspectPages.has(d.page ?? i + 1)).length;
     insp = (
       <>
         <div className="sh"><span className="t">{t('页面')}</span>{imgState.diffs.length > 0 && <span className="cnt">{imgState.diffs.length}</span>}</div>
         <div className="insp-sum">
           {needGate ? t('等你选择要比较的页码范围') : !pageRange ? t('正在统计页数…') : imgState.loading && !imgState.diffs.length ? imgState.loading
-            : diffPages ? t('{d} 页有差异 · {s} 页相同', { d: diffPages, s: imgState.diffs.length - diffPages })
-            : imgState.diffs.length ? t('每一页在视觉上都没有发现差异。') : null}
+            : diffPages || susPages ? t('{d} 页有差异 · {s} 页相同', { d: diffPages, s: imgState.diffs.length - diffPages - susPages }) + (susPages ? t(' · {n} 页可能缺字', { n: susPages }) : '') + (imgState.status !== 'done' ? t('（已完成 {d}/{n} 页）', { d: imgState.done, n: imgState.n }) : '')
+            : imgState.diffs.length ? (imgState.status === 'done' ? t('每一页在视觉上都没有发现差异。') : t('已比较的 {d} 页没有发现差异，还有 {l} 页没有比较。', { d: imgState.done, l: Math.max(0, imgState.n - imgState.done) })) : null}
         </div>
         <div className="dlist">
           {imgState.diffs.map((d, i) => (
             <button key={i} type="button" className="drow" onClick={() => document.getElementById(`page-${i}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
-              <span className={`pdot ${d.pct < 0.001 && !d.aMissing && !d.bMissing ? 'same' : 'diff'}`} aria-hidden="true" />
+              <span className={`pdot ${d.pct < 0.001 && !d.aMissing && !d.bMissing && !suspectPages.has(d.page ?? i + 1) ? 'same' : 'diff'}`} aria-hidden="true" />
               <span className="tx">{t('第 {n} 页', { n: d.page ?? i + 1 })}</span>
-              <span className="meta">{d.aMissing || d.bMissing ? t('缺页') : d.pct < 0.001 ? t('相同') : `${d.pct < 0.01 ? '<0.01' : d.pct.toFixed(2)}%`}</span>
+              <span className="meta">{d.aMissing || d.bMissing ? t('缺页') : d.pct < 0.001 ? (suspectPages.has(d.page ?? i + 1) ? t('可能缺字') : t('相同')) : `${d.pct < 0.01 ? '<0.01' : d.pct.toFixed(2)}%`}</span>
             </button>
           ))}
         </div>
@@ -1156,6 +1168,17 @@ export default function App() {
           <Notice tone="warn" className="bar" title={t('{n} 个决定对不上了。', { n: lostBanner.n })}
             action={<button className="btn sm" onClick={lostBanner.restore}>{t('改回原来的设置')}</button>} onClose={() => setLostBanner(null)}>
             {t('比较设置改过了。这些决定已经保存，改回原来的设置就会回来。')}
+          </Notice>
+        )}
+        {readIssueDocs.length > 0 && hideReadWarn !== docSig && (
+          <Notice tone="err" className="bar read-warn" role="alert" title={t('有些文字没能读出来，比较结果可能不完整。')}
+            action={<>
+              {readIssueDocs.some(([, d]) => d.readIssues!.kinds.includes('nounicode')) && tab !== 4 && <button className="btn sm" onClick={() => setTab(4)}>{t('改用 OCR 文本比较')}</button>}
+              {readIssueDocs.map(([i, d]) => d.file.path && <button key={i} className="btn sm" onClick={() => api.openExternalFile?.(d.file.path)}>{t('用其他阅读器打开{s}', { s: sideLabel(i as Side) })}</button>)}
+            </>}
+            onClose={() => setHideReadWarn(docSig)} closeLabel={t('知道了')}>
+            {readIssueDocs.map(([i, d]) => t('{s}第 {p} 页有 {n} 段文字{why}，', { s: sideLabel(i as Side), p: pageList(d.readIssues!.pages), n: d.readIssues!.runs, why: d.readIssues!.kinds.includes('font') ? t('的字体无法解析') : t('没有字符映射') })).join('')}
+            {t('这些内容没有参与比较，“没有差异”不代表这些地方相同。请在其他阅读器里打开原文件核对这几页。')}
           </Notice>
         )}
         {persist.review && (

@@ -28,7 +28,8 @@ export function isHeavy(a: Block[], b: Block[]): boolean {
 export interface DiffTask { key: string; blocksA: Block[]; blocksB: Block[]; opts: DiffOptions }
 export interface DiffState { res: DiffResult | null; running: boolean; heavy: boolean; error: string | null; cancelled: boolean; cancel: () => void; retry: () => void }
 
-export function useDiff(task: DiffTask | null): DiffState {
+/** scope：这一组文档的标识（任务 key 里包含它）。任务为空时只交出同一组文档的旧结果（1.7.4：新建比较后侧栏不再显示上一组的差异数） */
+export function useDiff(task: DiffTask | null, scope = ''): DiffState {
   const [state, setState] = useState<{ key: string | null; res: DiffResult | null; running: boolean; error: string | null; cancelled: boolean }>(
     { key: null, res: null, running: false, error: null, cancelled: false },
   );
@@ -87,7 +88,7 @@ export function useDiff(task: DiffTask | null): DiffState {
     // 只返回“这一个任务”的结果。换了文档后、新结果算出来之前，绝不能把上一次的结果交出去：
     // 旧结果里的段落下标对应的是旧文档，拿去画新文档会越界（1.7.2 白屏的原因）。
     // 任务为空（例如切到别的模式）时保留上一次结果，切回来是瞬时的。
-    res: task ? (state.key === task.key ? state.res : null) : (state.running ? null : state.res),
+    res: task ? (state.key === task.key ? state.res : null) : (state.running || !scope || !state.key?.includes(`|${scope}|`) ? null : state.res),
     running: state.running,
     heavy,
     error: state.error,

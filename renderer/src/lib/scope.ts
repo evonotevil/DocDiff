@@ -17,6 +17,12 @@ export interface ScopeInfo {
 const source = (d: DocModel) =>
   d.type === 'docx' ? t('Word 原文') : d.type === 'pdf' ? t('PDF 版面推断') : d.file.path ? t('纯文本') : t('粘贴的文字');
 
+/** 页码列表：3、7、12 … 共 n 页 */
+export function pageList(pages: number[]): string {
+  const p = [...pages].sort((a, b) => a - b);
+  return p.length > 6 ? t('{a} 等 {n} 页', { a: p.slice(0, 5).join(t('、')), n: p.length }) : p.join(t('、'));
+}
+
 export function scopeInfo(A: DocModel, B: DocModel, o: DiffOptions, res: DiffResult | null): ScopeInfo {
   const both = [A, B];
   const found = (k: 'header' | 'footer' | 'footnote') => both.some((d) => d.secInfo?.[k] === 'found');
@@ -34,6 +40,8 @@ export function scopeInfo(A: DocModel, B: DocModel, o: DiffOptions, res: DiffRes
   if (both.some((d) => d.type === 'pdf' && d.secInfo?.header === 'unknown')) notCompared.push(t('单页 PDF 无法识别页眉页脚，按正文比较'));
   if (both.some((d) => d.type === 'pdf' && d.secInfo?.footnote !== 'found') && both.some((d) => d.secInfo?.footnote === 'found')) notCompared.push(t('PDF 一侧没有识别到脚注，脚注可能留在正文里'));
   if (both.some((d) => d.secInfo?.pageNumbersDropped)) notCompared.push(t('页码'));
+  // 读不出来的文字（1.7.4）：字体解析失败或没有字符映射，这些内容不在比较里
+  both.forEach((d, i) => { if (d.readIssues) notCompared.push(t('{s}第 {p} 页有 {n} 段文字没能读出', { s: t(i ? '修改后文档' : '原始文档'), p: pageList(d.readIssues.pages), n: d.readIssues.runs })); });
   if (!o.formatting) notCompared.push(t('格式（加粗、字号、颜色等）'));
 
   const conditions = [

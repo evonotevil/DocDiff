@@ -5,6 +5,21 @@ import pixelmatch from 'pixelmatch';
 const api = (window as any).api;
 const pdfCache = new Map<string, Promise<Uint8Array>>();
 const countCache = new Map<string, Promise<number>>();
+// Word / TXT 排版出的 PDF 只留最近几份（1.7.3 一直累积，开过的文档越多占得越多）
+const KEEP_PDFS = 4;
+function trim<K, V>(m: Map<K, V>, n: number) { while (m.size > n) m.delete(m.keys().next().value as K); }
+
+// 页面图片地址的计数：内存回归测试用（window.__ddPageStats）
+let liveUrls = 0, liveBytes = 0;
+const urlBytes = new Map<string, number>();
+export function revokeUrls(diffs: PageDiff[] | undefined) {
+  for (const d of diffs || []) for (const u of [d.aUrl, d.bUrl, d.diffUrl]) if (u && urlBytes.has(u)) { URL.revokeObjectURL(u); liveUrls--; liveBytes -= urlBytes.get(u)!; urlBytes.delete(u); }
+}
+export function pageStats() {
+  let pages = 0; for (const v of diffCache.values()) pages += v.length;
+  return { diffSets: diffCache.size, cachedPages: pages, liveUrls, liveMB: +(liveBytes / 1048576).toFixed(1), layoutPdfs: pdfCache.size };
+}
+(window as any).__ddPageStats = pageStats;
 
 /** 超过这个页数，图像 / OCR 比较前先告诉用户页数和预计时间，让他决定比全部还是只比一段（1.7.3） */
 export const BIG_PAGES = 300;
@@ -19,6 +34,7 @@ export function getPdfBytes(d: DocModel): Promise<Uint8Array> {
     const p = api.renderToPdf({ kind: d.type, data: d.file.data, name: d.file.name }).then((b: any) => new Uint8Array(b));
     p.catch(() => pdfCache.delete(k));
     pdfCache.set(k, p);
+    trim(pdfCache, KEEP_PDFS);
   }
   return pdfCache.get(k)!;
 }
@@ -30,6 +46,7 @@ export function getPageCount(d: DocModel): Promise<number> {
     const p = getPdfBytes(d).then(async (bytes) => { const pdf = await openPdf(bytes, d.pdfPassword); const n = pdf.numPages; await pdf.destroy(); return n; });
     p.catch(() => countCache.delete(k));
     countCache.set(k, p);
+    trim(countCache, 32);
   }
   return countCache.get(k)!;
 }
@@ -76,11 +93,16 @@ export async function forEachPagePair(A: DocModel, B: DocModel, scale: number, r
 const diffCache = new Map<string, PageDiff[]>();
 export const imageCacheKey = (A: DocModel, B: DocModel, threshold: number, r: PageRange) => `${A.sha256}|${B.sha256}|${threshold}|${rangeKey(r)}`;
 export const getCachedDiffs = (k: string) => diffCache.get(k);
+/** 新建比较时清掉页面缓存 */
+export function clearPageCaches() {
+  for (const v of diffCache.values()) revokeUrls(v);
+  diffCache.clear(); pdfCache.clear(); countCache.clear();
+}
 export function setCachedDiffs(k: string, v: PageDiff[]) {
   diffCache.set(k, v);
   while (diffCache.size > 4) {
     const old = diffCache.keys().next().value as string;
-    for (const d of diffCache.get(old) || []) for (const u of [d.aUrl, d.bUrl, d.diffUrl]) if (u) URL.revokeObjectURL(u);
+    revokeUrls(diffCache.get(old));
     diffCache.delete(old);
   }
 }
@@ -91,7 +113,9 @@ export interface PageDiff { page?: number; pct: number; diffUrl?: string; boxes:
 // 页面截图压成 WebP 存地址，画布随即释放；差异图大面积是白色，PNG 更小也更清楚
 async function urlOf(c: HTMLCanvasElement, type: 'image/webp' | 'image/png' = 'image/webp'): Promise<string> {
   const b: Blob = await new Promise((r) => c.toBlob((x) => r(x!), type, 0.92));
-  return URL.createObjectURL(b);
+  const u = URL.createObjectURL(b);
+  urlBytes.set(u, b.size); liveUrls++; liveBytes += b.size;
+  return u;
 }
 
 export async function diffPage(a: PageImage | undefined, b: PageImage | undefined, threshold: number): Promise<PageDiff> {
