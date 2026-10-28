@@ -10,8 +10,10 @@ import type { DiffRes } from './diff.worker';
  * 只有"体量大 + 改动多"的文档（3000 段全文重写：diff 约 2.9s，克隆约 1.0s）才值得。
  * 所以这里按体量选路：小的同步算，大的进 Worker 并允许取消。
  */
-const HEAVY_CHARS = 150_000;
-const HEAVY_BLOCKS = 1500;
+// 1.7.4：阈值按“比较本身要算多久”重新定。十几页 PDF（约 600 段、5 万字）在 2 核机器上同步算要 0.7–0.9 秒，
+// 整段卡住主线程、也没法取消；放进 Worker 后主线程只剩接收结果的一小段。
+const HEAVY_CHARS = 20_000;
+const HEAVY_BLOCKS = 400;
 
 export function docChars(blocks: Block[]): number {
   let n = 0;

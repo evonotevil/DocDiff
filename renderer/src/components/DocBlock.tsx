@@ -3,7 +3,7 @@ import type { Block, Run } from '../lib/model';
 import type { Tok } from '../lib/engine';
 import { t } from '../lib/i18n';
 
-export interface RTok { tok: Tok; cls?: string; cid?: number; title?: string; style?: Run; mi?: number }
+export interface RTok { tok: Tok; cls?: string; cid?: number; title?: string; style?: Run; mi?: number; mj?: number }
 
 /** 文档原有的文字颜色 / 突出显示用 CSS 变量传递：浅色模式原样显示，深色模式由 CSS 调亮 / 调淡（导出 PDF 时仍是原色） */
 export function runStyle(st: Run, withHl = true): React.CSSProperties {
@@ -28,16 +28,23 @@ export function runStyle(st: Run, withHl = true): React.CSSProperties {
 const styleKey = (st: Run) =>
   `${st.b ? 1 : 0}${st.i ? 1 : 0}${st.u ? 1 : 0}${st.s ? 1 : 0}|${st.sz || ''}|${st.color || ''}|${st.hl || ''}|${st.img || ''}`;
 
-const plainTok = (r: RTok) => !r.cls && r.cid === undefined && !r.title && !r.tok.sep && !r.tok.psep && !(r.style || r.tok.st).img;
+const mergeable = (r: RTok) => !r.tok.sep && !r.tok.psep && !(r.style || r.tok.st).img;
 
+/**
+ * 1.7.4 起，同一处差异里连续的 token（类别、差异编号、提示文字都相同）也合并。
+ * 中文按字切分，一段新增的几百个字以前是几百个 span：十几页 PDF、几百处差异时富文本有 5 万多个 span，
+ * 首次排版 2 秒以上，滚动只有十几帧。合并不改变显示和差异编号：data-cid 照旧，
+ * 合并块用 data-mi / data-mj 记下首尾 token 的序号，点词对齐时按区间找另一侧对应的位置。
+ */
 export function coalesce(toks: RTok[]): RTok[] {
   const out: RTok[] = [];
   for (const r of toks) {
     const prev = out[out.length - 1];
-    if (prev && plainTok(r) && plainTok(prev)
+    if (prev && mergeable(r) && mergeable(prev)
+      && prev.cls === r.cls && prev.cid === r.cid && prev.title === r.title
       && prev.tok.c === r.tok.c && (prev.tok.blk || 0) === (r.tok.blk || 0)
       && styleKey(prev.style || prev.tok.st) === styleKey(r.style || r.tok.st)) {
-      out[out.length - 1] = { ...prev, tok: { ...prev.tok, t: prev.tok.t + r.tok.t } };
+      out[out.length - 1] = { ...prev, mj: r.mi ?? r.mj ?? prev.mj, tok: { ...prev.tok, t: prev.tok.t + r.tok.t } };
       continue;
     }
     out.push(r);
@@ -54,7 +61,7 @@ function TokSpan({ r, selCid }: { r: RTok; selCid?: number | null }) {
   if (st.img) {
     return <span className={['img-tok', cls].filter(Boolean).join(' ')} data-cid={r.cid} data-mi={r.mi} title={r.title || `${t('图片')} ${st.img}`}>🖼 {t('图片')}</span>;
   }
-  return <span className={cls} style={runStyle(st, !r.cls)} data-cid={r.cid} data-mi={r.mi} title={r.title}>{tk.t}</span>;
+  return <span className={cls} style={runStyle(st, !r.cls)} data-cid={r.cid} data-mi={r.mi} data-mj={r.mj !== undefined && r.mj !== r.mi ? r.mj : undefined} title={r.title}>{tk.t}</span>;
 }
 
 export function BlockView({ block, toks, selCid, className, extra }: { block: Block; toks: RTok[]; selCid?: number | null; className?: string; extra?: React.ReactNode }) {

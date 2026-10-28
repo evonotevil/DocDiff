@@ -1,6 +1,6 @@
 import type { DocModel } from './model';
 import { openPdf, renderPdfPage, releasePage, PageImage } from './pdf';
-import pixelmatch from 'pixelmatch';
+import { pixelDiff, type PageDiffRes } from './pagediff.worker';
 
 const api = (window as any).api;
 const pdfCache = new Map<string, Promise<Uint8Array>>();
@@ -113,9 +113,44 @@ export interface PageDiff { page?: number; pct: number; diffUrl?: string; boxes:
 // 页面截图压成 WebP 存地址，画布随即释放；差异图大面积是白色，PNG 更小也更清楚
 async function urlOf(c: HTMLCanvasElement, type: 'image/webp' | 'image/png' = 'image/webp'): Promise<string> {
   const b: Blob = await new Promise((r) => c.toBlob((x) => r(x!), type, 0.92));
+  return track(b);
+}
+function track(b: Blob): string {
   const u = URL.createObjectURL(b);
   urlBytes.set(u, b.size); liveUrls++; liveBytes += b.size;
   return u;
+}
+
+// 像素比较交给 Worker；Worker 起不来时退回主线程（结果完全相同，只是会卡）
+let pdw: Worker | null = null, pdwBroken = false, pdwSeq = 0;
+const pdwWait = new Map<number, (r: PageDiffRes) => void>();
+function pageWorker(): Worker | null {
+  if (pdw || pdwBroken) return pdw;
+  try {
+    pdw = new Worker(new URL('./pagediff.worker.ts', import.meta.url), { type: 'module' });
+    pdw.onmessage = (e: MessageEvent<PageDiffRes>) => { pdwWait.get(e.data.id)?.(e.data); pdwWait.delete(e.data.id); };
+    pdw.onerror = () => { pdwBroken = true; pdw?.terminate(); pdw = null; for (const [id, f] of pdwWait) f({ id, ok: false, error: 'worker failed' }); pdwWait.clear(); };
+  } catch { pdwBroken = true; pdw = null; }
+  return pdw;
+}
+async function pixelDiffOffThread(a: ImageData, b: ImageData, threshold: number): Promise<{ n: number; boxes: Box[]; diffUrl: string }> {
+  const w = a.width, h = a.height;
+  const wk = pageWorker();
+  if (wk) {
+    const id = ++pdwSeq;
+    const r = await new Promise<PageDiffRes>((res) => { pdwWait.set(id, res); wk.postMessage({ id, w, h, a: a.data.buffer, b: b.data.buffer, threshold }, [a.data.buffer, b.data.buffer]); });
+    if (r.ok) return { n: r.n, boxes: r.boxes, diffUrl: track(r.png) };
+    if (!pdwBroken) throw new Error(r.error);
+    // Worker 中途坏了：buffer 已经转走，交给调用方重试这一页
+    throw new Error('page diff worker unavailable');
+  }
+  const { n, boxes, out } = pixelDiff(a.data, b.data, w, h, threshold);
+  const dc = document.createElement('canvas');
+  dc.width = w; dc.height = h;
+  dc.getContext('2d')!.putImageData(new ImageData(out, w, h), 0, 0);
+  const diffUrl = await urlOf(dc, 'image/png');
+  dc.width = dc.height = 0;
+  return { n, boxes, diffUrl };
 }
 
 export async function diffPage(a: PageImage | undefined, b: PageImage | undefined, threshold: number): Promise<PageDiff> {
@@ -129,44 +164,20 @@ export async function diffPage(a: PageImage | undefined, b: PageImage | undefine
   const cx = cb.getContext('2d', { willReadFrequently: true })!;
   cx.fillStyle = '#fff'; cx.fillRect(0, 0, w, h);
   cx.drawImage(b.canvas, 0, 0, w, Math.round(b.height * (w / b.width)));
+  // 两页的截图编码（浏览器在后台线程编码）和像素比较（Worker）同时进行
+  const encA = urlOf(a.canvas), encB = urlOf(cb);
   const da = a.canvas.getContext('2d', { willReadFrequently: true })!.getImageData(0, 0, w, h);
   const db = cx.getImageData(0, 0, w, h);
-  const out = new ImageData(w, h);
-  const n = pixelmatch(da.data, db.data, out.data, w, h, { threshold, includeAA: false, alpha: 0.18, diffColor: [229, 77, 46], diffColorAlt: [18, 165, 148] } as any);
-  // 差异像素 → 网格 → 连通区域
-  const G = 10;
-  const gw = Math.ceil(w / G), gh = Math.ceil(h / G);
-  const grid = new Uint8Array(gw * gh);
-  const d = out.data;
-  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-    const i = (y * w + x) * 4;
-    if ((d[i] === 229 && d[i + 1] === 77 && d[i + 2] === 46) || (d[i] === 18 && d[i + 1] === 165 && d[i + 2] === 148)) grid[Math.floor(y / G) * gw + Math.floor(x / G)] = 1;
+  let px: { n: number; boxes: Box[]; diffUrl: string };
+  try { px = await pixelDiffOffThread(da, db, threshold); }
+  catch {
+    // Worker 不可用：用画布重新取像素，在主线程算
+    const ra = a.canvas.getContext('2d', { willReadFrequently: true })!.getImageData(0, 0, w, h);
+    const rb = cx.getImageData(0, 0, w, h);
+    pdwBroken = true;
+    px = await pixelDiffOffThread(ra, rb, threshold);
   }
-  const seen = new Uint8Array(gw * gh);
-  const boxes: Box[] = [];
-  const R = 2; // 合并半径（格）
-  for (let s = 0; s < grid.length; s++) {
-    if (!grid[s] || seen[s]) continue;
-    let minx = 1e9, miny = 1e9, maxx = -1, maxy = -1;
-    const st = [s]; seen[s] = 1;
-    while (st.length) {
-      const c = st.pop()!;
-      const cx0 = c % gw, cy0 = (c / gw) | 0;
-      minx = Math.min(minx, cx0); maxx = Math.max(maxx, cx0); miny = Math.min(miny, cy0); maxy = Math.max(maxy, cy0);
-      for (let dy = -R; dy <= R; dy++) for (let dx = -R; dx <= R; dx++) {
-        const nx = cx0 + dx, ny = cy0 + dy;
-        if (nx < 0 || ny < 0 || nx >= gw || ny >= gh) continue;
-        const ni = ny * gw + nx;
-        if (grid[ni] && !seen[ni]) { seen[ni] = 1; st.push(ni); }
-      }
-    }
-    boxes.push({ x: (minx * G - 3) / w, y: (miny * G - 3) / h, w: ((maxx - minx + 1) * G + 6) / w, h: ((maxy - miny + 1) * G + 6) / h });
-    if (boxes.length > 300) break;
-  }
-  const dc = document.createElement('canvas');
-  dc.width = w; dc.height = h;
-  dc.getContext('2d')!.putImageData(out, 0, 0);
-  const res = { pct: (n / (w * h)) * 100, boxes, diffUrl: await urlOf(dc, 'image/png'), aUrl: await urlOf(a.canvas), bUrl: await urlOf(cb), aspect: h / w };
-  dc.width = dc.height = cb.width = cb.height = 0;
-  return res;
+  const [aUrl, bUrl] = await Promise.all([encA, encB]);
+  cb.width = cb.height = 0;
+  return { pct: (px.n / (w * h)) * 100, boxes: px.boxes, diffUrl: px.diffUrl, aUrl, bUrl, aspect: h / w };
 }

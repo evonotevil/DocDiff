@@ -60,8 +60,27 @@ export function scrollToEl(root: HTMLElement, el: HTMLElement, instantFar = fals
 // 1.7.3 把整篇正文一次挂到页面上（3000 段约 3 万个节点），切回富文本时整篇重建。
 // 现在按行号每 CH 行分成一块，只挂载视口上下各一屏左右的块；其他块用同样高度的占位代替。
 // 量过的块高度按“块内容 + 宽度”缓存，切回来时占位高度就是真实高度，滚动条和差异地图不跳。
-const CH = 60;                 // 每块的行数
-const ALL_BELOW = 360;         // 可见条目少于这么多时整篇挂载（小文档没必要分块）
+const CH = 60;                 // 每块最多的行数
+const CH_UNITS = 80;           // 每块最多约多少“排版行”（约两屏）（1.7.4 修：十几页 PDF 的段落很长，60 段一块就是上万个节点）
+const ALL_BELOW = 360;         // 可见条目少于这么多、且总排版行少于 ALL_UNITS 时整篇挂载（小文档没必要分块）
+const ALL_UNITS = 600;
+/** 按行号切块：每块不超过 CH 行、也不超过约 CH_UNITS 排版行。只依赖比较结果，展开 / 折叠不改变分块，缓存的块高度继续有效 */
+const BOUNDS = new WeakMap<object, { of: Int32Array; total: number; units: Float32Array }>();
+function chunkBounds(res: DiffResult, A: DocModel, B: DocModel) {
+  let v = BOUNDS.get(res);
+  if (v) return v;
+  const of = new Int32Array(res.rows.length);
+  const units = new Float32Array(res.rows.length);
+  let id = 0, n = 0, u = 0, total = 0;
+  for (let i = 0; i < res.rows.length; i++) {
+    const w = units[i] = unitsOf(i, res.rows, A, B);
+    if (n > 0 && (n >= CH || u + w > CH_UNITS)) { id++; n = 0; u = 0; }
+    of[i] = id; n++; u += w; total += w;
+  }
+  v = { of, total, units };
+  BOUNDS.set(res, v);
+  return v;
+}
 const HCACHE = new WeakMap<object, { h: Map<string, number>; unit: number }>();
 type Item = number | { fold: number[] } | { sec: SecHeadProps };
 interface Chunk { key: string; first: number; last: number; items: { it: Item; vi: number }[]; units: number }
@@ -94,7 +113,7 @@ function lineRectAt(span: HTMLElement, y?: number): DOMRect | null {
   return rs.find((r) => y >= r.top - 2 && y <= r.bottom + 2) || rs.reduce((a, b) => (Math.abs(a.top - y) < Math.abs(b.top - y) ? a : b));
 }
 
-export function RichView({ A, B, res, selCid, onSel, hideUnchanged }: { A: DocModel; B: DocModel; res: DiffResult; selCid: number | null; onSel: (id: number) => void; hideUnchanged: boolean }) {
+export const RichView = React.memo(function RichView({ A, B, res, selCid, onSel, hideUnchanged }: { A: DocModel; B: DocModel; res: DiffResult; selCid: number | null; onSel: (id: number) => void; hideUnchanged: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   const richRef = useRef<HTMLDivElement>(null);
   const skipScroll = useRef(false);
@@ -106,8 +125,9 @@ export function RichView({ A, B, res, selCid, onSel, hideUnchanged }: { A: DocMo
   const anchor = useRef<{ span: HTMLElement; top: number; idx: number } | null>(null);
   useEffect(() => { setExpanded(new Set()); setAlign(null); setPinned(null); setHover(null); }, [res]);
   const rowOfCid = (cid: number) => res.changes.find((c) => c.id === cid)?.row;
+  const bounds = chunkBounds(res, A, B);
   const secs = useSections(res);
-  useScrollToChange(ref, selCid, rowOfCid, (row) => { secs.reveal(res.rows[row]?.sec); setForce([Math.floor(row / CH)]); if (hideUnchanged && !expanded.has(row)) setExpanded((s) => new Set(s).add(row)); }, skipScroll, true);
+  useScrollToChange(ref, selCid, rowOfCid, (row) => { secs.reveal(res.rows[row]?.sec); setForce([bounds.of[row] ?? 0]); if (hideUnchanged && !expanded.has(row)) setExpanded((s) => new Set(s).add(row)); }, skipScroll, true);
 
   const rows = res.rows;
 
@@ -147,12 +167,15 @@ export function RichView({ A, B, res, selCid, onSel, hideUnchanged }: { A: DocMo
     if (otherCell && !otherCell.classList.contains('ph')) {
       const merged = rows[row].merged;
       const mi = Number(span.dataset.mi);
+      // 另一侧的词块：合并后的 span 覆盖 data-mi..data-mj 一段序号
+      const others = Array.from(otherCell.querySelectorAll<HTMLElement>('[data-mi]')).map((el) => ({ el, a: Number(el.dataset.mi), b: Number(el.dataset.mj ?? el.dataset.mi) }));
+      const spanOf = (k: number) => others.find((o) => k >= o.a && k <= o.b)?.el || null;
       // 在合并序列里找离它最近、且另一侧有内容的词（相同的词优先，其次是被替换的词）
       for (let d = 0; d < merged.length; d++) {
         for (const k of d === 0 ? [mi] : [mi - d, mi + d]) {
           const t = merged[k]?.[other];
           if (!t || t.sep || t.psep || t.ws) continue;
-          const s2 = otherCell.querySelector(`[data-mi="${k}"]`) as HTMLElement | null;
+          const s2 = spanOf(k);
           const r2 = s2 && lineRectAt(s2);
           if (s2 && r2) { hit.twin = { span: s2, rect: r2 }; break; }
         }
@@ -231,14 +254,14 @@ export function RichView({ A, B, res, selCid, onSel, hideUnchanged }: { A: DocMo
   }, []);
 
   // ---------- 按需挂载 ----------
-  const [win, setWin] = useState<{ lo: number; hi: number }>({ lo: 0, hi: 2 });
+  const [win, setWin] = useState<{ lo: number; hi: number }>({ lo: 0, hi: 0 });   // 先只挂第一块，量过视口后再补
   const [force, setForce] = useState<number[]>([]);          // 跳转目标所在的块
   const [selSpan, setSelSpan] = useState<{ lo: number; hi: number } | 'all' | null>(null); // 正在选中文字时不卸载
   const [, setMeasured] = useState(0);
   const chunkEls = useRef(new Map<number, HTMLElement>());
   const [width, setWidth] = useState(0);
 
-  const ensureRow = useCallback((row: number) => setForce([Math.floor(row / CH)]), []);
+  const ensureRow = useCallback((row: number) => setForce([chunkBounds(res, A, B).of[row] ?? 0]), [res, A, B]);
   const jump = useCallback((row: number) => {
     ensureRow(row);
     requestAnimationFrame(() => requestAnimationFrame(() => {
@@ -273,12 +296,12 @@ export function RichView({ A, B, res, selCid, onSel, hideUnchanged }: { A: DocMo
     visible.forEach((it, vi) => {
       const row = rowOfItem(it);
       if (row < 0) { pendingSec.push({ it, vi }); return; }
-      const b = Math.floor(row / CH);
+      const b = bounds.of[row] ?? 0;
       let c = byB.get(b);
       if (!c) { c = { key: '', first: row, last: row, items: [], units: 0 }; byB.set(b, c); chunks.push(c); (c as any).b = b; }
-      for (const p of pendingSec) { c.items.push(p); c.units += unitsOf(p.it, rows, A, B); }
+      for (const p of pendingSec) { c.items.push(p); c.units += 1.6; }
       pendingSec = [];
-      c.items.push({ it, vi }); c.units += unitsOf(it, rows, A, B);
+      c.items.push({ it, vi }); c.units += typeof it === 'number' ? bounds.units[it] : unitsOf(it, rows, A, B);
       c.last = typeof it === 'number' ? it : (it as { fold: number[] }).fold[(it as { fold: number[] }).fold.length - 1];
     });
     if (pendingSec.length) {
@@ -289,7 +312,7 @@ export function RichView({ A, B, res, selCid, onSel, hideUnchanged }: { A: DocMo
     const k = (it: Item) => (typeof it === 'number' ? 'r' + it : 'fold' in it ? `f${it.fold[0]}-${it.fold.length}` : 's' + (it as any).sec.sec + ((it as any).sec.open ? 'o' : 'c'));
     for (const c of chunks) c.key = `${c.items.length}|${k(c.items[0].it)}|${k(c.items[c.items.length - 1].it)}`;
   }
-  const windowed = visible.length > ALL_BELOW;
+  const windowed = visible.length > ALL_BELOW || bounds.total > ALL_UNITS;
   const bOf = (c: Chunk) => (c as any).b as number;
   const cache = (() => { let c = HCACHE.get(res); if (!c) { c = { h: new Map(), unit: 26 }; HCACHE.set(res, c); } return c; })();
   const hKey = (c: Chunk) => `${width}|${align && align.row >= c.first && align.row <= c.last ? 'al' + align.px : ''}|${c.key}`;
@@ -303,8 +326,8 @@ export function RichView({ A, B, res, selCid, onSel, hideUnchanged }: { A: DocMo
     if (ci >= win.lo && ci <= win.hi) return true;
     if (selSpan && ci >= selSpan.lo && ci <= selSpan.hi) return true;
     if (force.includes(b)) return true;
-    if (selRowIdx !== undefined && Math.floor(selRowIdx / CH) === b) return true;
-    if (align && Math.floor(align.row / CH) === b) return true;
+    if (selRowIdx !== undefined && bounds.of[selRowIdx] === b) return true;
+    if (align && bounds.of[align.row] === b) return true;
     return false;
   };
 
@@ -415,7 +438,7 @@ export function RichView({ A, B, res, selCid, onSel, hideUnchanged }: { A: DocMo
       )}
     </>
   );
-}
+});
 
 /** 一行（左右两格）。按值比较 props：选中别的差异、对齐别的行时，这一行不重新渲染 */
 const RichRow = React.memo(function RichRow({ v, r, A, B, edge, selRow, sc, alignA, alignB, onJump }: {

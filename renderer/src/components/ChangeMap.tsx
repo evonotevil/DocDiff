@@ -110,14 +110,18 @@ export function ChangeMap({ changes, filter = [], selCid, onSel, dep, bottom = 6
     };
     const onScroll = () => { const H = sc.scrollHeight || 1; setView({ top: (sc.scrollTop / H) * 100, h: (sc.clientHeight / H) * 100 }); };
     let pending = 0, timer: any = 0;
-    const schedule = () => { clearTimeout(timer); timer = setTimeout(() => { cancelAnimationFrame(pending); pending = requestAnimationFrame(measure); }, 120); };
+    // 在这一帧画完之后再量（rAF 里再排一个 0 ms 定时器）：这时版面已经算好，读 scrollHeight / 矩形不会强制重排。
+    // 1.7.4 以前直接在 rAF 里量，会把新挂载正文的整次排版提前到脚本里同步执行（十几页 PDF 切回富文本时约 1.9 秒）。
+    let post: any = 0;
+    const afterPaint = () => { cancelAnimationFrame(pending); clearTimeout(post); pending = requestAnimationFrame(() => { post = setTimeout(measure, 0); }); };
+    const schedule = () => { clearTimeout(timer); timer = setTimeout(afterPaint, 120); };
     // 先画一次（有缓存就直接用），之后只在尺寸真的变化时再量
-    pending = requestAnimationFrame(measure);
+    afterPaint();
     const ro = new ResizeObserver(schedule);
     ro.observe(sc);
     if (sc.firstElementChild) ro.observe(sc.firstElementChild);
     sc.addEventListener('scroll', onScroll, { passive: true });
-    return () => { clearTimeout(timer); cancelAnimationFrame(pending); ro.disconnect(); sc.removeEventListener('scroll', onScroll); };
+    return () => { clearTimeout(timer); clearTimeout(post); cancelAnimationFrame(pending); ro.disconnect(); sc.removeEventListener('scroll', onScroll); };
   }, [changes, depV]);
 
   // 拖动视口框 = 拖动滚动条；在空白处按下 = 跳到那里（或选中附近的差异）

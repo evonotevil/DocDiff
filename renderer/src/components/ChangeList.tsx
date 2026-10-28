@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { Dec } from '../lib/review';
 import type { Change } from '../lib/engine';
 import type { DecMap } from '../lib/review';
 import type { Risk } from '../lib/insight';
@@ -12,6 +13,7 @@ const VERDICT: Record<string, string> = { a: '已接受', r: '已拒绝', h: '�
 const plain = (c: Change) => (c.kind === 'mod' ? `${short(c.before, 40)} → ${short(c.after, 40)}` : short(c.kind === 'ins' ? c.after : c.before, 80));
 
 const PAGE = 400;
+const FIRST = 60;
 const hhmm = (ts: number) => { const d = new Date(ts); const p = (x: number) => String(x).padStart(2, '0'); return `${p(d.getHours())}:${p(d.getMinutes())}`; };
 
 /**
@@ -23,13 +25,22 @@ export function ChangeList({ changes, all, sel, onSel, onHover, decisions, claus
   decisions?: DecMap; clauses: Map<number, string | null>; risks: Map<number, Risk>; grouped?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [limit, setLimit] = useState(PAGE);
-  useEffect(() => setLimit(PAGE), [changes]);
+  // 1.7.4：换筛选时先画前 FIRST 条，之后每帧补一批到 PAGE 条。一次换掉 400 行（约 2000 个节点）要 150 ms 以上，
+  // 分批后点筛选的反馈在一帧内出现，列表在随后几帧里补齐，内容和以前完全一样。
+  const [limit, setLimit] = useState(FIRST);
+  const [cap, setCap] = useState(PAGE);
+  useEffect(() => { setLimit(FIRST); setCap(PAGE); }, [changes]);
+  useEffect(() => {
+    if (limit >= Math.min(cap, changes.length)) return;
+    let t: any = 0;
+    const id = requestAnimationFrame(() => { t = setTimeout(() => setLimit((l) => Math.min(cap, l + FIRST)), 0); });
+    return () => { cancelAnimationFrame(id); clearTimeout(t); };
+  }, [limit, cap, changes]);
   const order = useMemo(() => new Map(all.map((c, i) => [c.id, i + 1])), [all]);
   useEffect(() => {
     if (sel == null) return;
     const idx = changes.findIndex((c) => c.id === sel);
-    if (idx >= limit) setLimit(Math.ceil((idx + 1) / PAGE) * PAGE);
+    if (idx >= limit) { const c = Math.max(cap, Math.ceil((idx + 1) / PAGE) * PAGE); setCap(c); setLimit(Math.min(c, idx + FIRST)); }
     // 只滚动列表自己，不要连带把整个右栏滚走
     requestAnimationFrame(() => {
       const list = ref.current;
@@ -54,7 +65,8 @@ export function ChangeList({ changes, all, sel, onSel, onHover, decisions, claus
   }, [changes]);
   const groups = useMemo(() => (grouped ? groupChanges(changes.slice(0, limit), clauses) : [{ title: '', items: changes.slice(0, limit) }]), [changes, clauses, limit, grouped]);
   if (!changes.length) return <div className="dlist-empty">{t('没有符合筛选条件的差异')}</div>;
-  const hov = (id: number | null) => onHover?.(id);
+  const hovRef = useRef(onHover); hovRef.current = onHover;
+  const hov = useCallback((id: number | null) => hovRef.current?.(id), []);
   return (
     <div className="dlist" ref={ref} onMouseLeave={() => hov(null)}>
       {patterns.length > 0 && (
@@ -72,30 +84,10 @@ export function ChangeList({ changes, all, sel, onSel, onHover, decisions, claus
       {groups.map((g, gi) => (
         <div className="dgroup" key={gi + g.title}>
           {g.title && <div className="grp" title={g.title}>{g.title}</div>}
-          {g.items.map((c) => {
-            const d = decisions?.[c.id];
-            const risk = risks.get(c.id);
-            const rec = d?.v ? `${t(VERDICT[d.v])}${d.by ? ' · ' + d.by : ''}${d.at ? ' · ' + hhmm(d.at) : ''}${d.note ? ' · ' + d.note : ''}` : '';
-            return (
-              <button key={c.id} type="button" data-chg={c.id} className={`drow k-${c.kind} ${c.id === sel ? 'sel' : ''} ${d?.v ? 'done v-' + d.v : ''}`}
-                onClick={() => onSel(c.id)} onMouseEnter={() => hov(c.id)} onFocus={() => hov(c.id)} aria-current={c.id === sel}
-                title={[`${t('第 {i} 处', { i: order.get(c.id) ?? 0 })} · ${KIND_LABEL[c.kind]}`, rec, risk ? `${t('需要留意')}：${riskTag(risk)}` : ''].filter(Boolean).join('\n')}
-                aria-label={`${KIND_LABEL[c.kind]}：${plain(c)}${rec ? '，' + rec : ''}`}>
-                <span className={`nb k-${c.kind} ${d?.v ? 'v-' + d.v : ''}`} aria-hidden="true">{d?.v === 'a' ? '✓' : d?.v === 'r' ? '✕' : d?.v === 'h' ? '?' : order.get(c.id)}</span>
-                <span className="tx">
-                  {c.kind === 'fmt' ? (<><em>{noteText(c)}</em>{short(c.before, 60) || t('（段落）')}</>) :
-                   c.kind === 'move' ? (<><em>{t('整段换了位置')}</em>{short(c.before, 60)}</>) :
-                   c.kind === 'mod' ? (<><del>{short(c.before, 40)}</del><span className="arrow">→</span><ins>{short(c.after, 40)}</ins></>) :
-                   c.kind === 'del' ? <del>{short(c.before, 80)}</del> : <ins>{short(c.after, 80)}</ins>}
-                </span>
-                {d?.note && <span className="meta note" aria-hidden="true">✎</span>}
-                {risk && <span className="rk" aria-hidden="true">⚠<span>{riskTag(risk)}</span></span>}
-              </button>
-            );
-          })}
+          {g.items.map((c) => <DRow key={c.id} c={c} n={order.get(c.id) ?? 0} isSel={c.id === sel} d={decisions?.[c.id]} risk={risks.get(c.id)} onSel={onSel} hov={hov} />)}
         </div>
       ))}
-      {changes.length > limit && <button className="btn sm plain block" onClick={() => setLimit((l) => l + PAGE)}>{t('再显示 {n} 处', { n: Math.min(PAGE, changes.length - limit) })}</button>}
+      {changes.length > cap && limit >= cap && <button className="btn sm plain block" onClick={() => setCap((c) => c + PAGE)}>{t('再显示 {n} 处', { n: Math.min(PAGE, changes.length - cap) })}</button>}
     </div>
   );
 }
@@ -104,3 +96,24 @@ export function short(s: string, n = 90) {
   const t = s.replace(/\s+/g, ' ').trim();
   return t.length > n ? t.slice(0, n) + '…' : t;
 }
+
+/** 清单的一行（1.7.4 按值比较）：J / K 换选中时只有前后两行重新渲染 */
+const DRow = React.memo(function DRow({ c, n, isSel, d, risk, onSel, hov }: { c: Change; n: number; isSel: boolean; d?: Dec; risk?: Risk; onSel: (id: number) => void; hov: (id: number | null) => void }) {
+  const rec = d?.v ? `${t(VERDICT[d.v])}${d.by ? ' · ' + d.by : ''}${d.at ? ' · ' + hhmm(d.at) : ''}${d.note ? ' · ' + d.note : ''}` : '';
+  return (
+    <button type="button" data-chg={c.id} className={`drow k-${c.kind} ${isSel ? 'sel' : ''} ${d?.v ? 'done v-' + d.v : ''}`}
+      onClick={() => onSel(c.id)} onMouseEnter={() => hov(c.id)} onFocus={() => hov(c.id)} aria-current={isSel}
+      title={[`${t('第 {i} 处', { i: n })} · ${KIND_LABEL[c.kind]}`, rec, risk ? `${t('需要留意')}：${riskTag(risk)}` : ''].filter(Boolean).join('\n')}
+      aria-label={`${KIND_LABEL[c.kind]}：${plain(c)}${rec ? '，' + rec : ''}`}>
+      <span className={`nb k-${c.kind} ${d?.v ? 'v-' + d.v : ''}`} aria-hidden="true">{d?.v === 'a' ? '✓' : d?.v === 'r' ? '✕' : d?.v === 'h' ? '?' : n}</span>
+      <span className="tx">
+        {c.kind === 'fmt' ? (<><em>{noteText(c)}</em>{short(c.before, 60) || t('（段落）')}</>) :
+         c.kind === 'move' ? (<><em>{t('整段换了位置')}</em>{short(c.before, 60)}</>) :
+         c.kind === 'mod' ? (<><del>{short(c.before, 40)}</del><span className="arrow">→</span><ins>{short(c.after, 40)}</ins></>) :
+         c.kind === 'del' ? <del>{short(c.before, 80)}</del> : <ins>{short(c.after, 80)}</ins>}
+      </span>
+      {d?.note && <span className="meta note" aria-hidden="true">✎</span>}
+      {risk && <span className="rk" aria-hidden="true">⚠<span>{riskTag(risk)}</span></span>}
+    </button>
+  );
+});

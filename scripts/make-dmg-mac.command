@@ -10,9 +10,9 @@
 # 脚本不会删除任何文件，zip 用完后请自己清理。
 set -euo pipefail
 DIR="${1:-$(cd "$(dirname "$0")" && pwd)}"
-cd "$DIR"
+cd "${DIR}"
 exec > >(tee make-dmg.log) 2>&1
-echo "开始 $(date)  目录：$DIR"
+echo "开始 $(date)  目录：${DIR}"
 
 shopt -s nullglob
 zips=(DocDiff-*-mac-*.zip)
@@ -21,25 +21,25 @@ if [ ${#zips[@]} -eq 0 ]; then echo "没有找到 DocDiff-<版本>-mac-<架构>.
 for zip in "${zips[@]}"; do
   dmg="${zip%.zip}.dmg"
   work="$(mktemp -d /tmp/docdiff-dmg.XXXX)"
-  trap 'rm -rf "$work"' EXIT
-  mkdir -p "$work/stage"
-  echo "== $zip：解压"
-  ditto -x -k "$zip" "$work/stage"
-  app="$work/stage/DocDiff.app"
-  [ -d "$app" ] || { echo "zip 里没有 DocDiff.app"; exit 1; }
+  trap 'rm -rf "${work}"' EXIT
+  mkdir -p "${work}/stage"
+  echo "== ${zip}：解压"
+  ditto -x -k "${zip}" "${work}/stage"
+  app="${work}/stage/DocDiff.app"
+  [ -d "${app}" ] || { echo "zip 里没有 DocDiff.app"; exit 1; }
 
   echo "== 本机签名（ad-hoc）"
-  xattr -cr "$app"
-  codesign --force --deep --sign - "$app"
-  codesign --verify --deep --strict "$app"
+  xattr -cr "${app}"
+  codesign --force --deep --sign - "${app}"
+  codesign --verify --deep --strict "${app}"
   echo "签名校验通过"
 
-  ln -s /Applications "$work/stage/Applications"
-  echo "== 生成 $dmg"
-  rm -f "$dmg"
-  hdiutil create -volname "DocDiff" -srcfolder "$work/stage" -fs HFS+ -format UDZO -imagekey zlib-level=9 -ov "$dmg"
-  hdiutil verify "$dmg"
-  rm -rf "$work"; trap - EXIT
+  ln -s /Applications "${work}/stage/Applications"
+  echo "== 生成 ${dmg}"
+  rm -f "${dmg}"
+  hdiutil create -volname "DocDiff" -srcfolder "${work}/stage" -fs HFS+ -format UDZO -imagekey zlib-level=9 -ov "${dmg}"
+  hdiutil verify "${dmg}"
+  rm -rf "${work}"; trap - EXIT
 done
 
 echo "== SHA-256"
