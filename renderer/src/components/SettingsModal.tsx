@@ -17,6 +17,7 @@ export interface UpdInfo { status: 'new' | 'latest' | 'error' | 'off'; current: 
 export interface SettingsValues {
   lang: Lang; theme: 'light' | 'dark'; paperFollowTheme: boolean; sound: boolean; celebrate: boolean;
   reviewerName: string; reviewerInitials: string; authorName: string; commentAccepted: boolean;
+  draftName: string; finalName: string;
   riskMoney: boolean; riskDate: boolean; keywords: string[];
   autoCheckUpdate: boolean;
 }
@@ -116,7 +117,8 @@ function ReviewStorage() {
   const [ask, setAsk] = useState<null | 'old' | 'all'>(null);
   const [msg, setMsg] = useState('');
   const load = () => api.reviewUsage?.().then(setU).catch(() => setU(null));
-  useEffect(() => { load(); }, []);
+  const [lib, setLibU] = useState<{ files: number; bytes: number } | null>(null);
+  useEffect(() => { load(); api.libUsage?.().then(setLibU).catch(() => {}); }, []);
   if (!api.reviewUsage) return null;
   const ix: Record<string, { updated: number }> = (() => { try { return api.reviewIndex() || {}; } catch { return {}; } })();
   const cutoff = Date.now() - 90 * DAY;
@@ -134,6 +136,7 @@ function ReviewStorage() {
         {u ? (u.count ? t('本机保存了 {n} 组比较的审阅结论，共 {s}；最早一组在 {d}。', { n: u.count, s: fmtBytes(u.bytes), d: fmtDate(u.oldest) }) : t('本机还没有保存审阅结论。')) : t('正在读取…')}
       </div>
       <small>{t('结论按两份文件的内容保存在本机应用数据目录，不会自动删除。')}</small>
+      {lib && lib.files > 0 && <small>{t('模板和往来稿存了 {n} 个文件的拷贝，共 {s}。在首页删除模板或往来稿时一起清掉。', { n: lib.files, s: fmtBytes(lib.bytes) })}</small>}
       {u && u.count > 0 && (ask ? (
         <div className="rs-ask" role="alert">
           <span>{ask === 'all' ? t('删除全部 {n} 组审阅记录？删除后不能恢复。', { n: u.count }) : t('删除 90 天前的 {n} 组审阅记录？删除后不能恢复。', { n: oldN })}</span>
@@ -193,6 +196,11 @@ export function SettingsModal({ v, set, onClose, upd, initialTab = 'general' }: 
                 <small>{t('Word 里的修订记的是“谁改了文字”，也就是对方。导出时还可以针对每份文件单独修改。')}</small>
               </div>
               <Opt label={t('接受的修订也加批注')} hint={t('关掉后，只有拒绝和待议带批注')}><Switch on={v.commentAccepted} onChange={(x) => set('commentAccepted', x)} label={t('接受的修订也加批注')} /></Opt>
+              <div className="field-row">
+                <div className="field grow"><label htmlFor="rv-draft">{t('审阅稿文件名')}</label><input id="rv-draft" value={v.draftName} placeholder={t('{name}-我方意见')} onChange={(e) => set('draftName', e.target.value)} /></div>
+                <div className="field grow"><label htmlFor="rv-final">{t('定稿文件名')}</label><input id="rv-final" value={v.finalName} placeholder={t('{name}-定稿')} onChange={(e) => set('finalName', e.target.value)} /></div>
+              </div>
+              <small className="set-hint">{t('{name} 会换成对方文件的名字。审阅稿会发回给对方，名字里别带只给自己看的字。')}</small>
               <ReviewStorage />
             </>
           )}

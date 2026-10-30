@@ -1,10 +1,10 @@
 # 更新机制
 
-DocDiff 的更新分两个阶段。1.6.0 实现了阶段 0，阶段 1 的前提是代码签名。
+DocDiff 的更新分两个阶段。1.5.0 实现了阶段 0，阶段 1 的前提是代码签名。
 
 ---
 
-## 阶段 0（1.6.0 已实现）：只检查，不安装
+## 阶段 0（1.5.0 已实现）：只检查，不安装
 
 应用向一个静态 JSON 发一次普通 GET，比较版本号，发现新版就在设置里显示更新日志，
 点「打开下载页」用系统浏览器去下载。**不需要任何证书。**
@@ -17,27 +17,27 @@ DocDiff 的更新分两个阶段。1.6.0 实现了阶段 0，阶段 1 的前提�
 |---|---|
 | 环境变量 `DOCDIFF_UPDATE_FEED` | 调试、CI |
 | 用户数据目录里的 `update-feed.txt`（单行 URL） | 给个别用户临时改地址 |
-| `electron/main.cjs` 里的 `UPDATE_FEED` 默认值 | 正式发布。默认值为 `https://evonotevil.github.io/DocDiff/updates/latest.json`，由本仓库的 GitHub Pages 发布 |
+| `electron/main.cjs` 里的 `UPDATE_FEED` 默认值 | 正式发布。**目前是占位值 `https://docdiff.app/updates/latest.json`，发版前必须改成真实地址** |
 
 用户数据目录：macOS `~/Library/Application Support/DocDiff/`，Windows `%APPDATA%\DocDiff\`。
 
-**2. 把这个 JSON 写入 `docs/updates/latest.json` 并推送到 `main`**（GitHub Pages 工作流会自动发布）：
+**2. 把这个 JSON 传到静态托管上**（对象存储即可，OSS / COS / R2 / S3 都行）：
 
 ```json
 {
   "version": "1.6.0",
-  "pubDate": "2026-10-09",
-  "notes": "· 应用内检查更新（设置 ›「关于与更新」）\n· 纯文本 / OCR 视图首次进入从 34.6 秒降到 1.7 秒\n· 差异地图在纯文本 / 修订审阅模式下恢复显示\n· 大文档比对改为后台进行，可取消\n· 两份文档差异过大时，明确提示段落对齐已简化\n· 一段换一段时左右配对，不再拆成删除 + 新增",
+  "pubDate": "2026-11-02",
+  "notes": "· 修复了 Windows 下折叠卡顿\n· 纯文本模式大文档快了 40 倍",
   "downloads": {
-    "mac-arm64": "https://github.com/evonotevil/DocDiff/releases/download/v1.6.0/DocDiff-1.6.0-mac-arm64.dmg",
-    "mac-x64": "https://github.com/evonotevil/DocDiff/releases/download/v1.6.0/DocDiff-1.6.0-mac-x64.dmg",
-    "win-exe": "https://github.com/evonotevil/DocDiff/releases/download/v1.6.0/DocDiff-Setup-1.6.0.exe",
-    "page": "https://github.com/evonotevil/DocDiff/releases/tag/v1.6.0"
+    "mac-arm64": "https://.../DocDiff-1.6.0-mac-arm64.dmg",
+    "mac-x64":   "https://.../DocDiff-1.6.0-mac-x64.dmg",
+    "win-exe":   "https://.../DocDiff-Setup-1.6.0.exe",
+    "page":      "https://.../download"
   }
 }
 ```
 
-- `version` 必填，按点分段比较数字（所以 `1.6.0` > `1.4.10`，不是字符串比较）。
+- `version` 必填，按点分段比较数字（所以 `1.5.0` > `1.4.10`，不是字符串比较）。
 - `notes` 原样显示，支持换行，超过 4000 字会被截断。
 - `downloads` 按当前平台取 `mac-arm64` / `mac-x64` / `win-exe`，取不到就退回 `page`。
 - 下载链接**必须是 https**：`open-url` 这个 IPC 只放行 https，免得被当成任意协议的跳板。

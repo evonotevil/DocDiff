@@ -8,7 +8,9 @@ export type Verdict = 'a' | 'r' | 'h'; // 接受 / 拒绝 / 待议
 export interface Dec { v?: Verdict; by: string; at: number; note?: string }
 export type DecMap = Record<number, Dec>;
 
-interface Stored { updated: number; total: number; decided: number; recs: Record<string, Dec> }
+/** 审阅稿（1.8）：写在哪、我们上次写完时的修改时间和大小（用来判断有没有被别人改过） */
+export interface DraftMeta { path: string; dir?: string; stat?: { mtime: number; size: number }; at: number }
+interface Stored { updated: number; total: number; decided: number; recs: Record<string, Dec>; draft?: DraftMeta }
 const LEGACY_KEY = 'reviews-v1';
 const api = (window as any).api || {};
 
@@ -72,7 +74,8 @@ export function loadDecisions(pk: string, changes: Change[]): { map: DecMap; los
 /** 保存：当前结果里的决定覆盖同指纹的旧记录；当前结果里没有的旧记录原样保留（改回设置后还能认回来） */
 export function saveDecisions(pk: string, changes: Change[], map: DecMap) {
   if (!pk || !changes.length) return;
-  const prev = readOne(pk)?.recs || {};
+  const old = readOne(pk);
+  const prev = old?.recs || {};
   const fps = changeFingerprints(changes);
   const recs: Record<string, Dec> = { ...prev };
   for (const c of changes) {
@@ -81,7 +84,23 @@ export function saveDecisions(pk: string, changes: Change[], map: DecMap) {
     if (d && (d.v || d.note)) recs[fp] = d; else delete recs[fp];
   }
   const decided = changes.filter((c) => map[c.id]?.v).length;
-  writeOne(pk, Object.keys(recs).length ? { updated: Date.now(), total: changes.length, decided, recs } : null);
+  const draft = draftCache.has(pk) ? draftCache.get(pk) || undefined : old?.draft;
+  writeOne(pk, Object.keys(recs).length || draft ? { updated: Date.now(), total: changes.length, decided, recs, ...(draft ? { draft } : {}) } : null);
+}
+
+const draftCache = new Map<string, DraftMeta | null>();
+export function getDraftMeta(pk: string): DraftMeta | null {
+  if (!pk) return null;
+  if (!draftCache.has(pk)) draftCache.set(pk, readOne(pk)?.draft || null);
+  return draftCache.get(pk) || null;
+}
+export function setDraftMeta(pk: string, draft: DraftMeta | null) {
+  if (!pk) return;
+  draftCache.set(pk, draft);
+  const st = readOne(pk) || { updated: Date.now(), total: 0, decided: 0, recs: {} };
+  const next: Stored = { ...st, updated: Date.now() };
+  if (draft) next.draft = draft; else delete next.draft;
+  writeOne(pk, next);
 }
 
 /** “最近比较”里显示的审阅进度 */

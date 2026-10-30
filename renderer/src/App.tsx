@@ -33,6 +33,13 @@ import { ImageView, ImgMode, useImagePages } from './views/ImageView';
 import { DetailsView } from './views/DetailsView';
 import { noteText, riskTag } from './lib/describe';
 import { useDiff } from './lib/useDiff';
+import { buildPlan } from './lib/draft/plan';
+import { DraftSync, type DraftState } from './lib/draft/client';
+import { DraftChip } from './components/DraftChip';
+import { TemplatesCard, TemplateCompareDialog, MatchNotice } from './components/Library';
+import { ThreadsCard, VersionChip, AddVersionDialog, HintLine, ClauseHistory } from './components/Thread';
+import { hintsFor, clauseHistory } from './lib/hints';
+import { type Library, type Template, type TplVersion, type Thread, type ThreadVersion, type Side as LibSide, type Round, EMPTY_LIB, loadLibrary, loadRounds, saveLibrary, putFile, readVersion, fingerprint, pick, versionLabel, stemOf, live, uid, UNDO_MS } from './lib/library';
 
 const api = (window as any).api;
 type Side = 0 | 1;
@@ -59,6 +66,8 @@ interface Prefs {
   authorName: string; commentAccepted: boolean;
   riskMoney: boolean; riskDate: boolean; keywords: string[];
   paperFollowTheme: boolean; celebrate: boolean;
+  // 1.8：审阅稿、定稿的文件名，{name} = 对方文件名
+  draftName: string; finalName: string;
 }
 const sysUser = (() => { try { return String(api.userName?.() || ''); } catch { return ''; } })();
 const DEFAULT_PREFS: Prefs = {
@@ -71,6 +80,7 @@ const DEFAULT_PREFS: Prefs = {
   authorName: '', commentAccepted: true,
   riskMoney: true, riskDate: true, keywords: DEFAULT_KEYWORDS,
   paperFollowTheme: false, celebrate: false,
+  draftName: '', finalName: '',
 };
 function loadPrefs(): Prefs {
   try { const v = getSetting('prefs-v2'); return { ...DEFAULT_PREFS, ...(typeof v === 'string' ? JSON.parse(v) : v || {}) }; } catch { return DEFAULT_PREFS; }
@@ -371,6 +381,159 @@ export default function App() {
     if (fs.length >= 2) { loadFile(0, fs[0]); loadFile(1, fs[1]); return; }
     loadFile(side, fs[0]);
   }, [loadFile]);
+  // ---------- 模板（1.8） ----------
+  const [lib, setLib] = useState<Library>(EMPTY_LIB);
+  const libRef = useRef(lib); libRef.current = lib;
+  const [libBusy, setLibBusy] = useState(false);
+  const [tplDlg, setTplDlg] = useState<string | null>(null);
+  const [matchOff, setMatchOff] = useState<string>('');
+  useEffect(() => { if (!compared) loadLibrary().then(setLib); }, [compared]);
+  // ---------- 往来稿（1.8 M3） ----------
+  const [thread, setThread] = useState<{ id: string; a: string; b: string } | null>(null);
+  const [addVer, setAddVer] = useState<{ id: string; f: FileInfo | null } | null>(null);
+  const [pendingSave, setPendingSave] = useState(false);
+  const activeTh = thread ? lib.threads.find((x) => x.id === thread.id && !x.deleted) || null : null;
+  const loadPair = async (va: { file: any; orig?: string }, vb: { file: any; orig?: string } | FileInfo, bIsFile = false) => {
+    const fa = await readVersion(va);
+    const fb = bIsFile ? (vb as FileInfo) : await readVersion(vb as any);
+    if (!fa || !fb) { flash(t('往来稿里的文件不见了')); return false; }
+    await Promise.all([loadFile(0, fa), loadFile(1, fb)]);
+    return true;
+  };
+  const openThread = async (th: Thread, a?: ThreadVersion, b?: ThreadVersion) => {
+    const vs = th.versions;
+    const vb = b || vs[vs.length - 1], va = a || vs[vs.indexOf(vb) - 1];
+    if (!va || !vb) { flash(t('这份往来稿只有一版，加入新版本后才能比较')); return; }
+    setThread(null);
+    if (!(await loadPair(va, vb))) return;
+    setThread({ id: th.id, a: va.id, b: vb.id });
+    setCompared(true); setTab(2);
+  };
+  const updThread = (id: string, f: (th: Thread) => Thread) => commitLib({ ...libRef.current, threads: libRef.current.threads.map((x) => (x.id === id ? f(x) : x)) });
+  /** 把当前的一对文件存成往来稿：原始 = V1（我方），修改后 = V2（对方） */
+  const saveAsThread = async (tplRef?: { tid: string; v: TplVersion }) => {
+    if (!A || !B) return;
+    // 这一对已经在某份往来稿里：直接进入，不重复建
+    for (const th of live(libRef.current.threads)) {
+      const va = th.versions.find((v) => v.file.sha === A.sha256), vb = th.versions.find((v) => v.file.sha === B.sha256);
+      if (va && vb && th.versions.indexOf(va) < th.versions.indexOf(vb)) { setThread({ id: th.id, a: va.id, b: vb.id }); if (!tplRef) flash(t('这两份已经在往来稿「{n}」里了', { n: th.name })); return; }
+    }
+    try {
+      const now = Date.now();
+      const v1: ThreadVersion = tplRef
+        ? { id: uid(), n: 1, side: 'ours', added: now, file: tplRef.v.file, fp: tplRef.v.fp, orig: tplRef.v.orig, tpl: { tid: tplRef.tid, vid: tplRef.v.id } }
+        : { id: uid(), n: 1, side: 'ours', added: now, file: (A.file as any).lib ? { sha: A.sha256!, ext: A.file.ext, size: A.file.size, name: A.file.name, mtime: A.file.mtime } : await putFile(A.file.path), fp: fingerprint(A), orig: (A.file as any).lib ? undefined : A.file.path };
+      const v2: ThreadVersion = { id: uid(), n: 2, side: 'theirs', added: now, file: (B.file as any).lib ? { sha: B.sha256!, ext: B.file.ext, size: B.file.size, name: B.file.name, mtime: B.file.mtime } : await putFile(B.file.path), fp: fingerprint(B), orig: (B.file as any).lib ? undefined : B.file.path };
+      const th: Thread = { id: uid(), name: stemOf(B.file.name), created: now, updated: now, versions: [v1, v2], rounds: [], tpl: tplRef ? { tid: tplRef.tid, vid: tplRef.v.id } : undefined };
+      await commitLib({ ...libRef.current, threads: [...libRef.current.threads, th] });
+      setThread({ id: th.id, a: v1.id, b: v2.id });
+      if (!tplRef) flash(t('已存为往来稿「{n}」', { n: th.name }));
+    } catch (e: any) { flash(t('没能存为往来稿：{e}', { e: String(e?.message || e) })); }
+  };
+  useEffect(() => { if (pendingSave && compared && A && B && !busy[0] && !busy[1]) { setPendingSave(false); saveAsThread(); } }, [pendingSave, compared, A, B, busy]);
+  /** 加入新版本：拷进库、记指纹，然后和指定的一版比较 */
+  const addThreadVersion = async (th: Thread, f: FileInfo, side: LibSide, against: string, loaded?: DocModel) => {
+    try {
+      const d = loaded || await loadDoc(f);
+      const file = await putFile(f.path);
+      if (th.versions.some((v) => v.file.sha === file.sha)) { flash(t('这一版已经在往来稿里了')); return; }
+      const v: ThreadVersion = { id: uid(), n: (th.versions[th.versions.length - 1]?.n || 0) + 1, side, added: Date.now(), file, fp: fingerprint(d), orig: f.path };
+      const next = { ...th, updated: Date.now(), versions: [...th.versions, v] };
+      await commitLib({ ...libRef.current, threads: libRef.current.threads.map((x) => (x.id === th.id ? next : x)) });
+      const va = th.versions.find((x) => x.id === against) || th.versions[th.versions.length - 1];
+      setThread(null);
+      if (!(await loadPair(va, f, true))) return;
+      setThread({ id: th.id, a: va.id, b: v.id });
+      setCompared(true); setTab(2);
+      flash(t('已加为 V{n}', { n: v.n }));
+    } catch (e: any) { flash(String(e?.message || e)); }
+  };
+  const deleteThread = (th: Thread) => softDelete(
+    (l) => ({ ...l, threads: l.threads.map((y) => (y.id === th.id ? { ...y, deleted: Date.now() } : y)) }),
+    (l) => ({ ...l, threads: l.threads.map((y) => (y.id === th.id ? { ...y, deleted: undefined } : y)) }),
+    t('已删除往来稿「{n}」', { n: th.name }));
+  const commitLib = async (next: Library, purge = false) => {
+    setLib(next);
+    const r = await saveLibrary(next, purge);
+    if (!r.ok) flash(t('模板没能保存到本机：{e}', { e: r.error || '' }));
+  };
+  /** 选一个文件、读出段落指纹、拷进库 */
+  const pickForLibrary = async (): Promise<{ file: any; fp: number[]; f: FileInfo } | null> => {
+    const f: FileInfo | null = await api.openDialog();
+    if (!f) return null;
+    setLibBusy(true);
+    try {
+      const d = await loadDoc(f);
+      const file = await putFile(f.path);
+      return { file, fp: fingerprint(d), f };
+    } catch (e: any) {
+      flash(e instanceof NeedPassword ? t('加密的 PDF 不能存成模板') : String(e?.message || e));
+      return null;
+    } finally { setLibBusy(false); }
+  };
+  const newTemplate = async () => {
+    const x = await pickForLibrary();
+    if (!x) return;
+    const now = Date.now();
+    const tpl: Template = { id: uid(), name: stemOf(x.f.name), created: now, updated: now, versions: [{ id: uid(), label: versionLabel(x.f.mtime, []), added: now, file: x.file, fp: x.fp, orig: x.f.path }] };
+    await commitLib({ ...libRef.current, templates: [...libRef.current.templates, tpl] });
+    flash(t('已存为模板「{n}」', { n: tpl.name }));
+  };
+  const addTplVersion = async (tpl: Template) => {
+    const x = await pickForLibrary();
+    if (!x) return;
+    if (tpl.versions.some((v) => v.file.sha === x.file.sha)) { flash(t('这个版本已经在模板里了')); return; }
+    const v: TplVersion = { id: uid(), label: versionLabel(x.f.mtime, tpl.versions.map((y) => y.label)), added: Date.now(), file: x.file, fp: x.fp, orig: x.f.path };
+    await commitLib({ ...libRef.current, templates: libRef.current.templates.map((y) => (y.id === tpl.id ? { ...y, updated: Date.now(), versions: [...y.versions, v] } : y)) });
+    flash(t('已加入新版本 {v}', { v: v.label }));
+  };
+  const renameTpl = (tpl: Template, name: string) => commitLib({ ...libRef.current, templates: libRef.current.templates.map((y) => (y.id === tpl.id ? { ...y, name, updated: Date.now() } : y)) });
+  /** 删除：先做标记，10 秒内可撤销，之后真正清掉（连同库里不再用到的文件） */
+  const softDelete = (apply: (l: Library) => Library, restore: (l: Library) => Library, msg: string) => {
+    commitLib(apply(libRef.current));
+    clearTimeout(undoTimer.current);
+    setUndoToast({ msg, undo: () => { clearTimeout(undoTimer.current); setUndoToast(null); commitLib(restore(libRef.current)); flash(t('已撤销删除')); } });
+    undoTimer.current = setTimeout(() => {
+      setUndoToast(null);
+      const l = libRef.current;
+      commitLib({ ...l, templates: l.templates.filter((y) => !y.deleted), threads: l.threads.filter((y) => !y.deleted) }, true);
+    }, UNDO_MS);
+  };
+  const deleteTpl = (tpl: Template) => softDelete(
+    (l) => ({ ...l, templates: l.templates.map((y) => (y.id === tpl.id ? { ...y, deleted: Date.now() } : y)) }),
+    (l) => ({ ...l, templates: l.templates.map((y) => (y.id === tpl.id ? { ...y, deleted: undefined } : y)) }),
+    t('已删除模板「{n}」。用过它的往来稿不受影响。', { n: tpl.name }));
+  const deleteTplVersion = (tpl: Template, v: TplVersion) => {
+    const idx = tpl.versions.findIndex((x) => x.id === v.id);
+    softDelete(
+      (l) => ({ ...l, templates: l.templates.map((y) => (y.id === tpl.id ? { ...y, versions: y.versions.filter((x) => x.id !== v.id) } : y)) }),
+      (l) => ({ ...l, templates: l.templates.map((y) => (y.id === tpl.id ? { ...y, versions: [...y.versions.slice(0, idx), v, ...y.versions.slice(idx)] } : y)) }),
+      t('已删除版本 {v}', { v: v.label }));
+  };
+  // 首页只放了对方文件：看看像哪个模板的哪一版
+  const homeMatch = useMemo(() => {
+    if (compared || A || !B || B.sha256 === matchOff) return null;
+    const fp = fingerprint(B);
+    const ths = live(lib.threads).filter((x) => !x.archived).flatMap((th) => th.versions.map((v) => ({ ...v, th })));
+    const tb = ths.length ? pick(fp, ths).best : null;
+    const vs = live(lib.templates).flatMap((tp) => tp.versions.map((v) => ({ ...v, tpl: tp })));
+    const pb = vs.length ? pick(fp, vs).best : null;
+    if (tb && (!pb || tb.score >= pb.score)) return { th: tb.item.th, tv: tb.item as ThreadVersion, score: tb.score } as any;
+    return pb ? { tpl: pb.item.tpl, v: pb.item as TplVersion, score: pb.score } : null;
+  }, [compared, A, B, lib, matchOff]);
+  const startFromTemplate = async (v: TplVersion) => {
+    setTplDlg(null);
+    const tpl = libRef.current.templates.find((x) => x.versions.some((y) => y.id === v.id));
+    const f = await readVersion(v);
+    if (!f) { flash(t('模板文件不见了')); return; }
+    setThread(null);
+    await loadFile(0, f);
+    setCompared(true); setTab(0);
+    if (tpl) setTplThread({ tid: tpl.id, v });
+  };
+  // 用模板比较的结果自动成为往来稿（等两份文件都读好）
+  const [tplThread, setTplThread] = useState<{ tid: string; v: TplVersion } | null>(null);
+  useEffect(() => { if (tplThread && compared && A && B && !busy[0] && !busy[1] && A.sha256 === tplThread.v.file.sha) { const x = tplThread; setTplThread(null); saveAsThread(x); } }, [tplThread, compared, A, B, busy]);
   const trySample = async () => {
     try {
       await Promise.all([loadFile(0, await sampleFile('示例合同_v1.docx')), loadFile(1, await sampleFile('示例合同_v2.docx'))]);
@@ -492,6 +655,7 @@ export default function App() {
   const noClauses = useMemo(() => new Map<number, string | null>(), []);
 
   // ---------- 审阅决定：载入 / 保存 / 设置变化后的迁移 ----------
+  const reviewer = prefs.reviewerName.trim() || t('审阅人');
   const pk = pairKey(A?.sha256, B?.sha256);
   const decFor = useRef<DiffResult | null>(null);
   const lastLoaded = useRef<{ pk: string; snap: string; opts: any } | null>(null);
@@ -520,7 +684,64 @@ export default function App() {
     } else setLostBanner(null);
     lastLoaded.current = { pk, snap, opts: optSnap };
   }, [richRes]);
-  useEffect(() => { if (richRes && decFor.current === richRes) saveDecisions(pk, richRes.changes, decisions); }, [decisions]);
+  useEffect(() => { if (richRes && decFor.current === richRes) { saveDecisions(pk, richRes.changes, decisions); draftSync?.update(decisions); } }, [decisions]);
+
+  // ---------- 审阅稿（1.8）：修改后文档是 Word 时，决定自动写进它旁边的一份拷贝 ----------
+  const [draftSync, setDraftSync] = useState<DraftSync | null>(null);
+  const [draftState, setDraftState] = useState<DraftState>({ s: 'none', unwritten: [], prior: 0 });
+  useEffect(() => {
+    if (!richRes || !RA || !RB || !B || B.type !== 'docx' || !B.file.path || !pk) { setDraftSync(null); setDraftState({ s: 'none', unwritten: [], prior: 0 }); return; }
+    const plan = buildPlan(richRes, RA.blocks, RB.blocks);
+    const sync = new DraftSync({
+      pk, bPath: B.file.path, bName: B.file.name, noDir: !!(B.file as any).lib, bData: B.file.data, plan,
+      reviewer, initials: prefs.reviewerInitials.trim() || initialsOf(reviewer),
+      theirs: prefs.authorName.trim() || B.meta['最后修改者'] || B.meta['作者'] || t('修改方'),
+      theirsDate: B.file.mtime || Date.now(), pattern: prefs.draftName.trim() || t('{name}-我方意见'),
+    });
+    const off = sync.subscribe(setDraftState);
+    setDraftSync(sync);
+    if (decFor.current === richRes) sync.update(decisions);
+    return () => { off(); sync.dispose(); };
+  }, [richRes, pk]);
+  useEffect(() => { if (draftSync) { draftSync.ctx.reviewer = reviewer; draftSync.ctx.pattern = prefs.draftName.trim() || t('{name}-我方意见'); draftSync.ctx.theirs = prefs.authorName.trim() || B?.meta['最后修改者'] || B?.meta['作者'] || t('修改方'); } }, [draftSync, reviewer, prefs.draftName, prefs.authorName]);
+  // 往来稿：这一轮的结论摘要存进往来稿（只存有结论或备注的处），供下一轮的“上轮”提示和条款历史使用
+  const roundTimer = useRef<any>(0);
+  useEffect(() => {
+    if (!thread || !richRes || decFor.current !== richRes) return;
+    clearTimeout(roundTimer.current);
+    roundTimer.current = setTimeout(() => {
+      const items = richRes.changes.filter((c) => decisions[c.id]?.v || decisions[c.id]?.note)
+        .map((c) => ({ clause: clauses.get(c.id) ?? null, before: c.before.slice(0, 300), after: c.after.slice(0, 300), v: decisions[c.id]?.v, note: decisions[c.id]?.note }));
+      const r: Round = { a: thread.a, b: thread.b, pk, total: richRes.changes.length, decided: richRes.changes.filter((c) => decisions[c.id]?.v).length, updated: Date.now(), items };
+      const th = libRef.current.threads.find((x) => x.id === thread.id);
+      if (!th) return;
+      const old = th.rounds.find((x) => x.a === r.a && x.b === r.b);
+      if (old && old.decided === r.decided && JSON.stringify(old.items) === JSON.stringify(r.items)) return;
+      updThread(th.id, (x) => ({ ...x, updated: Date.now(), rounds: [...x.rounds.filter((y) => !(y.a === r.a && y.b === r.b)), r] }));
+    }, 600);
+  }, [decisions, thread, richRes]);
+  // 打开往来稿时把各轮的结论摘要读进来（首页只读索引，不带这些）
+  useEffect(() => {
+    if (!thread) return;
+    const id = thread.id;
+    loadRounds(id).then((rs) => {
+      if (!rs.length) return;
+      setLib((l) => ({ ...l, threads: l.threads.map((x) => (x.id !== id ? x : { ...x, rounds: x.rounds.map((r) => (r.items ? r : { ...r, items: rs.find((y) => y.a === r.a && y.b === r.b)?.items || [] })) })) }));
+    });
+  }, [thread?.id]);
+  const hints = useMemo(() => (activeTh && thread && richRes ? hintsFor(richRes.changes, clauses, activeTh, thread.b) : new Map()), [activeTh, thread, richRes, clauses]);
+  // 绑定的往来稿和当前文件对不上了（换了文件）：退出往来稿模式
+  useEffect(() => {
+    if (!thread || busy[0] || busy[1] || !A || !B) return;
+    const th = libRef.current.threads.find((x) => x.id === thread.id);
+    const va = th?.versions.find((v) => v.id === thread.a), vb = th?.versions.find((v) => v.id === thread.b);
+    if (!th || va?.file.sha !== A.sha256 || vb?.file.sha !== B.sha256) setThread(null);
+  }, [A?.sha256, B?.sha256]);
+  useEffect(() => {
+    const onFocus = () => draftSync?.check();
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [draftSync]);
 
   useEffect(() => setDismissDegraded(false), [docSig, optKey]);
   useEffect(() => setSelCid(null), [tab, richRes, plainRes, ocrRes]);
@@ -552,7 +773,6 @@ export default function App() {
     return shown.slice(idx + 1).find((c) => !dec[c.id]?.v) || shown.find((c) => !dec[c.id]?.v);
   };
   useEffect(() => { if (tab === 2 && selCid == null && shown.length) setSelCid((nextUndecided(null, decisions) || shown[0]).id); }, [tab, shown, selCid]);
-  const reviewer = prefs.reviewerName.trim() || t('审阅人');
   const mkDec = (v: Verdict | undefined, prev?: Dec): Dec => ({ v, by: v ? reviewer : prev?.by || reviewer, at: Date.now(), note: prev?.note });
   const decide = (cid: number | null, v: Verdict | null) => {
     // 撤销：当前这处还没决定时，撤销最近一次决定并跳回那一处（刚按完 A/R 会自动跳到下一处）
@@ -610,6 +830,19 @@ export default function App() {
     const overwrite = withV.filter((c) => decisions[c.id]!.v !== kind).length;
     const same = withV.length - overwrite;
     return { total: changes.length, overwrite, clear: 0, same };
+  };
+  // 沿用上轮结论（往来稿）：只针对“对方又改回来”和“一模一样的修改”，只改还没决定的处
+  const [reuseAsk, setReuseAsk] = useState(false);
+  const reusable = useMemo(() => (tab === 2 ? changes.filter((c) => !decisions[c.id]?.v && hints.get(c.id)?.reuse).map((c) => ({ c, h: hints.get(c.id)! })) : []), [tab, changes, decisions, hints]);
+  const applyReuse = () => {
+    const snap = { decisions, order: decideOrder.current.slice(), sel: selCid };
+    const next = { ...decisions };
+    for (const { c, h } of reusable) next[c.id] = { ...mkDec(h.reuse, decisions[c.id]), note: decisions[c.id]?.note };
+    setDecisions(next);
+    setReuseAsk(false);
+    clearTimeout(undoTimer.current);
+    setUndoToast({ msg: t('已沿用上轮结论（{n} 处）', { n: reusable.length }), undo: () => { clearTimeout(undoTimer.current); decideOrder.current = snap.order; setDecisions(snap.decisions); setSelCid(snap.sel); setUndoToast(null); flash(t('已撤销，结论恢复到操作前')); } });
+    undoTimer.current = setTimeout(() => setUndoToast(null), 10000);
   };
   const runBulk = (kind: 'a' | 'r' | 'reset') => {
     const snap = { decisions, order: decideOrder.current.slice(), sel: selCid };
@@ -736,8 +969,8 @@ export default function App() {
   // ---------- 菜单 & 键盘 ----------
   const canCompare = !!(A && B) && !busy[0] && !busy[1];
   const startCompare = () => { if (canCompare) { setCompared(true); setTab(0); setChangedSides([]); } };
-  const clearAll = () => { clearPageCaches(); setDocs([null, null]); setCompared(false); setErrs([null, null]); ocrRun.current++; setOcr({ status: 'idle' }); setChangedSides([]); setLostBanner(null); lastLoaded.current = null; };
-  const swap = () => { setDocs(([a, b]) => [b, a]); ocrRun.current++; setOcr({ status: 'idle' }); };
+  const clearAll = () => { clearPageCaches(); setThread(null); setDocs([null, null]); setCompared(false); setErrs([null, null]); ocrRun.current++; setOcr({ status: 'idle' }); setChangedSides([]); setLostBanner(null); lastLoaded.current = null; };
+  const swap = () => { setThread(null); setDocs(([a, b]) => [b, a]); ocrRun.current++; setOcr({ status: 'idle' }); };
   const actions = useRef<any>({});
   actions.current = { open, swap, clearAll, go, decide, setTab, startCompare, toggleNav, toggleAside, compared, tab, selCid, undoBulk: undoToast?.undo, modal: !!(pwd || pasteSide !== null || showSettings || exportOpen || pop || bulkAsk) };
   useEffect(() => api.onMenu((cmd: string, arg?: any) => {
@@ -779,6 +1012,7 @@ export default function App() {
   const settingsValues: SettingsValues = {
     lang, theme, paperFollowTheme: prefs.paperFollowTheme, sound: prefs.sound, celebrate: prefs.celebrate,
     reviewerName: prefs.reviewerName, reviewerInitials: prefs.reviewerInitials, authorName: prefs.authorName, commentAccepted: prefs.commentAccepted,
+    draftName: prefs.draftName, finalName: prefs.finalName,
     riskMoney: prefs.riskMoney, riskDate: prefs.riskDate, keywords: prefs.keywords, autoCheckUpdate: prefs.autoCheckUpdate,
   };
   const setSetting = <K extends keyof SettingsValues>(k: K, v: SettingsValues[K]) => {
@@ -844,6 +1078,7 @@ export default function App() {
       setCompared(true); setTab(0);
     };
     const missing = 2 - (A ? 1 : 0) - (B ? 1 : 0);
+    const tplOpen = tplDlg ? lib.templates.find((y) => y.id === tplDlg && !y.deleted) : null;
     return (
       <div className="app home">
         <div className="home-top drag">
@@ -870,6 +1105,21 @@ export default function App() {
               <div className="vs"><button className="vs-chip" title={t('交换左右')} aria-label={t('交换左右')} onClick={swap}><I.IconSwap /></button></div>
               <DropZone side={1} doc={B} loading={busy[1]} error={errs[1]} onOpen={() => open(1)} onFiles={(f) => onFiles(1, f)} onClear={() => setDocs((d) => [d[0], null])} onPaste={() => setPasteSide(1)} />
             </div>
+            {homeMatch?.th && B && (
+              <MatchNotice title={t('这份文件很像往来稿「{n}」的新一版', { n: homeMatch.th.name })}
+                body={t('和 V{k} 相同段落 {p}。加为 V{m} 后默认和上一版 V{l} 比较，上一轮的结论会作为参考显示。', { k: homeMatch.tv.n, p: `${Math.round(homeMatch.score * 100)}%`, m: homeMatch.th.versions[homeMatch.th.versions.length - 1].n + 1, l: homeMatch.th.versions[homeMatch.th.versions.length - 1].n })}
+                action={t('加为 V{n}', { n: homeMatch.th.versions[homeMatch.th.versions.length - 1].n + 1 })}
+                onUse={() => addThreadVersion(homeMatch.th, B.file, 'theirs', homeMatch.th.versions[homeMatch.th.versions.length - 1].id, B)} onDismiss={() => setMatchOff(B?.sha256 || '')} />
+            )}
+            {homeMatch?.tpl && (
+              <MatchNotice title={t('这份文件很像模板「{n}」的 {v}', { n: homeMatch.tpl.name, v: homeMatch.v.label })}
+                body={t('相同段落 {p}。用模板比较时，原始文档会自动用对方拿到的那一版。', { p: `${Math.round(homeMatch.score * 100)}%` })}
+                action={t('用模板比较')} onUse={() => setTplDlg(homeMatch.tpl.id)} onDismiss={() => setMatchOff(B?.sha256 || '')} />
+            )}
+            <div className="lib-cols">
+            <div className="lib-col">
+            <ThreadsCard threads={live(lib.threads)} onOpen={(th) => openThread(th)} onRename={(th, name) => updThread(th.id, (x) => ({ ...x, name, updated: Date.now() }))}
+              onArchive={(th, on) => updThread(th.id, (x) => ({ ...x, archived: on ? Date.now() : undefined }))} onDelete={deleteThread} />
             {recent.length > 0 && (
               <div className="recent">
                 <h2>{t('最近比较')}<span className="grow" />
@@ -883,6 +1133,7 @@ export default function App() {
                         <div className="row"><span className={`badge ${r.a.ext}`}>{r.a.ext.toUpperCase()}</span><span className="name" title={r.a.name}>{midEllipsis(r.a.name)}</span></div>
                         <div className="row"><span className={`badge ${r.b.ext}`}>{r.b.ext.toUpperCase()}</span><span className="name" title={r.b.name}>{midEllipsis(r.b.name)}</span></div>
                         <div className="time">{timeAgo(r.time)}{prog && <><span className="mini-prog" aria-hidden="true"><i style={{ width: `${prog.total ? (prog.decided / prog.total) * 100 : 0}%` }} /></span><span className={`tag ${prog.decided >= prog.total ? 'brand' : 'hold'}`}>{prog.decided >= prog.total ? t('已审完') : t('已审 {d}/{n}', { d: prog.decided, n: prog.total })}</span></>}</div>
+                        <button className="btn sm plain save-th" onClick={(e) => { e.stopPropagation(); setPendingSave(true); openRecent(r); }} title={t('把这两份存成往来稿：原始 = V1（我方），修改后 = V2（对方）')}>{t('存为往来稿')}</button>
                         <button className="btn sm icon x" title={t('从列表移除')} aria-label={t('从列表移除')} onClick={(e) => { e.stopPropagation(); api.recentRemove(i).then(setRecent); }}><I.IconX /></button>
                       </div>
                     );
@@ -890,6 +1141,12 @@ export default function App() {
                 </div>
               </div>
             )}
+            </div>
+            <div className="lib-col">
+              <TemplatesCard lib={lib} threadCount={(tid) => live(lib.threads).filter((x) => x.tpl?.tid === tid).length} busy={libBusy} onUse={(tp) => setTplDlg(tp.id)} onNew={newTemplate} onAddVersion={addTplVersion}
+                onRename={renameTpl} onDelete={deleteTpl} onDeleteVersion={deleteTplVersion} />
+            </div>
+            </div>
           </div>
         </div>
         <div className="home-cta">
@@ -897,6 +1154,7 @@ export default function App() {
             ? <><span className="hint">{t('也可以直接按')} <Kbd>Enter</Kbd></span><button className="btn primary big" onClick={startCompare}>{t('开始比较')}</button></>
             : <><span className="hint">{busy[0] || busy[1] ? t('正在读取文档…') : t('还差 {n} 个文档', { n: missing })}</span><button className="btn primary big" disabled>{t('开始比较')}</button></>}
         </div>
+        {tplOpen && <TemplateCompareDialog tpl={tplOpen} B={B} bBusy={busy[1]} onPickB={() => open(1)} onStart={startFromTemplate} onClose={() => setTplDlg(null)} />}
         {modals}
       </div>
     );
@@ -1082,6 +1340,9 @@ export default function App() {
             {[...ocr.conf[0], ...ocr.conf[1]].some((c) => c >= 0 && c < 80) && <div className="insp-note">{t('有页面识别把握不高，结果仅供参考。虚线标出的是没认准的字。')}</div>}
           </div>
         )}
+        {tab === 2 && activeTh && thread && cur && clauses.get(cur.id) && (
+          <ClauseHistory clause={clauses.get(cur.id)!} items={clauseHistory(activeTh, clauses.get(cur.id)!, thread.b)} th={activeTh} />
+        )}
         {isRichTab && scope && (
           <div className="insp-foot">
             <span className="k">{t('比较范围')}</span>
@@ -1128,11 +1389,18 @@ export default function App() {
         </div>
       </nav>
 
-      <header className="tbar drag">
+      <header className={`tbar drag${draftState.s !== 'none' && isRichTab ? ' has-draft' : ''}`}>
         {!navOpen && <button type="button" className="ibtn tb-nav" onClick={toggleNav} title={toggleTitle(false, '侧栏', navKey)} aria-label={t('展开侧栏')} aria-expanded={false}><I.IconPanelLeft /></button>}
+        {activeTh && thread ? (
+          <VersionChip th={activeTh} a={thread.a} b={thread.b} tpl={activeTh.tpl ? lib.templates.find((x) => x.id === activeTh.tpl!.tid) : null}
+            progress={(v) => { const r = activeTh.rounds.find((x) => x.b === v.id); return r ? (r.decided >= r.total ? t('已审完') : t('已审 {d} / {n}', { d: r.decided, n: r.total })) : t('未审'); }}
+            onPick={(a, b) => openThread(activeTh, a, b)} onAdd={() => setAddVer({ id: activeTh.id, f: null })}
+            onRename={(name) => updThread(activeTh.id, (x) => ({ ...x, name, updated: Date.now() }))} />
+        ) : (<>
         <FilePill side={0} doc={A} onOpen={() => open(0)} onFiles={(f) => onFiles(0, f)} changed={changedSides.includes(0)} />
         <button type="button" className="ibtn" title={t('交换左右（{k}）', { k: kbd('mod+shift+S') })} aria-label={t('交换左右')} onClick={swap}><I.IconSwap /></button>
         <FilePill side={1} doc={B} onOpen={() => open(1)} onFiles={(f) => onFiles(1, f)} changed={changedSides.includes(1)} />
+        </>)}
         {(busy[0] || busy[1]) && <div className="spinner sm" />}
         <div className="tb-mid">
           {tab === 2 && changes.length > 0 ? (
@@ -1150,6 +1418,11 @@ export default function App() {
         </div>
         {tab !== 5 && <button ref={gearRef} type="button" className="ibtn" onClick={() => setPop(pop === 'settings' ? null : 'settings')} title={t('比较设置')} aria-label={t('比较设置')} aria-expanded={pop === 'settings'}><I.IconGear /></button>}
         {curRes && <button type="button" className="btn tb-copy" onClick={copySummary} title={t('复制为 Markdown，可粘贴到邮件 / 飞书 / 文档')} aria-label={t('复制摘要')}><I.IconCopy /><span className="lbl">{t('复制摘要')}</span></button>}
+        {richRes && isRichTab && draftSync && draftState.s !== 'none' && B && (
+          <DraftChip state={draftState} sync={draftSync} bPath={B.file.path} narrow={narrow} decided={richRes.changes.filter((c) => decisions[c.id]?.v).length}
+            pending={richRes.changes.filter((c) => !decisions[c.id]?.v || decisions[c.id]?.v === 'h').length} finalPattern={prefs.finalName.trim() || t('{name}-定稿')}
+            onJump={(cid) => { setTab(2); setFilter('all'); setSelCid(cid); }} flash={flash} />
+        )}
         {richRes && isRichTab && <button type="button" className={`btn ${tab === 2 ? '' : 'primary'}`} onClick={openExport}><I.IconExport />{t('导出')}</button>}
         {hasInsp && <button type="button" className="ibtn" onClick={toggleAside} title={toggleTitle(inspOpen, '检查器', inspKey)} aria-label={t(inspOpen ? '收起检查器' : '展开检查器')} aria-expanded={inspOpen}><I.IconPanelRight /></button>}
       </header>
@@ -1244,6 +1517,7 @@ export default function App() {
                 </span>
               ) : <span className="rb-where">{t('点文中任意一处修订开始审阅')}</span>}
               {cur && <div className="rb-diff">{cur.kind === 'mod' ? <><del>{short(cur.before, 60)}</del><span className="arrow">→</span><ins>{short(cur.after, 60)}</ins></> : cur.kind === 'ins' ? <ins>{short(cur.after, 120)}</ins> : cur.kind === 'del' ? <del>{short(cur.before, 120)}</del> : cur.kind === 'fmt' ? <>{short(cur.before, 60)}<em>（{noteText(cur)}）</em></> : <>{short(cur.before, 100)}<em>（{t('整段移动')}）</em></>}</div>}
+              {cur && activeTh && hints.get(cur.id) && <HintLine hint={hints.get(cur.id)!} th={activeTh} onReuse={(v) => decide(cur.id, v)} />}
               <label className="rb-note">
                 <input id="note-input" ref={noteRef} disabled={!cur} value={cur ? decisions[cur.id]?.note || '' : ''} placeholder={t('备注（可选），会写进 Word 批注')}
                   onChange={(e) => cur && setNote(cur.id, e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') (e.target as HTMLInputElement).blur(); }} aria-label={t('备注')} />
@@ -1286,7 +1560,24 @@ export default function App() {
         <MenuItem icon={<I.IconCheck />} onClick={() => { closePop(); setBulkAsk('a'); }}>{t('全部接受…')}</MenuItem>
         <MenuItem icon={<I.IconX />} tone="danger" onClick={() => { closePop(); setBulkAsk('r'); }}>{t('全部拒绝…')}</MenuItem>
         {decidedCount > 0 && <MenuItem icon={<I.IconRefresh />} onClick={() => { closePop(); setBulkAsk('reset'); }}>{t('重置所有决定…')}</MenuItem>}
+        {reusable.length > 0 && <MenuItem icon={<I.IconClock />} onClick={() => { closePop(); setReuseAsk(true); }}>{t('沿用上轮结论…（{n} 处）', { n: reusable.length })}</MenuItem>}
+        {!activeTh && A && B && A.file.path && B.file.path && <MenuItem icon={<I.IconPlusDoc />} onClick={() => { closePop(); saveAsThread(); }}>{t('存为往来稿')}</MenuItem>}
       </Popover>
+      {reuseAsk && (
+        <Modal title={t('沿用上轮结论')} onClose={() => setReuseAsk(false)}
+          footer={<><button type="button" className="btn" onClick={() => setReuseAsk(false)}>{t('取消')}</button><button type="button" className="btn primary" onClick={applyReuse}>{t('沿用 {n} 处', { n: reusable.length })}</button></>}>
+          <ul className="bulk-lines">
+            {reusable.filter((x) => x.h.kind === 'reverted').length > 0 && <li>{t('{n} 处是你上轮拒绝、对方又改回来的：沿用“拒绝”', { n: reusable.filter((x) => x.h.kind === 'reverted').length })}</li>}
+            {reusable.filter((x) => x.h.kind === 'repeat').length > 0 && <li>{t('{n} 处和上轮的修改一模一样：沿用上轮的结论', { n: reusable.filter((x) => x.h.kind === 'repeat').length })}</li>}
+            <li>{t('只改还没有结论的处；已经决定过的不动。')}</li>
+          </ul>
+          <p className="bulk-note">{t('做完 10 秒内可以撤销，回到操作前的全部结论。')}</p>
+        </Modal>
+      )}
+      {addVer && (() => { const th = lib.threads.find((x) => x.id === addVer.id); return th ? (
+        <AddVersionDialog th={th} file={addVer.f} busy={libBusy} onClose={() => setAddVer(null)}
+          onPick={async () => { const f: FileInfo | null = await api.openDialog(); if (f) setAddVer({ id: th.id, f }); }}
+          onDone={(side, against) => { const f = addVer.f!; setAddVer(null); addThreadVersion(th, f, side, against); }} />) : null; })()}
       {modals}
     </div>
   );

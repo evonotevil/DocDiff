@@ -49,6 +49,8 @@ const PLATFORM = {
 const { createStore, createReviewStore } = require('./persist.cjs');
 const store = createStore(() => app.getPath('userData'));
 const reviews = createReviewStore(store);
+const { createLibrary } = require('./library.cjs');
+const library = createLibrary(store);
 /** 写失败时通知界面（非阻塞警告）；成功时也通知，界面据此收起警告 */
 function reportPersist(kind, err) {
   try { if (mainWin && !mainWin.isDestroyed()) mainWin.webContents.send('persist-status', { kind, ok: !err, error: err ? String(err.message || err) : '' }); } catch {}
@@ -187,7 +189,7 @@ ipcMain.handle('chrome-info', () => ({ chrome: useOverlay ? 'overlay' : 'system'
 // electron-updater（配置方式见 docs/UPDATE.md）。
 const UPDATE_FEED = process.env.DOCDIFF_UPDATE_FEED
   || (() => { try { return fs.readFileSync(path.join(app.getPath('userData'), 'update-feed.txt'), 'utf8').trim(); } catch { return ''; } })()
-  || 'https://evonotevil.github.io/DocDiff/updates/latest.json';
+  || 'https://docdiff.app/updates/latest.json';
 
 /** 1.5.0 > 1.4.10：按段比较数字，不做字符串比较 */
 function cmpVer(a, b) {
@@ -332,6 +334,54 @@ ipcMain.on('notify', (_e, { title, body }) => {
 ipcMain.on('copy-text', (_e, t) => clipboard.writeText(t));
 
 ipcMain.handle('reveal', (_e, p) => shell.showItemInFolder(p));
+
+// ---------- 审阅稿（1.8）：写在对方文件旁边，先写临时文件再改名；绝不覆盖别人改过的文件 ----------
+const draftStat = (p) => { try { const s = fs.statSync(p); return { mtime: s.mtimeMs, size: s.size }; } catch { return null; } };
+// Word 打开文件时在同一目录放一个 “~$” 开头的占用文件（名字长时替换前两个字符）
+function wordLock(p) {
+  const dir = path.dirname(p), base = path.basename(p);
+  const cands = ['~$' + base, '~$' + base.slice(2), '~$' + base.slice(1)];
+  return cands.some((c) => { try { return fs.existsSync(path.join(dir, c)); } catch { return false; } });
+}
+ipcMain.handle('draft-stat', (_e, p) => (p ? { stat: draftStat(p), locked: wordLock(p) } : null));
+ipcMain.handle('draft-save', async (_e, { path: p, data, expect }) => {
+  if (!p || !/\.docx$/i.test(p)) return { ok: false, code: 'error', error: 'bad path' };
+  const cur = draftStat(p);
+  // expect = 上次我们写完后的状态；null = 第一次创建
+  if (cur && !expect) return { ok: false, code: 'exists' };
+  if (cur && expect && (Math.abs(cur.mtime - expect.mtime) > 1 || cur.size !== expect.size)) return { ok: false, code: 'modified' };
+  if (expect && !cur) return { ok: false, code: 'gone' };
+  if (cur && wordLock(p)) return { ok: false, code: 'locked' };
+  const tmp = path.join(path.dirname(p), `.${path.basename(p)}.${process.pid}.ddtmp`);
+  try { await fs.promises.writeFile(tmp, Buffer.from(data)); }
+  catch (err) { try { fs.unlinkSync(tmp); } catch {} return { ok: false, code: ['EACCES', 'EPERM', 'EROFS', 'ENOENT'].includes(err.code) ? 'nowrite' : 'error', error: String(err.code || err.message) }; }
+  try { await fs.promises.rename(tmp, p); }
+  catch (err) { try { fs.unlinkSync(tmp); } catch {} return { ok: false, code: ['EBUSY', 'EPERM', 'EACCES'].includes(err.code) ? 'locked' : 'error', error: String(err.code || err.message) }; }
+  return { ok: true, stat: draftStat(p) };
+});
+// ---------- 模板与往来稿（1.8） ----------
+ipcMain.handle('lib-get', () => library.get());
+ipcMain.handle('lib-save', (_e, ix, purge) => { try { library.save(ix, !!purge); return { ok: true }; } catch (err) { return { ok: false, error: String(err.message || err) }; } });
+ipcMain.handle('lib-put', async (_e, p) => { try { return { ok: true, file: await library.putFile(p) }; } catch (err) { return { ok: false, error: String(err.message || err) }; } });
+ipcMain.handle('lib-read', async (_e, { sha, ext, name, orig }) => {
+  // 原文件还在、内容没变就读原文件（审阅稿写在它旁边）；否则读库里的拷贝
+  if (orig) {
+    try {
+      const buf = await fs.promises.readFile(orig);
+      if (require('crypto').createHash('sha256').update(buf).digest('hex') === sha) return await readDoc(orig);
+    } catch {}
+  }
+  const p = library.pathOf(sha, ext);
+  if (!p) return null;
+  const f = await readDoc(p);
+  return { ...f, name: name || f.name, lib: true };
+});
+ipcMain.handle('lib-usage', () => library.usage());
+ipcMain.handle('lib-rounds', (_e, id) => library.rounds(id));
+ipcMain.handle('pick-folder', async (_e, { title, defaultPath } = {}) => {
+  const r = await dialog.showOpenDialog(mainWin, { title, defaultPath, properties: ['openDirectory', 'createDirectory'] });
+  return r.canceled ? null : r.filePaths[0];
+});
 // 用系统默认的 PDF 阅读器打开原文件（读取有问题时人工核对，1.7.4）。只允许打开存在的 PDF / DOCX / TXT
 ipcMain.handle('open-external-file', async (_e, p) => { if (!p || !fs.existsSync(p) || !EXT_OK.includes(path.extname(p).slice(1).toLowerCase())) return 'not-allowed'; return shell.openPath(p); });
 
