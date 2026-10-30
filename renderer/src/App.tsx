@@ -69,6 +69,8 @@ interface Prefs {
   paperFollowTheme: boolean; celebrate: boolean;
   // 1.8：审阅稿、定稿的文件名，{name} = 对方文件名
   draftName: string; finalName: string;
+  /** 以前的审阅稿被删了或挪走了：自动重新生成 / 先问我（beta.6） */
+  draftMissing: 'auto' | 'ask';
 }
 const sysUser = (() => { try { return String(api.userName?.() || ''); } catch { return ''; } })();
 const DEFAULT_PREFS: Prefs = {
@@ -81,7 +83,7 @@ const DEFAULT_PREFS: Prefs = {
   authorName: '', commentAccepted: true,
   riskMoney: true, riskDate: true, keywords: DEFAULT_KEYWORDS,
   paperFollowTheme: false, celebrate: false,
-  draftName: '', finalName: '',
+  draftName: '', finalName: '', draftMissing: 'auto',
 };
 function loadPrefs(): Prefs {
   try { const v = getSetting('prefs-v2'); return { ...DEFAULT_PREFS, ...(typeof v === 'string' ? JSON.parse(v) : v || {}) }; } catch { return DEFAULT_PREFS; }
@@ -661,25 +663,41 @@ export default function App() {
   // ---------- 审阅稿（1.8）：修改后文档是 Word 时，决定自动写进它旁边的一份拷贝 ----------
   const [draftSync, setDraftSync] = useState<DraftSync | null>(null);
   const [draftState, setDraftState] = useState<DraftState>({ s: 'none', unwritten: [], prior: 0 });
+  useEffect(() => { if (draftState.regenerated && draftState.s === 'saved') flash(t('原来的审阅稿不见了，已在原位置重新生成一份，所有决定都写进去了。')); }, [draftState.regenerated, draftState.s]);
+  // 原始文档是谁：往来稿里写版本号（第一版来自模板时写模板名和版本），普通比较写文件名
+  const origLabel = (() => {
+    if (activeTh && thread) {
+      const va = activeTh.versions.find((v) => v.id === thread.a);
+      if (!va) return '';
+      const tp = va === activeTh.versions[0] && activeTh.tpl ? lib.templates.find((x) => x.id === activeTh.tpl!.tid) : null;
+      const tv = tp?.versions.find((v) => v.id === activeTh.tpl!.vid);
+      return tp && tv ? t('模板「{n}」{v}', { n: tp.name, v: tv.label }) : `V${va.n}`;
+    }
+    return A ? A.file.name : '';
+  })();
   const draftReady = (draftState.s === 'saved' || draftState.s === 'locked') && !!draftState.path;
   const [finalReq, setFinalReq] = useState(0);
   const baseOfPath = (p: string) => p.slice(Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\')) + 1);
+  // 审阅稿只属于修订审阅（beta.6）：进入修订审阅后才开始检查、生成和同步；之后切到别的模式也不打断正在进行的写入，但不显示
+  const [draftArmed, setDraftArmed] = useState('');
+  useEffect(() => { if (tab === 2 && pk && draftArmed !== pk) setDraftArmed(pk); }, [tab, pk]);
   useEffect(() => {
-    if (!richRes || !RA || !RB || !B || B.type !== 'docx' || !B.file.path || !pk) { setDraftSync(null); setDraftState({ s: 'none', unwritten: [], prior: 0 }); return; }
+    if (!richRes || !RA || !RB || !B || B.type !== 'docx' || !B.file.path || !pk || draftArmed !== pk) { setDraftSync(null); setDraftState({ s: 'none', unwritten: [], prior: 0 }); return; }
     const plan = buildPlan(richRes, RA.blocks, RB.blocks);
     const sync = new DraftSync({
       pk, bPath: B.file.path, bName: B.file.name, noDir: !!(B.file as any).lib, bData: B.file.data, plan,
       reviewer, initials: prefs.reviewerInitials.trim() || initialsOf(reviewer),
       theirs: prefs.authorName.trim() || B.meta['最后修改者'] || B.meta['作者'] || t('修改方'),
       theirsDate: B.file.mtime || Date.now(), pattern: prefs.draftName.trim() || t('{name}-我方意见'),
+      onMissing: prefs.draftMissing,
     });
     const off = sync.subscribe(setDraftState);
     setDraftSync(sync);
     if (decFor.current === richRes) sync.update(decisions);
     return () => { off(); sync.dispose(); };
-  }, [richRes, pk]);
+  }, [richRes, pk, draftArmed]);
   const draftVer = activeTh && thread ? activeTh.versions.find((v) => v.id === thread.b) : null;
-  useEffect(() => { if (draftSync) { draftSync.ctx.ver = draftVer ? `V${draftVer.n}` : undefined; const renamed = draftSync.ctx.reviewer !== reviewer || draftSync.ctx.initials !== (prefs.reviewerInitials.trim() || initialsOf(reviewer)); draftSync.ctx.initials = prefs.reviewerInitials.trim() || initialsOf(reviewer); if (renamed) { draftSync.ctx.reviewer = reviewer; draftSync.touch(); } draftSync.ctx.reviewer = reviewer; draftSync.ctx.pattern = prefs.draftName.trim() || t('{name}-我方意见'); draftSync.ctx.theirs = prefs.authorName.trim() || B?.meta['最后修改者'] || B?.meta['作者'] || t('修改方'); } }, [draftSync, reviewer, prefs.reviewerInitials, prefs.draftName, prefs.authorName, draftVer]);
+  useEffect(() => { if (draftSync) { draftSync.ctx.ver = draftVer ? `V${draftVer.n}` : undefined; const renamed = draftSync.ctx.reviewer !== reviewer || draftSync.ctx.initials !== (prefs.reviewerInitials.trim() || initialsOf(reviewer)); draftSync.ctx.initials = prefs.reviewerInitials.trim() || initialsOf(reviewer); if (renamed) { draftSync.ctx.reviewer = reviewer; draftSync.touch(); } draftSync.ctx.reviewer = reviewer; draftSync.ctx.onMissing = prefs.draftMissing; draftSync.ctx.pattern = prefs.draftName.trim() || t('{name}-我方意见'); draftSync.ctx.theirs = prefs.authorName.trim() || B?.meta['最后修改者'] || B?.meta['作者'] || t('修改方'); } }, [draftSync, reviewer, prefs.reviewerInitials, prefs.draftName, prefs.authorName, prefs.draftMissing, draftVer]);
   // 往来稿：这一轮的结论摘要存进往来稿（只存有结论或备注的处），供下一轮的“上轮”提示和条款历史使用
   const roundTimer = useRef<any>(0);
   useEffect(() => {
@@ -995,7 +1013,7 @@ export default function App() {
   const settingsValues: SettingsValues = {
     lang, theme, paperFollowTheme: prefs.paperFollowTheme, sound: prefs.sound, celebrate: prefs.celebrate,
     reviewerName: prefs.reviewerName, reviewerInitials: prefs.reviewerInitials, authorName: prefs.authorName, commentAccepted: prefs.commentAccepted,
-    draftName: prefs.draftName, finalName: prefs.finalName,
+    draftName: prefs.draftName, finalName: prefs.finalName, draftMissing: prefs.draftMissing,
     riskMoney: prefs.riskMoney, riskDate: prefs.riskDate, keywords: prefs.keywords, autoCheckUpdate: prefs.autoCheckUpdate,
   };
   const setSetting = <K extends keyof SettingsValues>(k: K, v: SettingsValues[K]) => {
@@ -1402,7 +1420,7 @@ export default function App() {
         </div>
       </nav>
 
-      <header ref={tbRef} data-level="0" className={`tbar drag${draftState.s !== 'none' && isRichTab ? ' has-draft' : ''}`}>
+      <header ref={tbRef} data-level="0" className={`tbar drag${draftState.s !== 'none' && tab === 2 ? ' has-draft' : ''}`}>
         {!navOpen && <button type="button" className="ibtn tb-nav" onClick={toggleNav} title={toggleTitle(false, '侧栏', navKey)} aria-label={t('展开侧栏')} aria-expanded={false}><I.IconPanelLeft /></button>}
         {activeTh && thread ? (
           <VersionChip th={activeTh} a={thread.a} b={thread.b} tpl={activeTh.tpl ? lib.templates.find((x) => x.id === activeTh.tpl!.tid) : null}
@@ -1432,8 +1450,8 @@ export default function App() {
         </div>
         {tab !== 5 && <button ref={gearRef} type="button" className="ibtn" onClick={() => setPop(pop === 'settings' ? null : 'settings')} title={t('比较设置')} aria-label={t('比较设置')} aria-expanded={pop === 'settings'}><I.IconGear /></button>}
         {curRes && <button type="button" className="btn tb-copy" onClick={copySummary} title={t('复制为 Markdown，可粘贴到邮件 / 飞书 / 文档')} aria-label={t('复制摘要')}><I.IconCopy /><span className="lbl">{t('复制摘要')}</span></button>}
-        {richRes && isRichTab && draftSync && draftState.s !== 'none' && B && (
-          <DraftChip state={draftState} sync={draftSync} bPath={B.file.path} narrow={false} finalReq={finalReq} hideTip={tab === 2 && doneOpen} decided={richRes.changes.filter((c) => decisions[c.id]?.v).length}
+        {richRes && tab === 2 && draftSync && draftState.s !== 'none' && B && (
+          <DraftChip state={draftState} sync={draftSync} bPath={B.file.path} narrow={false} finalReq={finalReq} hideTip={tab === 2 && doneOpen} origLabel={origLabel} decided={richRes.changes.filter((c) => decisions[c.id]?.v).length}
             pending={richRes.changes.filter((c) => !decisions[c.id]?.v || decisions[c.id]?.v === 'h').length} finalPattern={prefs.finalName.trim() || t('{name}-定稿')}
             onJump={(cid) => { setTab(2); setFilter('all'); setSelCid(cid); }} flash={flash} />
         )}

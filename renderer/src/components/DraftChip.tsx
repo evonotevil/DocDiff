@@ -28,7 +28,9 @@ export const REASON: Record<Reason, string> = {
 };
 const hm = (ms?: number) => { if (!ms) return ''; const d = new Date(ms); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
 
-export function DraftChip({ state, sync, bPath, narrow, decided, pending, finalPattern, onJump, flash, finalReq = 0, hideTip }: {
+export function DraftChip({ state, sync, bPath, narrow, decided, pending, finalPattern, onJump, flash, finalReq = 0, hideTip, origLabel }: {
+  /** 原始文档是谁（如“模板「标准合同」2026-10 版”“V1”），定稿弹窗里写明“恢复原始文档”指的是哪一份 */
+  origLabel?: string;
   /** 完成页开着时不弹首次提示（完成页已经说明了审阅稿） */
   hideTip?: boolean;
   /** 完成页的“生成定稿…”：数字一变就打开定稿弹窗 */
@@ -123,12 +125,12 @@ export function DraftChip({ state, sync, bPath, narrow, decided, pending, finalP
           </div>
         </div>
       </Popover>
-      {final && <FinalDialog sync={sync} bPath={bPath} pending={pending} pattern={finalPattern} onClose={() => setFinal(false)} flash={flash} onJump={onJump} />}
+      {final && <FinalDialog sync={sync} bPath={bPath} pending={pending} pattern={finalPattern} onClose={() => setFinal(false)} flash={flash} onJump={onJump} origLabel={origLabel} />}
     </>
   );
 }
 
-function FinalDialog({ sync, bPath, pending, pattern, onClose, flash, onJump }: { sync: DraftSync; bPath: string; pending: number; pattern: string; onClose: () => void; flash: (m: string) => void; onJump: (cid: number) => void }) {
+function FinalDialog({ sync, bPath, pending, pattern, onClose, flash, onJump, origLabel }: { sync: DraftSync; bPath: string; pending: number; pattern: string; onClose: () => void; flash: (m: string) => void; onJump: (cid: number) => void; origLabel?: string }) {
   const [pend, setPend] = useState<'b' | 'a'>('b');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -160,7 +162,10 @@ function FinalDialog({ sync, bPath, pending, pattern, onClose, flash, onJump }: 
       {pending > 0 && (
         <div className="dlg-field">
           <div className="lbl">{t('还有 {n} 处没有决定（含待议），在定稿里：', { n: pending })}</div>
-          <Seg full value={pend} onChange={setPend} label={t('没有决定的处')} options={[['b', t('用对方的改动')], ['a', t('改回我方原文')]]} />
+          <Seg full value={pend} onChange={setPend} label={t('没有决定的处')} options={[['b', t('保留对方的改动')], ['a', t('恢复原始文档')]]} />
+          <div className="dlg-hint">{pend === 'a'
+            ? t('这些处恢复成原始文档{o}的写法，不采纳对方的修改。', { o: origLabel ? t('（{x}）', { x: origLabel }) : '' })
+            : t('这些处采用对方的写法。想逐处决定，可以先回去审阅，定稿随时可以再生成。')}</div>
         </div>
       )}
       <div className="dlg-field">

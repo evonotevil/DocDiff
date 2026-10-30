@@ -1020,8 +1020,9 @@ select.sel { height: 36px; border-radius: var(--r-m); border: 2px solid var(--bo
 /* 有审阅稿片时，中等宽度下“复制摘要”只留图标，给两侧文件名让位 */
 
 /* ---------- 首页：往来稿 / 模板两栏（1.8 · 设计稿 01） ---------- */
-.lib-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-6); margin-top: 28px; align-items: start; }
-@media (max-width: 900px) { .lib-cols { grid-template-columns: minmax(0, 1fr); } }
+/* 和上面两个放文件的区域用同一套列（1fr 54px 1fr），左右边缘对齐（beta.6） */
+.lib-cols { display: grid; grid-template-columns: minmax(0, 1fr) 54px minmax(0, 1fr); gap: 0; margin-top: 28px; align-items: start; }
+.lib-cols > :nth-child(2) { grid-column: 3; }
 .lib-card { border: 2px solid var(--border); border-bottom-width: var(--lip); border-radius: var(--r-l); background: var(--surface); padding: var(--space-2) var(--space-2) var(--space-3); }
 .lib-card h2 { font-size: 15px; font-weight: 900; color: var(--title); margin: 0; min-height: 40px; padding: 0 4px 0 10px; display: flex; align-items: center; gap: 8px; }
 .lib-card h2 .grow { flex: 1; }
@@ -1270,3 +1271,5 @@ select.sel { height: 36px; border-radius: var(--r-m); border: 2px solid var(--bo
 .done-row { display: flex; gap: 8px; }
 .done-row .btn { flex: 1; }
 .ver-pairs .grp { background: none; position: static; }
+.set-review .seg { height: var(--control-l); padding: 4px; gap: 4px; }
+.set-review .seg button { height: 36px; font-size: 15px; }

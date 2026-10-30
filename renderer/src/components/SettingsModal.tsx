@@ -19,6 +19,7 @@ export interface SettingsValues {
   lang: Lang; theme: 'light' | 'dark'; paperFollowTheme: boolean; sound: boolean; celebrate: boolean;
   reviewerName: string; reviewerInitials: string; authorName: string; commentAccepted: boolean;
   draftName: string; finalName: string;
+  draftMissing: 'auto' | 'ask';
   riskMoney: boolean; riskDate: boolean; keywords: string[];
   autoCheckUpdate: boolean;
 }
@@ -208,6 +209,15 @@ export function SettingsModal({ v, set, onClose, upd, initialTab = 'general', sa
                 <NameEditor id="rv-draft" label={t('审阅稿文件名')} value={v.draftName} fallback={t('{name}-我方意见')} sample={sample || t('对方的文件.docx')} vars={{ ver: 'V4', who: v.reviewerName }} onChange={(x) => set('draftName', x)} />
                 <NameEditor id="rv-final" label={t('定稿文件名')} value={v.finalName} fallback={t('{name}-定稿')} sample={sample || t('对方的文件.docx')} vars={{ ver: 'V4', who: v.reviewerName }} onChange={(x) => set('finalName', x)} />
                 <small className="set-cap">{t('“对方文件名”会去掉 DocDiff 加过的后缀（-我方意见、-定稿）。“版本号”只在往来稿里有值。审阅稿要发回给对方，名字里别写只给自己看的内容。')}</small>
+              </section>
+              <section className="set-sec" aria-labelledby="rv-s4">
+                <h4 className="set-sh" id="rv-s4">{t('审阅稿')}</h4>
+                <div className="field">
+                  <label>{t('以前的审阅稿被删了或挪走了')}</label>
+                  <Seg full value={v.draftMissing || 'auto'} onChange={(x) => set('draftMissing', x)} label={t('以前的审阅稿被删了或挪走了')} options={[['auto', t('自动重新生成')], ['ask', t('先问我')]]} />
+                  <small>{v.draftMissing === 'ask' ? t('工具栏的“审阅稿”会显示“不见了”，你点“重新生成”才生成。') : t('再次进入修订审阅时，在原位置重新生成一份，所有决定都写进去，并提示一次。')}</small>
+                </div>
+                <small className="set-cap">{t('审阅稿只在修订审阅里生成和同步；富文本、纯文本等模式只做比较，不碰审阅稿。')}</small>
               </section>
               <ReviewStorage />
             </div>

@@ -789,4 +789,18 @@ export const EN_DICT: Record<string, string> = {
   '所有决定已写进「{f}」，要发给对方的就是这份。': 'All decisions are in “{f}” — that’s the file to send back.',
   '其中 {n} 处没能写进去，审阅稿里仍是对方的写法。点工具栏的“审阅稿”查看。': '{n} of them could not be written and still read as theirs. See “Review draft” in the toolbar.',
   '导出报告或其他格式…': 'Export a report or other formats…',
+  // 1.8 beta.6
+  '原来的审阅稿不见了，已在原位置重新生成一份，所有决定都写进去了。': 'The earlier review draft was missing, so a new one was created in the same place with all decisions.',
+  '以前的审阅稿被删了或挪走了': 'If the earlier review draft was deleted or moved',
+  '自动重新生成': 'Recreate automatically',
+  '先问我': 'Ask me first',
+  '工具栏的“审阅稿”会显示“不见了”，你点“重新生成”才生成。': '“Review draft” in the toolbar shows it is missing; it is only recreated when you click “Recreate”.',
+  '再次进入修订审阅时，在原位置重新生成一份，所有决定都写进去，并提示一次。': 'When you return to Review, a new one is created in the same place with all decisions, and you are told once.',
+  '审阅稿只在修订审阅里生成和同步；富文本、纯文本等模式只做比较，不碰审阅稿。': 'The review draft is only created and updated in Review; Rich text, Plain text and other modes only compare.',
+  '保留对方的改动': 'Keep their changes',
+  '恢复原始文档': 'Restore the original',
+  '这些处恢复成原始文档{o}的写法，不采纳对方的修改。': 'These are restored to the original{o}; their changes are not taken.',
+  '（{x}）': ' ({x})',
+  '这些处采用对方的写法。想逐处决定，可以先回去审阅，定稿随时可以再生成。': 'These use their wording. To decide one by one, go back and review — you can create the final version again any time.',
+  '模板「{n}」{v}': 'template “{n}” {v}',
 };

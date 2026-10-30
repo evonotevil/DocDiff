@@ -19,6 +19,8 @@ export interface DraftState {
   /** 最近一次写入用时（毫秒，含 Worker 和写盘），以及各段用时 */
   ms?: number;
   parts?: Record<string, number>;
+  /** 原来的审阅稿不见了，刚刚在原位置重新生成（beta.6，设置为“自动重新生成”时） */
+  regenerated?: boolean;
 }
 export interface DraftCtx {
   pk: string;
@@ -35,6 +37,8 @@ export interface DraftCtx {
   theirsDate: number;
   /** 文件名规则，见 fillName */
   pattern: string;
+  /** 以前的审阅稿被删或挪走：auto = 自动在原位置重新生成；ask = 显示“审阅稿不见了”，等用户点 */
+  onMissing?: 'auto' | 'ask';
   /** 往来稿里对方这一版的版本号（V4），文件名标签 {ver} 用 */
   ver?: string;
 }
@@ -116,12 +120,21 @@ export class DraftSync {
     if (!this.meta?.stat || this.busy) return;
     const r = await api.draftStat?.(this.meta.path);
     if (!r || this.disposed) return;
-    if (!r.stat) this.set({ s: 'gone' });
+    if (!r.stat) { if (this.ctx.onMissing === 'ask') this.set({ s: 'gone' }); else this.regenerate(); }
     else if (Math.abs(r.stat.mtime - this.meta.stat.mtime) > 1 || r.stat.size !== this.meta.stat.size) this.set({ s: 'modified' });
     else if (r.locked) this.set({ s: 'locked' });
     else if (this.state.s === 'locked') this.schedule(0);
   }
 
+  /** 原来的审阅稿不见了（设置为自动重新生成）：同一位置重新生成一份，所有决定都写进去 */
+  private regenerating = false;
+  private regenerate() {
+    if (!this.meta) return;
+    this.meta = { ...this.meta, stat: undefined as any, at: 0 };
+    this.regenerating = true;
+    const any = Object.values(this.decisions).some((d) => d?.v || d?.note);
+    if (any) this.schedule(0); else this.set({ s: 'none' });
+  }
   /** 决定变了。还没有审阅稿、也没有任何决定时什么都不做 */
   update(decisions: Record<number, Decision>) {
     this.decisions = decisions;
@@ -176,7 +189,8 @@ export class DraftSync {
             setDraftMeta(pk, this.meta);
             if (this.disposed) return;
             clearInterval(this.poll); this.poll = null;
-            this.set({ s: 'saved', path, at: this.meta.at, unwritten: out.unwritten, prior: out.priorRevisions, ms: Math.round(performance.now() - t0), parts: { worker: Math.round(tBuilt - t0), ...out.ms }, error: undefined });
+            const regen = this.regenerating; this.regenerating = false;
+            this.set({ s: 'saved', regenerated: regen, path, at: this.meta.at, unwritten: out.unwritten, prior: out.priorRevisions, ms: Math.round(performance.now() - t0), parts: { worker: Math.round(tBuilt - t0), ...out.ms }, error: undefined });
             break;
           }
           if (this.disposed) return;
@@ -186,7 +200,7 @@ export class DraftSync {
             this.set({ s: 'locked', path, unwritten: out.unwritten });
             if (!this.poll) this.poll = setInterval(() => this.check(), 3000);
           } else if (code === 'modified') this.set({ s: 'modified', path });
-          else if (code === 'gone') this.set({ s: 'gone', path });
+          else if (code === 'gone') { if (this.ctx.onMissing !== 'ask' && expect) { expect = null; this.regenerating = true; continue; } this.set({ s: 'gone', path }); }
           else if (code === 'nowrite') this.set({ s: 'nowrite', path });
           else this.set({ s: 'error', path, error: res?.error || code });
           break;
