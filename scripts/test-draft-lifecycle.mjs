@@ -54,3 +54,54 @@ test('new instance during the old write: waits, then writes with the registered 
   assert.equal(disk.size, 1, 'same file, no "(2)" copy');
   assert.equal([...disk.values()][0].size, 5);
 });
+
+// beta.7：审阅稿手动开始
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+test('manual start: decisions alone write nothing', async () => {
+  disk.clear(); const s = new DraftSync(ctx('m1')); s.build = async () => built();
+  s.update({ 1: { v: 'a' }, 2: { v: 'r' } });
+  await wait(400);
+  assert.equal(disk.size, 0, 'no file before “生成审阅稿”');
+  assert.equal(s.state.s, 'none');
+  assert.equal(s.isStarted, false);
+  s.dispose();
+});
+test('manual start: start() writes once with the decisions so far, marks fresh, then keeps syncing', async () => {
+  disk.clear(); const s = new DraftSync(ctx('m2')); let n = 0; s.build = async () => built(3 + n++);
+  s.update({ 1: { v: 'a' } });
+  await s.start();
+  assert.equal(s.state.s, 'saved'); assert.equal(s.state.fresh, true); assert.equal(disk.size, 1);
+  s.update({ 1: { v: 'a' }, 2: { v: 'h' } });
+  await wait(400);
+  assert.equal(s.state.s, 'saved'); assert.equal(s.state.fresh, false, 'tip only after the manual start');
+  assert.equal([...disk.values()][0].size, 4, 'second write synced automatically');
+  s.dispose();
+});
+test('manual start: the same pair reopened keeps syncing without another click', async () => {
+  disk.clear(); const a = new DraftSync(ctx('m3')); a.build = async () => built(3);
+  await a.start(); a.dispose();
+  const b = new DraftSync(ctx('m3')); b.build = async () => built(6);
+  assert.equal(b.isStarted, true);
+  b.update({ 1: { v: 'r' } }); await wait(400);
+  assert.equal(disk.size, 1); assert.equal([...disk.values()][0].size, 6);
+  b.dispose();
+});
+test('manual start: a new pair (next round) is not started', async () => {
+  const c = new DraftSync(ctx('m4-new-round')); c.build = async () => built();
+  assert.equal(c.isStarted, false); c.dispose();
+});
+test('final without a draft: saved next to the other side’s file, no draft written', async () => {
+  disk.clear(); const s = new DraftSync(ctx('m5')); s.build = async () => built(2);
+  const p = await s.saveFinal(built(2), '{name}-定稿');
+  assert.equal(p, '/w/合同-定稿.docx'); assert.equal(disk.size, 1); assert.equal(s.state.s, 'none');
+  s.dispose();
+});
+test('library copy without a draft: final asks for a folder; cancel throws "cancel"', async () => {
+  disk.clear(); window.api.pickFolder = async () => null;
+  const s = new DraftSync({ ...ctx('m6'), noDir: true }); s.build = async () => built(2);
+  await assert.rejects(() => s.saveFinal(built(2), '{name}-定稿'), /cancel/);
+  window.api.pickFolder = async () => '/picked';
+  assert.equal(await s.saveFinal(built(2), '{name}-定稿'), '/picked/合同-定稿.docx');
+  await s.start(); assert.equal(s.state.path, '/picked/合同-我方意见.docx');
+  s.dispose();
+});

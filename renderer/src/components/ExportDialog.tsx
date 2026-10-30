@@ -64,7 +64,7 @@ export function ExportDialog({ total, undecided, risks, author, setAuthor, revie
       {undecided > 0 && (
         <Notice tone="warn" className="stack" title={t('还有 {n} 处没有处理。', { n: undecided })}
           action={kind === 'final' && <button className="btn sm" onClick={onHoldPending}>{t('把 {n} 处都标为待议', { n: undecided })}</button>}>
-          {kind === 'final' ? t('定稿需要先处理完每一处修订。可以回去继续审阅，或者把它们都标为待议（在定稿里保持为修订）。')
+          {kind === 'final' ? t('审阅记录存档需要先处理完每一处修订。可以回去继续审阅，或者把它们都标为待议（在存档里保持为修订）。')
             : kind === 'redline' ? t('修订稿中它们保持为修订、不加批注。') : t('报告里显示为“—”。')}
         </Notice>
       )}

@@ -17,7 +17,7 @@ async function launch() {
   const errs = [];
   win.on('pageerror', (e) => errs.push(e.message));
   await win.setViewportSize({ width: 1280, height: 860 });
-  await win.waitForSelector('.lib-card', { timeout: 60000 });
+  await win.waitForSelector('.lib-card, .home-intro', { timeout: 60000 }); // beta.7：第一次用时只有一行说明 + 新建模板
   const pickNext = (p) => app.evaluate(({ dialog }, p) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [p] }); }, p);
   return { app, win, errs, pickNext };
 }
@@ -28,7 +28,7 @@ const clickText = (win, sel, re) => win.evaluate(([s, r]) => { const b = [...doc
   let { app, win, errs, pickNext } = await launch();
   // 1. 新建模板（2026-03 版）
   await pickNext(path.join(dir, 'tpl-v1.docx'));
-  await clickText(win, '.lib-card .btn', '新建模板');
+  await clickText(win, '.lib-card .btn, .home-intro .btn', '新建模板');
   await win.waitForSelector('.lib-card[aria-label="模板"] .lib-row', { timeout: 15000 });
   ok('template created', /tpl-v1/.test(await text(win, '.lib-card[aria-label="模板"] .lib-row')), { row: await text(win, '.lib-card[aria-label="模板"] .lib-row') });
   // 2. 上传新版本（2026-09 版）

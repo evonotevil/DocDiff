@@ -4,7 +4,7 @@ import * as I from './icons';
 import { Popover, MenuItem } from './Popover';
 import { Modal } from './Modal';
 import { Notice } from './Panel';
-import { Seg, MidName, TypeTag } from './ui';
+import { Seg, MidName, TypeTag, Info } from './ui';
 import { useDrop } from '../lib/drop';
 import type { FileInfo } from '../lib/model';
 import type { Thread, ThreadVersion, Side, Template } from '../lib/library';
@@ -32,7 +32,7 @@ export function ThreadsCard({ threads, onOpen, onRename, onArchive, onDelete, ch
         {arch.length > 0 && <button type="button" className="btn sm plain" onClick={() => setShowArch(!showArch)}>{showArch ? t('返回') : t('已归档 {n}', { n: arch.length })}</button>}
       </h2>
       {list.length === 0 && !showArch
-        ? <p className="lib-empty">{t('一份合同来回改好几轮时，存成往来稿：每一版都留着，下次只放对方的新稿，默认和上一版比，上一轮的结论也会提示你。')}</p>
+        ? <p className="lib-empty">{t('合同来回改好几轮时，比较完存成往来稿。')}<Info label={t('往来稿')}>{t('每一版都留着，下次只放对方的新稿，默认和上一版比，上一轮的结论也会提示你。')}</Info></p>
         : <div className="lib-rows">{list.map((th) => <ThreadRow key={th.id} th={th} onOpen={onOpen} onRename={onRename} onArchive={onArchive} onDelete={onDelete} />)}</div>}
       {children}
     </section>
@@ -60,11 +60,9 @@ function ThreadRow({ th, onOpen, onRename, onArchive, onDelete }: { th: Thread; 
       <span className="meta">{meta}</span>
       <button ref={more} type="button" className="btn sm plain icon" aria-label={t('更多')} title={t('更多')} onClick={(e) => { e.stopPropagation(); setMenu(!menu); }}><I.IconMore /></button>
       <Popover anchor={more} open={menu} onClose={() => setMenu(false)} width={260} title={th.name}>
-        <div onClick={(e) => e.stopPropagation()}>
-          <MenuItem icon={<I.IconEdit />} onClick={() => { setMenu(false); setEdit(th.name); }}>{t('重命名')}</MenuItem>
-          <MenuItem icon={<I.IconCheck />} onClick={() => { setMenu(false); onArchive(th, !th.archived); }}>{th.archived ? t('取消归档') : t('归档（签完了）')}</MenuItem>
-          <MenuItem icon={<I.IconX />} tone="danger" onClick={() => { setMenu(false); onDelete(th); }}>{t('删除往来稿')}</MenuItem>
-        </div>
+        <MenuItem icon={<I.IconEdit />} onClick={() => { setMenu(false); setEdit(th.name); }}>{t('重命名')}</MenuItem>
+        <MenuItem icon={<I.IconCheck />} onClick={() => { setMenu(false); onArchive(th, !th.archived); }}>{th.archived ? t('取消归档') : t('归档（签完了）')}</MenuItem>
+        <MenuItem icon={<I.IconX />} tone="danger" onClick={() => { setMenu(false); onDelete(th); }}>{t('删除往来稿')}</MenuItem>
       </Popover>
     </div>
   );

@@ -16,7 +16,7 @@ async function launch(args, cfg) {
 }
 const txt = (w, s) => w.evaluate((s) => document.querySelector(s)?.innerText || '', s);
 const clickText = (w, s, re) => w.evaluate(([s, r]) => { const b = [...document.querySelectorAll(s)].find((x) => new RegExp(r).test(x.textContent)); b?.click(); return !!b; }, [s, re]);
-const toReview = async (w) => { await w.evaluate(() => document.querySelectorAll('.nav-list .nav-item')[2].click()); await w.waitForTimeout(500); await clickText(w, '.reviewer-ask .btn', '好的'); };
+const toReview = async (w) => { await w.evaluate(() => document.querySelectorAll('.nav-list .nav-item')[2].click()); await w.waitForTimeout(500); await clickText(w, '.reviewer-ask .btn', '好的'); await w.evaluate(() => document.querySelector('.tb-start')?.click()); await w.waitForTimeout(800); }; // beta.7：手动开始审阅稿
 const decideOn = async (w, re, key) => { await w.evaluate((r) => [...document.querySelectorAll('.dlist .drow')].find((x) => new RegExp(r).test(x.textContent))?.click(), re); await w.waitForTimeout(200); await w.keyboard.press(key); await w.waitForTimeout(400); };
 const dismissTip = (w) => clickText(w, '.draft-tip .btn', '知道了');
 const verdicts = (w) => w.evaluate(() => [...document.querySelectorAll('.dlist .drow')].map((x) => (x.className.match(/v-[arh]/) || ['-'])[0]).join(''));

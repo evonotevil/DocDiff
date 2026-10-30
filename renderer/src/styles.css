@@ -615,7 +615,8 @@ select.sel { height: 36px; border-radius: var(--r-m); border: 2px solid var(--bo
 .pop-b { min-height: 0; overflow: auto; padding: 0 0 var(--space-2); }
 .pop-b > .opt { padding: 6px var(--space-4); min-height: var(--row-h); }
 .pop-b > .opt + .opt { border-top: 0; }
-.pop-b > .menu-item:first-child { margin-top: var(--space-2); }
+/* 菜单 = 无标题的 Popover（beta.7 · MenuItem）：上下各留 8px，菜单项左右内缩 8px */
+.pop.menu .pop-b { padding: var(--space-2) 0; }
 .menu-item { display: flex; align-items: center; gap: 10px; width: calc(100% - 16px); margin: 0 8px; height: var(--row-h); padding: 0 10px; border: 0; border-radius: var(--radius-m); background: transparent; font-size: 15px; font-weight: 700; color: var(--eel); cursor: pointer; text-align: left; }
 .menu-item:hover { background: var(--hover); }
 .menu-item svg { color: var(--wolf); }
@@ -1273,3 +1274,48 @@ select.sel { height: 36px; border-radius: var(--r-m); border: 2px solid var(--bo
 .ver-pairs .grp { background: none; position: static; }
 .set-review .seg { height: var(--control-l); padding: 4px; gap: 4px; }
 .set-review .seg button { height: 36px; font-size: 15px; }
+/* beta.7：没开始审阅稿时的“生成审阅稿”（Outline Blue M），窄窗口和审阅稿片一样收成图标 */
+.tb-start { gap: 6px; }
+.tb-start svg { color: var(--macaw-ink); }
+.tbar[data-level="3"] .tb-start, .tbar[data-level="4"] .tb-start { width: var(--control-m); padding: 0; }
+.tbar[data-level="3"] .tb-start .lbl, .tbar[data-level="4"] .tb-start .lbl { display: none; }
+.done-acts .done-draft { text-align: left; margin: 4px 0 -2px; }
+.done-acts .nt { text-align: left; }
+.done-final .mid-name { font-weight: 700; color: var(--eel); }
+.code .cchunk { display: block; }
+.code .cchunk.ph { contain: strict; }
+/* 设置 · “ⓘ”悬停（beta.7）：深色气泡 13/700，最多约 280 宽 */
+.qtip { position: relative; display: inline-flex; align-items: center; margin-left: 6px; color: var(--text-3); cursor: help; vertical-align: middle; border-radius: 50%; }
+.qtip svg { width: 16px; height: 16px; }
+.qtip:focus-visible { outline: 2px solid var(--macaw); outline-offset: 2px; }
+.qtip-b { display: none; position: absolute; left: -12px; top: calc(100% + 8px); z-index: 80; width: max-content; max-width: 300px; padding: 10px 12px; border-radius: var(--radius-m); background: var(--eel); color: var(--surface); font-size: 13px; font-weight: 700; line-height: 1.5; white-space: normal; text-align: left; box-shadow: var(--shadow-float); pointer-events: none; }
+.qtip:hover .qtip-b, .qtip:focus .qtip-b { display: block; }
+.set-review .field label { display: inline-flex; align-items: center; }
+
+/* ---------- 首页排布（beta.7 · H / H2） ---------- */
+.home-sh { display: flex; align-items: center; gap: 8px; margin: 4px 0 12px; }
+.home-sh h2 { margin: 0; font-size: 13px; font-weight: 800; color: var(--text-2); }
+.home-sh .grow { flex: 1; }
+.hero .sample-btn { flex: none; align-self: center; }
+.drops.compact { align-items: stretch; }
+.drops.compact .vs { align-items: center; }
+.drops.compact .vs-ic { color: var(--text-2); }
+.drop.compact { min-height: 88px; flex-direction: row; flex-wrap: wrap; justify-content: flex-start; align-items: center; text-align: left; gap: 12px; padding: 16px 16px 16px 20px; border-width: 2px; }
+.drop.compact.filled { border-bottom-width: 4px; }
+.drop.compact.over { transform: none; }
+.drop.compact .label { position: static; font-size: 12px; letter-spacing: 0; margin-bottom: 2px; }
+.drop.compact .dz-txt { flex: 1; min-width: 0; }
+.drop.compact .title { font-size: 15px; font-weight: 800; color: var(--title); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.drop.compact .title.muted { color: var(--text-3); }
+.drop.compact .title.file { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.drop.compact .title.file .mid-name { flex: 1; min-width: 0; }
+.drop.compact .sub { font-size: 12px; margin-top: 2px; }
+.drop.compact .acts { margin: 0; flex: none; flex-wrap: nowrap; }
+.drop.compact .dz-note { flex-basis: 100%; }
+.spinner.sm { width: 20px; height: 20px; border-width: 3px; }
+.home-intro { display: flex; align-items: center; gap: 16px; margin-top: 24px; padding: 12px 12px 12px 20px; border-radius: var(--radius-l); background: var(--surface-2); color: var(--text-2); font-size: 14px; font-weight: 700; }
+.home-intro span { flex: 1; min-width: 0; }
+.home-intro .btn { flex: none; }
+.lib-foot, .lib-empty { display: flex; align-items: center; flex-wrap: wrap; }
+.home .lib-cols { margin-top: 24px; }
+.toast.above { bottom: 84px; }

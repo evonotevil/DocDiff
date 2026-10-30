@@ -30,6 +30,8 @@ const drafts = () => fs.readdirSync(dir).filter((f) => f.endsWith('.docx') && f 
   await win.waitForTimeout(800);
   // 第一次进修订审阅会问署名：点“好的”
   await win.evaluate(() => [...document.querySelectorAll('.reviewer-ask .btn')].find((b) => /好的|OK/.test(b.textContent))?.click());
+  // beta.7：审阅稿手动开始
+  if (!process.env.NODRAFT) { await win.evaluate(() => document.querySelector('.tb-start')?.click()); await win.waitForTimeout(1000); await win.evaluate(() => [...document.querySelectorAll('.draft-tip .btn')].find((b) => /知道了/.test(b.textContent))?.click()); }
   await win.evaluate(() => {
     window.__long = [];
     try { new PerformanceObserver((l) => { for (const e of l.getEntries()) window.__long.push([Math.round(e.startTime), Math.round(e.duration)]); }).observe({ type: 'longtask', buffered: false }); } catch {}

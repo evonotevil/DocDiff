@@ -6,7 +6,7 @@ import { Modal } from './Modal';
 import { Notice } from './Panel';
 import type { DocModel, FileInfo } from '../lib/model';
 import { useDrop } from '../lib/drop';
-import { MidName, TypeTag } from './ui';
+import { MidName, TypeTag, Info } from './ui';
 import { type Template, type TplVersion, type Library as Lib, pick, live, fingerprint } from '../lib/library';
 
 const pct = (x: number) => `${Math.round(x * 100)}%`;
@@ -26,9 +26,9 @@ export function TemplatesCard({ lib, threadCount, onUse, onNew, onAddVersion, on
         <button type="button" className="btn sm" onClick={onNew} disabled={busy}><I.IconPlusDoc />{t('新建模板')}</button>
       </h2>
       {tpls.length === 0
-        ? <p className="lib-empty">{t('把你的标准合同存成模板。对方改稿来了，只放对方的文件就能比，DocDiff 会自动找出对方是在哪一版上改的。')}</p>
+        ? <p className="lib-empty">{t('把标准合同存成模板，对方改稿来了只放对方的文件就能比。')}</p>
         : <div className="lib-rows">{tpls.map((tp) => <TemplateRow key={tp.id} tpl={tp} n={threadCount(tp.id)} onUse={onUse} onAddVersion={onAddVersion} onRename={onRename} onDelete={onDelete} onDeleteVersion={onDeleteVersion} />)}</div>}
-      <p className="lib-foot">{t('模板只存你自己的标准稿，存的是拷贝；原文件挪走、改名都不影响。')}</p>
+      <p className="lib-foot">{t('模板只存你自己的标准稿')}<Info label={t('模板')}>{t('存的是拷贝；原文件挪走、改名都不影响。对方改稿来了，DocDiff 会自动找出对方是在哪一版上改的。')}</Info></p>
     </section>
   );
 }
@@ -160,11 +160,9 @@ export function RecentRow({ a, b, time, prog, onOpen, onSave, onRemove }: {
         </div>
       </div>
       <button ref={more} type="button" className="btn sm plain icon" aria-label={t('更多')} title={t('更多')} onClick={(e) => { e.stopPropagation(); setMenu(!menu); }}><I.IconMore /></button>
-      <Popover anchor={more} open={menu} onClose={() => setMenu(false)} width={260}>
-        <div onClick={(e) => e.stopPropagation()}>
-          <MenuItem icon={<I.IconPlusDoc />} onClick={() => { setMenu(false); onSave(); }}>{t('存为往来稿')}</MenuItem>
-          <MenuItem icon={<I.IconX />} onClick={() => { setMenu(false); onRemove(); }}>{t('从列表移除')}</MenuItem>
-        </div>
+      <Popover anchor={more} open={menu} onClose={() => setMenu(false)} width={260} className="menu" label={t('更多')}>
+        <MenuItem icon={<I.IconPlusDoc />} onClick={() => { setMenu(false); onSave(); }}>{t('存为往来稿')}</MenuItem>
+        <MenuItem icon={<I.IconX />} onClick={() => { setMenu(false); onRemove(); }}>{t('从列表移除')}</MenuItem>
       </Popover>
     </div>
   );

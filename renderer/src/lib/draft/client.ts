@@ -21,6 +21,8 @@ export interface DraftState {
   parts?: Record<string, number>;
   /** 原来的审阅稿不见了，刚刚在原位置重新生成（beta.6，设置为“自动重新生成”时） */
   regenerated?: boolean;
+  /** 刚刚手动开始（点了“生成审阅稿”）后的第一次写好（beta.7）：工具栏据此弹一次“审阅稿已生成” */
+  fresh?: boolean;
 }
 export interface DraftCtx {
   pk: string;
@@ -104,10 +106,33 @@ export class DraftSync {
   private decisions: Record<number, Decision> = {};
   private subs = new Set<(s: DraftState) => void>();
   private disposed = false;
+  /**
+   * 审阅稿手动开始（beta.7）：点“生成审阅稿”之前，决定只记在 DocDiff 里，不写任何文件。
+   * 这一对文件开始过（有登记）就一直自动同步；往来稿的新一轮是新的一对，要再点一次。
+   */
+  private started = false;
+  private fresh = false;
   constructor(public ctx: DraftCtx) {
     this.meta = getDraftMeta(ctx.pk);
+    this.started = !!this.meta;
     if (this.meta) { this.set({ s: 'saved', path: this.meta.path, at: this.meta.at }); this.check(); }
   }
+  get isStarted() { return this.started; }
+  /** 点了“生成审阅稿”：把已经做过的决定一次写进去，之后自动同步。对方文件不在用户文件夹里（库里的拷贝）时先选文件夹 */
+  async start(folderTitle?: string) {
+    if (this.started && this.meta) { this.schedule(0); return; }
+    this.started = true;
+    this.fresh = true;
+    if (!this.meta && this.ctx.noDir) {
+      const dir = await api.pickFolder?.({ title: folderTitle, defaultPath: dirOf(this.ctx.bPath) });
+      if (!dir) { this.started = false; this.fresh = false; return; }
+      this.meta = { dir, path: await freePath(dir, draftName(this.ctx.pattern, this.ctx.bName, '', this.vars())), at: 0 };
+    }
+    clearTimeout(this.timer);
+    await this.run();
+  }
+  /** 完成页的“重新写入”：Word 占着时先看看关了没有，其余情况直接重写 */
+  retry() { if (this.state.s === 'locked') this.check(); else this.schedule(0); }
   /** 署名等写入参数变了：已有审阅稿时重写一次 */
   touch() { if (this.meta && (this.state.s === 'saved' || this.state.s === 'locked')) this.schedule(250); }
   vars(): NameVars { return { ver: this.ctx.ver, who: this.ctx.reviewer }; }
@@ -116,8 +141,10 @@ export class DraftSync {
   dispose() { this.disposed = true; clearTimeout(this.timer); clearInterval(this.poll); this.subs.clear(); }
 
   /** 打开时、窗口回到前台时：看看审阅稿还在不在、有没有被别人改过、Word 是不是正开着 */
+  /** 不在修订审阅里（beta.7 · P2-3）：不检查、不重建；已经提交的写入照常完成 */
+  paused = false;
   async check() {
-    if (!this.meta?.stat || this.busy) return;
+    if (!this.meta?.stat || this.busy || this.paused) return;
     const r = await api.draftStat?.(this.meta.path);
     if (!r || this.disposed) return;
     if (!r.stat) { if (this.ctx.onMissing === 'ask') this.set({ s: 'gone' }); else this.regenerate(); }
@@ -132,14 +159,12 @@ export class DraftSync {
     if (!this.meta) return;
     this.meta = { ...this.meta, stat: undefined as any, at: 0 };
     this.regenerating = true;
-    const any = Object.values(this.decisions).some((d) => d?.v || d?.note);
-    if (any) this.schedule(0); else this.set({ s: 'none' });
+    this.schedule(0);
   }
-  /** 决定变了。还没有审阅稿、也没有任何决定时什么都不做 */
+  /** 决定变了。还没点过“生成审阅稿”时只记下来，不写文件 */
   update(decisions: Record<number, Decision>) {
     this.decisions = decisions;
-    const any = Object.values(decisions).some((d) => d?.v || d?.note);
-    if (!this.meta && !any) return;
+    if (!this.started) return;
     if (this.state.s === 'modified' || this.state.s === 'gone' || this.state.s === 'nowrite') return; // 等用户处理
     this.schedule(250);
   }
@@ -190,7 +215,8 @@ export class DraftSync {
             if (this.disposed) return;
             clearInterval(this.poll); this.poll = null;
             const regen = this.regenerating; this.regenerating = false;
-            this.set({ s: 'saved', regenerated: regen, path, at: this.meta.at, unwritten: out.unwritten, prior: out.priorRevisions, ms: Math.round(performance.now() - t0), parts: { worker: Math.round(tBuilt - t0), ...out.ms }, error: undefined });
+            const fresh = this.fresh; this.fresh = false;
+            this.set({ s: 'saved', regenerated: regen, fresh, path, at: this.meta.at, unwritten: out.unwritten, prior: out.priorRevisions, ms: Math.round(performance.now() - t0), parts: { worker: Math.round(tBuilt - t0), ...out.ms }, error: undefined });
             break;
           }
           if (this.disposed) return;
@@ -242,8 +268,13 @@ export class DraftSync {
     return { out, missed };
   }
   /** 生成定稿第二步：保存，返回路径 */
-  async saveFinal(out: Built, pattern: string): Promise<string> {
-    const dir = this.meta?.dir || dirOf(this.meta?.path || this.ctx.bPath);
+  async saveFinal(out: Built, pattern: string, folderTitle?: string): Promise<string> {
+    // 没开始审阅稿也能生成定稿（beta.7）；对方文件是库里的拷贝时先问放哪
+    let dir = this.meta?.dir || (this.meta?.path ? dirOf(this.meta.path) : '');
+    if (!dir) {
+      if (this.ctx.noDir) { dir = await api.pickFolder?.({ title: folderTitle, defaultPath: dirOf(this.ctx.bPath) }); if (!dir) throw new Error('cancel'); }
+      else dir = dirOf(this.ctx.bPath);
+    }
     let path = await freePath(dir, draftName(pattern, this.ctx.bName, '', this.vars()));
     for (let i = 0; i < 5; i++) {
       const res = await api.draftSave({ path, data: out.bytes, expect: null });

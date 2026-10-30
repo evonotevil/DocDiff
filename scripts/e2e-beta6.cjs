@@ -21,10 +21,11 @@ const drafts = () => fs.readdirSync(dir).filter((f) => /我方意见/.test(f));
 (async () => {
   // 1. 首页对齐
   { const { app, w } = await launch([]);
-    await w.waitForSelector('.lib-card', { timeout: 30000 });
+    // beta.7：第一次用（库是空的）时没有两张卡片，改为一行说明；它和两块放置区的外沿对齐
+    await w.waitForSelector('.home-intro', { timeout: 30000 });
     for (const W of [1440, 1100]) { await w.setViewportSize({ width: W, height: 900 }); await w.waitForTimeout(300);
-      const r = await w.evaluate(() => { const d = [...document.querySelectorAll('.drops .drop, .drops > div')].filter((x) => !x.classList.contains('vs')).map((x) => x.getBoundingClientRect()); const c = [...document.querySelectorAll('.lib-cols > *')].map((x) => x.getBoundingClientRect()); return { d: d.map((x) => [Math.round(x.left), Math.round(x.right)]), c: c.map((x) => [Math.round(x.left), Math.round(x.right)]) }; });
-      ok(`home cards line up with the drop zones at ${W}px`, r.d.length >= 2 && r.c.length === 2 && Math.abs(r.d[0][0] - r.c[0][0]) <= 1 && Math.abs(r.d[0][1] - r.c[0][1]) <= 1 && Math.abs(r.d[r.d.length - 1][0] - r.c[1][0]) <= 1 && Math.abs(r.d[r.d.length - 1][1] - r.c[1][1]) <= 1, r); }
+      const r = await w.evaluate(() => { const d = [...document.querySelectorAll('.drops .drop')].map((x) => x.getBoundingClientRect()); const c = document.querySelector('.home-intro').getBoundingClientRect(); return { d: d.map((x) => [Math.round(x.left), Math.round(x.right)]), c: [Math.round(c.left), Math.round(c.right)] }; });
+      ok(`home intro lines up with the drop zones at ${W}px`, r.d.length === 2 && Math.abs(r.d[0][0] - r.c[0]) <= 1 && Math.abs(r.d[1][1] - r.c[1]) <= 1, r); }
     await app.close(); }
   // 2. 修订审阅里生成审阅稿，然后删掉它
   { const { app, w } = await launch([F('V1'), F('V2')]);
@@ -32,7 +33,8 @@ const drafts = () => fs.readdirSync(dir).filter((f) => /我方意见/.test(f));
     ok('rich text: no review draft chip and nothing written', !(await w.$('.draft-chip')) && drafts().length === 0);
     await w.evaluate(() => document.querySelectorAll('.nav-list .nav-item')[2].click()); await w.waitForTimeout(500);
     await clickText(w, '.reviewer-ask .btn', '好的');
-    await w.evaluate(() => document.querySelector('.dlist .drow')?.click()); await w.keyboard.press('r'); await w.waitForTimeout(1500);
+    await w.evaluate(() => document.querySelector('.dlist .drow')?.click()); await w.keyboard.press('r'); await w.waitForTimeout(800);
+    await w.evaluate(() => document.querySelector('.tb-start')?.click()); await w.waitForTimeout(1200); // beta.7：手动开始
     ok('review: draft created', drafts().length === 1 && !!(await w.$('.draft-chip')));
     await w.evaluate(() => document.querySelectorAll('.nav-list .nav-item')[0].click()); await w.waitForTimeout(400);
     ok('back in rich text: chip hidden', !(await w.$('.draft-chip')));
@@ -45,10 +47,10 @@ const drafts = () => fs.readdirSync(dir).filter((f) => /我方意见/.test(f));
     await w.evaluate(() => document.querySelectorAll('.nav-list .nav-item')[2].click()); await w.waitForTimeout(2000);
     const chip = await w.evaluate(() => document.querySelector('.draft-chip')?.getAttribute('aria-label') || '');
     const toast = await w.evaluate(() => document.querySelector('.toast')?.innerText || '');
-    ok('review: recreated automatically in the same place, told once', drafts().length === 1 && /已保存/.test(chip) && /重新生成/.test(toast), { files: drafts(), chip, toast });
+    ok('review: recreated automatically in the same place, told once', drafts().length === 1 && /已保存/.test(chip) && /重建/.test(toast), { files: drafts(), chip, toast });
     // 4. 改成“先问我”，再删
     await w.evaluate(() => [...document.querySelectorAll('.nav-foot .nav-item')].find((b) => /设置/.test(b.textContent))?.click()); await w.waitForTimeout(300);
-    await clickText(w, '.modal button', '^\\s*审阅\\s*$'); await w.waitForTimeout(200);
+    await clickText(w, '.modal button', '^\\s*审阅稿与定稿\\s*$'); await w.waitForTimeout(200); // beta.7：设置拆页
     await clickText(w, '.set-review .seg button', '先问我'); await w.keyboard.press('Escape'); await w.waitForTimeout(300);
     fs.unlinkSync(path.join(dir, drafts()[0]));
     await w.evaluate(() => window.dispatchEvent(new Event('focus'))); await w.waitForTimeout(1200);

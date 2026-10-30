@@ -1,4 +1,5 @@
 import React from 'react';
+import * as I from './icons';
 
 export function Switch({ on, onChange, disabled, label, size }: { on: boolean; onChange: (v: boolean) => void; disabled?: boolean; label?: string; size?: 'sm' }) {
   return <button type="button" className={`switch ${on ? 'on' : ''} ${size || ''}`} disabled={disabled} onClick={() => onChange(!on)} role="switch" aria-checked={on} aria-label={label} />;
@@ -52,4 +53,9 @@ export function MidName({ name, className, title }: { name: string; className?: 
 export function TypeTag({ type }: { type: string }) {
   const k = (type || 'docx').toLowerCase().replace(/^md$/, 'txt');
   return <span className={`badge ${k}`} aria-hidden="true">{k.toUpperCase()}</span>;
+}
+
+/** “ⓘ”悬停说明（beta.7 · 设置与首页排布）：说明文字最多一行，其余放进悬停 / 聚焦时出现的深色气泡 */
+export function Info({ children, label }: { children: React.ReactNode; label: string }) {
+  return <span className="qtip" tabIndex={0} aria-label={label}><I.IconInfo /><span className="qtip-b" role="tooltip">{children}</span></span>;
 }

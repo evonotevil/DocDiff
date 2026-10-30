@@ -14,7 +14,7 @@ export function Popover({ anchor, open, onClose, title, right, width = 340, alig
   children: React.ReactNode; className?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ top: number; left: number; maxH: number } | null>(null);
+  const [pos, setPos] = useState<{ top?: number; bottom?: number; left: number; maxH: number } | null>(null);
   useLayoutEffect(() => {
     if (!open || !anchor.current) return;
     const place = () => {
@@ -23,9 +23,9 @@ export function Popover({ anchor, open, onClose, title, right, width = 340, alig
       let left = align === 'end' ? r.right - width : r.left;
       left = Math.max(8, Math.min(W - width - 8, left));
       const below = r.bottom + 8;
-      // 放不下时向上弹
+      // 放不下时向上弹：用 bottom 贴住按钮上方 8px，高度按内容往上长（beta.7；以前按最大高度推，短菜单会飘到屏幕顶上）
       const up = H - below < 220 && r.top > H - below;
-      setPos(up ? { top: Math.max(8, r.top - 8 - Math.min(H * 0.7, 520)), left, maxH: Math.min(H * 0.7, r.top - 16) } : { top: below, left, maxH: H - below - 12 });
+      setPos(up ? { bottom: H - r.top + 8, left, maxH: Math.min(H * 0.7, r.top - 16) } : { top: below, left, maxH: H - below - 12 });
     };
     place();
     window.addEventListener('resize', place);
@@ -51,15 +51,16 @@ export function Popover({ anchor, open, onClose, title, right, width = 340, alig
   }, [open]);
   if (!open || !pos) return null;
   return (
-    <div ref={ref} tabIndex={-1} className={`pop ${className}`} role="dialog" aria-label={label || (typeof title === 'string' ? title : undefined)}
-      style={{ top: pos.top, left: pos.left, width, maxHeight: pos.maxH }}>
+    // 点弹出层里面不往外冒泡（它在 DOM 里可能嵌在一行可点击的条目里，如“最近比较”的一行）
+    <div ref={ref} tabIndex={-1} className={`pop ${className}`} onClick={(e) => e.stopPropagation()} role="dialog" aria-label={label || (typeof title === 'string' ? title : undefined)}
+      style={{ top: pos.top, bottom: pos.bottom, left: pos.left, width, maxHeight: pos.maxH }}>
       {title && <div className="pop-h"><span className="pop-t">{title}</span>{right && <span className="pop-r">{right}</span>}</div>}
       <div className="pop-b">{children}</div>
     </div>
   );
 }
 
-/** “…”菜单里的一项 */
+/** “…”菜单里的一项（组件 MenuItem）。菜单 = 无标题的 Popover，className="menu"：上下各留 8px */
 export function MenuItem({ icon, children, onClick, tone }: { icon?: React.ReactNode; children: React.ReactNode; onClick: () => void; tone?: 'danger' }) {
   return <button type="button" className={`menu-item ${tone || ''}`} onClick={onClick}>{icon}{children}</button>;
 }

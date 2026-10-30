@@ -20,7 +20,7 @@ import { FilterChips, Filter, ScopeBody, scopeLine } from './components/Panels';
 import { Notice } from './components/Panel';
 import { Popover, MenuItem } from './components/Popover';
 import { ExportDialog, ExportKind } from './components/ExportDialog';
-import { SettingsModal, SettingsValues, UpdInfo, APP_VERSION } from './components/SettingsModal';
+import { SettingsModal, SettingsValues, UpdInfo, APP_VERSION, type Tab as SettingsTab } from './components/SettingsModal';
 import { Modal } from './components/Modal';
 import { Mascot, Confetti } from './components/Mascot';
 import { Wordmark } from './components/Logo';
@@ -36,7 +36,7 @@ import { useDiff } from './lib/useDiff';
 import { useDrop } from './lib/drop';
 import { buildPlan } from './lib/draft/plan';
 import { DraftSync, cleanStem, type DraftState } from './lib/draft/client';
-import { DraftChip } from './components/DraftChip';
+import { DraftChip, REASON } from './components/DraftChip';
 import { TemplatesCard, TemplateCompareDialog, MatchNotice, RecentRow } from './components/Library';
 import { ThreadsCard, VersionChip, AddVersionDialog, HintLine, ClauseHistory } from './components/Thread';
 import { hintsFor, clauseHistory } from './lib/hints';
@@ -131,11 +131,31 @@ function timeAgo(ts: number) {
 }
 
 // ---------- 首页组件 ----------
-function DropZone({ side, doc, loading, error, onOpen, onFiles, onClear, onPaste }: {
+function DropZone({ side, doc, loading, error, onOpen, onFiles, onClear, onPaste, compact }: {
   side: Side; doc: DocModel | null; loading: boolean; error: string | null;
   onOpen: () => void; onFiles: (f: FileInfo[]) => void; onClear: () => void; onPaste: () => void;
+  /** 老用户首页（beta.7 · H）：一行写清是哪一边 + 两个按钮，约 88 高；整块照旧能拖放 */
+  compact?: boolean;
 }) {
   const d = useDrop(onFiles);
+  if (compact) return (
+    <div className={`drop compact ${d.over ? 'over' : ''} ${doc ? 'filled' : ''}`} {...d.props}>
+      <div className="dz-txt">
+        <div className="label">{sideLabel(side)}</div>
+        {loading ? <div className="title muted">{t('正在读取…')}</div>
+          : doc ? <div className="title file"><TypeTag type={doc.type} /><MidName name={doc.file.name} /></div>
+          : <div className="title">{side ? t('拖入对方发来的文件') : t('拖入 Word、PDF 或 TXT')}</div>}
+        {doc && !loading && <div className="sub">{docStat(doc)} · {t('{n} 段', { n: doc.blocks.filter((b) => b.kind === 'tr' || b.runs.length).length })}</div>}
+      </div>
+      {loading ? <div className="spinner sm" /> : doc ? (
+        <div className="acts"><button className="btn sm" onClick={onOpen}><I.IconUpload />{t('更换')}</button><button className="btn sm plain" onClick={onClear}>{t('移除')}</button></div>
+      ) : (
+        <div className="acts"><button className="btn sm blue" onClick={onOpen}><I.IconUpload />{t('选择文件')}</button><button className="btn sm" onClick={onPaste}><I.IconPaste />{t('粘贴')}</button></div>
+      )}
+      {doc?.type === 'pdf' && doc.blocks.length === 0 && <Notice tone="warn" className="stack dz-note" title={t('没读到文字，可能是扫描件。')}>{t('比较后用「OCR 文本」或「图像」模式。')}</Notice>}
+      {error && <Notice tone="err" className="stack dz-note" title={error} />}
+    </div>
+  );
   return (
     <div className={`drop ${d.over ? 'over' : ''} ${doc ? 'filled' : ''}`} {...d.props}>
       <div className="label">{sideLabel(side)}</div>
@@ -236,7 +256,7 @@ export default function App() {
   const [errs, setErrs] = useState<[string | null, string | null]>([null, null]);
   const [pwd, setPwd] = useState<{ side: Side; file: FileInfo; wrong: boolean } | null>(null);
   const [pasteSide, setPasteSide] = useState<Side | null>(null);
-  const [showSettings, setShowSettings] = useState<false | 'general' | 'review' | 'risk' | 'keys' | 'about'>(false);
+  const [showSettings, setShowSettings] = useState<false | SettingsTab>(false);
   const [lang, setLangState] = useState<Lang>(initLang);
   const [compared, setCompared] = useState(false);
   const [tab, setTab] = useState(0);
@@ -663,7 +683,10 @@ export default function App() {
   // ---------- 审阅稿（1.8）：修改后文档是 Word 时，决定自动写进它旁边的一份拷贝 ----------
   const [draftSync, setDraftSync] = useState<DraftSync | null>(null);
   const [draftState, setDraftState] = useState<DraftState>({ s: 'none', unwritten: [], prior: 0 });
-  useEffect(() => { if (draftState.regenerated && draftState.s === 'saved') flash(t('原来的审阅稿不见了，已在原位置重新生成一份，所有决定都写进去了。')); }, [draftState.regenerated, draftState.s]);
+  // 只在真的写好后提示（beta.7 · E5）；没写完的情况由状态片和完成页说明
+  useEffect(() => { if (draftState.regenerated && draftState.s === 'saved' && !draftState.unwritten.length) flash(t('原来的审阅稿不见了，已按 DocDiff 里的决定在原位置重建。在 Word 里直接改的内容没有保留。')); }, [draftState.regenerated, draftState.s]);
+  const heldN = richRes ? richRes.changes.filter((c) => decisions[c.id]?.v === 'h').length : 0;
+  const allDecided = !!richRes && richRes.changes.length > 0 && richRes.changes.every((c) => decisions[c.id]?.v);
   // 原始文档是谁：往来稿里写版本号（第一版来自模板时写模板名和版本），普通比较写文件名
   const origLabel = (() => {
     if (activeTh && thread) {
@@ -675,8 +698,12 @@ export default function App() {
     }
     return A ? A.file.name : '';
   })();
-  const draftReady = (draftState.s === 'saved' || draftState.s === 'locked') && !!draftState.path;
+  // 只有真的写好（没被 Word 占着、没有写不进的处）才算“可以发给对方”（P1-1）
+  const draftReady = draftState.s === 'saved' && !draftState.unwritten.length && !!draftState.path;
   const [finalReq, setFinalReq] = useState(0);
+  /** 刚生成的定稿（完成页显示）；换了文件或决定变了就清掉 */
+  const [finalMade, setFinalMade] = useState('');
+  useEffect(() => { setFinalMade(''); }, [pk]);
   const baseOfPath = (p: string) => p.slice(Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\')) + 1);
   // 审阅稿只属于修订审阅（beta.6）：进入修订审阅后才开始检查、生成和同步；之后切到别的模式也不打断正在进行的写入，但不显示
   const [draftArmed, setDraftArmed] = useState('');
@@ -732,10 +759,12 @@ export default function App() {
     if (!th || va?.file.sha !== A.sha256 || vb?.file.sha !== B.sha256) setThread(null);
   }, [A?.sha256, B?.sha256]);
   useEffect(() => {
-    const onFocus = () => draftSync?.check();
+    // 只在修订审阅里检查和补写审阅稿（beta.7 · P2-3）；切回修订审阅时由 tab 的 effect 再检查一次
+    const onFocus = () => { if (actions.current.tab === 2) draftSync?.check(); };
+    if (draftSync) { const was = draftSync.paused; draftSync.paused = tab !== 2; if (was && tab === 2) draftSync.check(); }
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
-  }, [draftSync]);
+  }, [draftSync, tab]);
 
   useEffect(() => setDismissDegraded(false), [docSig, optKey]);
   useEffect(() => setSelCid(null), [tab, richRes, plainRes, ocrRes]);
@@ -969,6 +998,8 @@ export default function App() {
   actions.current = { open, swap, clearAll, go, decide, setTab, startCompare, toggleNav, toggleAside, compared, tab, selCid, undoBulk: undoToast?.undo, modal: !!(pwd || pasteSide !== null || showSettings || exportOpen || pop || bulkAsk) };
   useEffect(() => api.onMenu((cmd: string, arg?: any) => {
     const a = actions.current;
+    // 弹窗、弹出层开着时，菜单栏和它的快捷键（⌘1 / ⌘3 / ⌘N 等）同样不作用到后台（beta.7 · P1-2，和键盘处理一致）
+    if (cmd !== 'fullscreen' && (a.modal || document.querySelector('.modal-bg') || document.querySelector('.pop:not(.draft-tip)'))) return;
     if (cmd === 'open-left') a.open(0);
     else if (cmd === 'open-right') a.open(1);
     else if (cmd === 'swap') a.swap();
@@ -1039,7 +1070,8 @@ export default function App() {
           onExport={doExport} onHoldPending={() => decideAll('h', true)} onClose={() => setExportOpen(false)} busy={exportBusy}
           draft={draftReady ? { name: baseOfPath(draftState.path!), open: () => api.openExternalFile?.(draftState.path) } : null} />
       )}
-      {toast && !undoToast && <div className="toast" role="status" aria-live="polite">{toast}</div>}
+      {/* 有撤销提示时，新的提示叠在它上面，不再被吞掉（beta.7：如“审阅稿已重建”） */}
+      {toast && <div className={`toast${undoToast ? ' above' : ''}`} role="status" aria-live="polite">{toast}</div>}
       {undoToast && (
         <div className="toast undo" role="status" aria-live="polite">
           <span className="tm">{undoToast.msg}</span>
@@ -1085,7 +1117,86 @@ export default function App() {
       if (el.scrollWidth <= el.clientWidth + 1) break;
     }
   }, []);
-  const tbSig = `${tab}|${activeTh?.id || ''}|${draftState.s}|${(draftState.unwritten || []).length}|${!!curRes}|${A?.file.name || ''}|${B?.file.name || ''}|${activeTh?.name || ''}|${thread?.a || ''}|${thread?.b || ''}|${String(changes.length).length}`;
+  // 完成页的交接区（beta.7 · D1 / D3 / E3）：只有审阅稿真的写好了，才说“要发给对方的就是这份”
+  const finalBtn = (hasDraft: boolean) => heldN > 0
+    ? <button className="btn plain block" onClick={() => { setDoneOpen(false); setFinalReq((n) => n + 1); }}>{t('谈完后：生成定稿…')}</button>
+    : hasDraft ? null : <button className="btn big block" onClick={() => { setDoneOpen(false); setFinalReq((n) => n + 1); }}>{t('生成定稿…')}</button>;
+  const fileRow = (p?: string) => p ? <div className="file-row"><TypeTag type="docx" /><MidName name={baseOfPath(p)} /></div> : null;
+  const doneTail = (
+    <>
+      {finalMade && (
+        <Notice tone="ok" className="done-final" title={t('定稿已生成')}
+          action={<><button type="button" className="btn sm" onClick={() => api.openExternalFile?.(finalMade)}>{t('打开')}</button><button type="button" className="btn sm" onClick={() => api.reveal?.(finalMade)}>{t('在文件夹中显示')}</button></>}>
+          <MidName name={baseOfPath(finalMade)} />
+        </Notice>
+      )}
+      <button className="btn plain block" onClick={() => { setDoneOpen(false); openExport(); }}>{t('导出报告或其他格式…')}</button>
+      <button className="btn plain block" onClick={() => setDoneOpen(false)}>{t('回去再看看')}</button>
+    </>
+  );
+  const ds = draftState, unN = (ds.unwritten || []).length;
+  const unList = (ds.unwritten || []).slice(0, 3).map((u) => t('第 {i} 处（{r}）', { i: u.cid, r: t(REASON[u.reason]) })).join(t('、')) + (unN > 3 ? t(' 等 {n} 处', { n: unN }) : '');
+  const doneActs = !draftSync ? (
+    <div className="done-acts">
+      <button className="btn primary big block" onClick={() => { setDoneOpen(false); openExport(); }}><I.IconExport />{t('导出审阅结果…')}</button>
+      <button className="btn plain block" onClick={() => setDoneOpen(false)}>{t('回去再看看')}</button>
+    </div>
+  ) : ds.s === 'none' ? (
+    // E3：还没开始审阅稿——结论只记在 DocDiff 里，主按钮是“生成审阅稿”，点了原地变成 D1
+    <div className="done-acts">
+      <Notice tone="info" title={t('结论目前只记在 DocDiff 里')}>{t('要发给对方时，生成一份审阅稿：在对方文件旁边写好你的修订和批注，格式不变。')}</Notice>
+      <button className="btn primary big block" onClick={() => draftSync.start(t('选择放审阅稿的文件夹'))}>{t('生成审阅稿')}</button>
+      {finalBtn(false)}
+      {doneTail}
+    </div>
+  ) : (ds.s === 'saved' && !unN) || ds.s === 'saving' ? (
+    // D1 ①：已写好（写入中时按钮暂不可用）
+    <div className="done-acts">
+      <p className="done-draft">{heldN > 0 ? t('要发给对方的就是这份审阅稿，{n} 处待议已写成批注：', { n: heldN }) : t('所有决定已写进审阅稿，要发给对方的就是这份：')}</p>
+      {fileRow(ds.path)}
+      <button className="btn primary big block" disabled={ds.s === 'saving'} onClick={() => { setDoneOpen(false); api.openExternalFile?.(ds.path); }}>{ds.s === 'saving' ? t('正在写入…') : t('打开审阅稿')}</button>
+      {heldN > 0 ? (
+        <><button className="btn big block" disabled={!ds.path} onClick={() => { setDoneOpen(false); api.reveal?.(ds.path); }}>{t('在文件夹中显示')}</button>{finalBtn(true)}</>
+      ) : (
+        <div className="done-row">
+          <button className="btn big block" disabled={!ds.path} onClick={() => { setDoneOpen(false); api.reveal?.(ds.path); }}>{t('在文件夹中显示')}</button>
+          <button className="btn big block" onClick={() => { setDoneOpen(false); setFinalReq((n) => n + 1); }}>{t('生成定稿…')}</button>
+        </div>
+      )}
+      {doneTail}
+    </div>
+  ) : ds.s === 'locked' ? (
+    // D3 ②：Word 占着，最新的决定没写进去；切回 DocDiff 时自动再试，写完自动变成 ①
+    <div className="done-acts">
+      <Notice tone="warn" title={t('在 Word 里关掉它，DocDiff 会自动写完')}>{t('写完之前先别发给对方。回到 DocDiff 时会自动再试一次。')}</Notice>
+      <p className="done-draft">{t('这份审阅稿还没写进最新的决定：')}</p>
+      {fileRow(ds.path)}
+      <button className="btn primary big block" onClick={() => draftSync.retry()}>{t('重新写入')}</button>
+      <button className="btn big block" onClick={() => { setDoneOpen(false); api.reveal?.(ds.path); }}>{t('在文件夹中显示')}</button>
+      {doneTail}
+    </div>
+  ) : ds.s === 'saved' ? (
+    // D3 ③：有几处写不进去（结构原因，重写也写不进）——列出来，可以直接跳回去；审阅稿里这些处仍是对方的写法
+    <div className="done-acts">
+      <Notice tone="err" title={t('有 {n} 处没能写进审阅稿', { n: unN })}>{t('{list}。审阅稿里这几处仍是对方的写法，可以回去查看，或在 Word 里手动改。', { list: unList })}</Notice>
+      <p className="done-draft">{t('其余决定已写进这份审阅稿：')}</p>
+      {fileRow(ds.path)}
+      <button className="btn primary big block" onClick={() => { setDoneOpen(false); setFilter('all'); setSelCid(ds.unwritten[0].cid); }}>{unN > 1 ? t('回到没写进去的那 {n} 处', { n: unN }) : t('回到没写进去的那 1 处')}</button>
+      <button className="btn big block" onClick={() => { setDoneOpen(false); api.openExternalFile?.(ds.path); }}>{t('用 Word 打开审阅稿')}</button>
+      {doneTail}
+    </div>
+  ) : (
+    // 被改过 / 不见了 / 写不进 / 出错：交给工具栏的状态片处理
+    <div className="done-acts">
+      <Notice tone="err" title={ds.s === 'modified' ? t('审阅稿在 DocDiff 之外被改过') : ds.s === 'gone' ? t('审阅稿被移走或删除了') : ds.s === 'nowrite' ? t('审阅稿写不进这个文件夹') : t('没能保存审阅稿')}>
+        {t('你的决定都还在。点工具栏的“审阅稿”处理好之后再发给对方。')}
+      </Notice>
+      <button className="btn primary big block" onClick={() => setDoneOpen(false)}>{t('回去处理')}</button>
+      {finalBtn(false)}
+      <button className="btn plain block" onClick={() => { setDoneOpen(false); openExport(); }}>{t('导出报告或其他格式…')}</button>
+    </div>
+  );
+  const tbSig = `${tab}|${activeTh?.id || ''}|${draftState.s}|${draftSync ? 1 : 0}|${(draftState.unwritten || []).length}|${!!curRes}|${A?.file.name || ''}|${B?.file.name || ''}|${activeTh?.name || ''}|${thread?.a || ''}|${thread?.b || ''}|${String(changes.length).length}`;
   // 内容变了：等这一帧画完、排版干净时再量（在提交阶段量会强制把整份文档提前排版一遍，打开大文档时多花约 0.1 秒）
   useEffect(() => { const id = requestAnimationFrame(fitToolbar); return () => cancelAnimationFrame(id); }, [tbSig, fitToolbar]);
   useEffect(() => {
@@ -1111,6 +1222,8 @@ export default function App() {
       setCompared(true); setTab(0);
     };
     const missing = 2 - (A ? 1 : 0) - (B ? 1 : 0);
+    // 老用户 / 新用户（beta.7 · 首页排布）：库里有往来稿、模板或最近比较，就用紧凑布局
+    const veteran = live(lib.threads).length > 0 || live(lib.templates).length > 0 || recent.length > 0;
     const tplOpen = tplDlg ? lib.templates.find((y) => y.id === tplDlg && !y.deleted) : null;
     return (
       <div className="app home">
@@ -1121,22 +1234,24 @@ export default function App() {
         </div>
         <div className="home-scroll">
           <div className="home-inner">
-            <div className="hero">
-              <Mascot mood={A && B ? 'cheer' : A || B ? 'happy' : 'happy'} size={124} className="mascot-bob" />
-              <div className="hero-text">
-                <h1>{t(A && B ? '准备好了，开始比较吧' : '找出两份文档的每一处不同')}</h1>
-                <p>{t('Word、PDF、TXT 任意组合 · 所有处理都在这台电脑上完成，不会上传')}</p>
-                <div className="feats">
-                  {MODES.slice(0, 5).map((m) => <span key={m.label} className={`feat mc-${m.c}`}>{m.icon}{t(m.label)}</span>)}
-                  {!A && !B && <button className="btn sm sample-btn" onClick={trySample}>{t('用示例合同试一下')}</button>}
+            {veteran ? (
+              // H：老用户（已有往来稿 / 模板 / 最近比较）——去掉大标题和引导，放置区变矮，库占主要位置
+              <div className="home-sh"><h2>{t('新比较')}</h2><span className="grow" />{!A && !B && <button className="btn sm" onClick={trySample}>{t('用示例合同试一下')}</button>}</div>
+            ) : (
+              // H2：第一次用——保留标题、副标题、吉祥物；去掉五个模式图标和气泡
+              <div className="hero">
+                <Mascot mood={A && B ? 'cheer' : 'happy'} size={104} className="mascot-bob" />
+                <div className="hero-text">
+                  <h1>{t(A && B ? '准备好了，开始比较吧' : '找出两份文档的每一处不同')}</h1>
+                  <p>{t('Word、PDF、TXT 任意组合，全部在这台电脑上完成，不会上传。')}</p>
                 </div>
+                {!A && !B && <button className="btn sample-btn" onClick={trySample}>{t('用示例合同试一下')}</button>}
               </div>
-              <div className="bubble" aria-hidden="true">{t(A && B ? '两份都到齐了！按 Enter 就能开始。' : A || B ? '很好，再放一份进来。' : '把合同的两个版本拖进来，我帮你一处处找。')}</div>
-            </div>
-            <div className="drops">
-              <DropZone side={0} doc={A} loading={busy[0]} error={errs[0]} onOpen={() => open(0)} onFiles={(f) => onFiles(0, f)} onClear={() => setDocs((d) => [null, d[1]])} onPaste={() => setPasteSide(0)} />
-              <div className="vs"><button className="vs-chip" title={t('交换左右')} aria-label={t('交换左右')} onClick={swap}><I.IconSwap /></button></div>
-              <DropZone side={1} doc={B} loading={busy[1]} error={errs[1]} onOpen={() => open(1)} onFiles={(f) => onFiles(1, f)} onClear={() => setDocs((d) => [d[0], null])} onPaste={() => setPasteSide(1)} />
+            )}
+            <div className={`drops${veteran ? ' compact' : ''}`}>
+              <DropZone side={0} compact={veteran} doc={A} loading={busy[0]} error={errs[0]} onOpen={() => open(0)} onFiles={(f) => onFiles(0, f)} onClear={() => setDocs((d) => [null, d[1]])} onPaste={() => setPasteSide(0)} />
+              <div className="vs"><button className={veteran ? 'btn plain icon vs-ic' : 'vs-chip'} title={t('交换左右')} aria-label={t('交换左右')} onClick={swap}><I.IconSwap /></button></div>
+              <DropZone side={1} compact={veteran} doc={B} loading={busy[1]} error={errs[1]} onOpen={() => open(1)} onFiles={(f) => onFiles(1, f)} onClear={() => setDocs((d) => [d[0], null])} onPaste={() => setPasteSide(1)} />
             </div>
             {homeMatch?.th && homeMatch.alt && B && (
               <Notice tone="warn" className="lib-match" title={t('这份文件和两份往来稿都很像')}
@@ -1156,6 +1271,13 @@ export default function App() {
                 body={t('相同段落 {p}。用模板比较时，原始文档会自动用对方拿到的那一版。', { p: `${Math.round(homeMatch.score * 100)}%` })}
                 action={t('用模板比较')} onUse={() => setTplDlg(homeMatch.tpl.id)} onDismiss={() => setMatchOff(B?.sha256 || '')} />
             )}
+            {!veteran ? (
+              // 往来稿和模板都还空着：不放两张空卡片，一行说明 + “新建模板”
+              <div className="home-intro">
+                <span>{t('合同要来回改好几轮？比较完可以存成往来稿；常用的标准稿可以存成模板。')}</span>
+                <button type="button" className="btn sm" onClick={newTemplate} disabled={libBusy}><I.IconPlusDoc />{t('新建模板')}</button>
+              </div>
+            ) : (
             <div className="lib-cols">
             <div className="lib-col">
             <ThreadsCard threads={live(lib.threads)} onOpen={(th) => openThread(th)} onRename={(th, name) => updThread(th.id, (x) => ({ ...x, name, updated: Date.now() }))}
@@ -1178,6 +1300,7 @@ export default function App() {
                 onRename={renameTpl} onDelete={deleteTpl} onDeleteVersion={deleteTplVersion} />
             </div>
             </div>
+            )}
           </div>
         </div>
         <div className="home-cta">
@@ -1420,7 +1543,7 @@ export default function App() {
         </div>
       </nav>
 
-      <header ref={tbRef} data-level="0" className={`tbar drag${draftState.s !== 'none' && tab === 2 ? ' has-draft' : ''}`}>
+      <header ref={tbRef} data-level="0" className={`tbar drag${draftSync && tab === 2 ? ' has-draft' : ''}`}>
         {!navOpen && <button type="button" className="ibtn tb-nav" onClick={toggleNav} title={toggleTitle(false, '侧栏', navKey)} aria-label={t('展开侧栏')} aria-expanded={false}><I.IconPanelLeft /></button>}
         {activeTh && thread ? (
           <VersionChip th={activeTh} a={thread.a} b={thread.b} tpl={activeTh.tpl ? lib.templates.find((x) => x.id === activeTh.tpl!.tid) : null}
@@ -1450,9 +1573,9 @@ export default function App() {
         </div>
         {tab !== 5 && <button ref={gearRef} type="button" className="ibtn" onClick={() => setPop(pop === 'settings' ? null : 'settings')} title={t('比较设置')} aria-label={t('比较设置')} aria-expanded={pop === 'settings'}><I.IconGear /></button>}
         {curRes && <button type="button" className="btn tb-copy" onClick={copySummary} title={t('复制为 Markdown，可粘贴到邮件 / 飞书 / 文档')} aria-label={t('复制摘要')}><I.IconCopy /><span className="lbl">{t('复制摘要')}</span></button>}
-        {richRes && tab === 2 && draftSync && draftState.s !== 'none' && B && (
+        {richRes && tab === 2 && draftSync && B && (
           <DraftChip state={draftState} sync={draftSync} bPath={B.file.path} narrow={false} finalReq={finalReq} hideTip={tab === 2 && doneOpen} origLabel={origLabel} decided={richRes.changes.filter((c) => decisions[c.id]?.v).length}
-            pending={richRes.changes.filter((c) => !decisions[c.id]?.v || decisions[c.id]?.v === 'h').length} finalPattern={prefs.finalName.trim() || t('{name}-定稿')}
+            pending={richRes.changes.filter((c) => !decisions[c.id]?.v || decisions[c.id]?.v === 'h').length} held={heldN} onFinal={(p) => { setFinalMade(p); if (allDecided) setDoneOpen(true); }} finalPattern={prefs.finalName.trim() || t('{name}-定稿')}
             onJump={(cid) => { setTab(2); setFilter('all'); setSelCid(cid); }} flash={flash} />
         )}
         {richRes && isRichTab && <button type="button" className={`btn tb-export ${tab === 2 ? '' : 'primary'}`} onClick={openExport} title={t('导出')} aria-label={t('导出')}><I.IconExport /><span className="lbl">{t('导出')}</span></button>}
@@ -1566,33 +1689,16 @@ export default function App() {
         )}
         {tab === 2 && doneOpen && (
           <div className="overlay-bg">
-            {prefs.celebrate && <Confetti />}
+            {prefs.celebrate && !finalMade && <Confetti />}
             <div className="done-card" role="dialog" aria-label={t('审阅完成')}>
               <Mascot mood="cheer" size={120} className="mascot-pop" />
               <h2>{t('全部看完了！')}</h2>
-              <div className="muted">{t('{n} 处修订全部处理完毕', { n: changes.length })}</div>
+              {/* 待议算看完，但不等于谈定（beta.7） */}
+              <div className="muted">{heldN > 0 ? t('已看完 {n} 处修订，{h} 处待议', { n: changes.length, h: heldN }) : t('{n} 处修订全部处理完毕', { n: changes.length })}</div>
               <div className="done-stats">
                 {(['a', 'r', 'h'] as Verdict[]).map((v) => <div key={v} className={`done-stat ${v}`}><div className="h">{t(v === 'a' ? '接受' : v === 'r' ? '拒绝' : '待议')}</div><div className="v">{changes.filter((c) => decisions[c.id]?.v === v).length}</div></div>)}
               </div>
-              {draftReady ? (
-                <div className="done-acts">
-                  {/* 审阅稿已经自动写好：交接动作就是打开它（beta.5，和首次提示的说法一致） */}
-                  <p className="done-draft">{t('所有决定已写进「{f}」，要发给对方的就是这份。', { f: baseOfPath(draftState.path!) })}</p>
-                  {draftState.unwritten.length > 0 && <p className="done-draft warn">{t('其中 {n} 处没能写进去，审阅稿里仍是对方的写法。点工具栏的“审阅稿”查看。', { n: draftState.unwritten.length })}</p>}
-                  <button className="btn primary big block" onClick={() => { setDoneOpen(false); api.openExternalFile?.(draftState.path); }}>{t('打开审阅稿')}</button>
-                  <div className="done-row">
-                    <button className="btn block" onClick={() => { setDoneOpen(false); api.reveal?.(draftState.path); }}>{t('在文件夹中显示')}</button>
-                    <button className="btn block" onClick={() => { setDoneOpen(false); setFinalReq((n) => n + 1); }}>{t('生成定稿…')}</button>
-                  </div>
-                  <button className="btn plain block" onClick={() => { setDoneOpen(false); openExport(); }}>{t('导出报告或其他格式…')}</button>
-                  <button className="btn plain block" onClick={() => setDoneOpen(false)}>{t('回去再看看')}</button>
-                </div>
-              ) : (
-                <div className="done-acts">
-                  <button className="btn primary big block" onClick={() => { setDoneOpen(false); openExport(); }}><I.IconExport />{t('导出审阅结果…')}</button>
-                  <button className="btn plain block" onClick={() => setDoneOpen(false)}>{t('回去再看看')}</button>
-                </div>
-              )}
+              {doneActs}
             </div>
           </div>
         )}
@@ -1603,9 +1709,10 @@ export default function App() {
 
       <Popover anchor={gearRef} open={pop === 'settings'} onClose={closePop} title={t('比较设置')}>{compareSettings}</Popover>
       <Popover anchor={scopeRef} open={pop === 'scope'} onClose={closePop} title={t('比较范围')} width={360} align="end">{scope && <ScopeBody scope={scope} />}</Popover>
-      <Popover anchor={moreRef} open={pop === 'more'} onClose={closePop} width={240}>
+      <Popover anchor={moreRef} open={pop === 'more'} onClose={closePop} width={260} className="menu" label={t('更多')}>
         <MenuItem icon={<I.IconCheck />} onClick={() => { closePop(); setBulkAsk('a'); }}>{t('全部接受…')}</MenuItem>
         <MenuItem icon={<I.IconX />} tone="danger" onClick={() => { closePop(); setBulkAsk('r'); }}>{t('全部拒绝…')}</MenuItem>
+        {draftSync && <MenuItem icon={<I.IconPlusDoc />} onClick={() => { closePop(); setFinalReq((n) => n + 1); }}>{t('生成定稿…')}</MenuItem>}
         {decidedCount > 0 && <MenuItem icon={<I.IconRefresh />} onClick={() => { closePop(); setBulkAsk('reset'); }}>{t('重置所有决定…')}</MenuItem>}
         {reusable.length > 0 && <MenuItem icon={<I.IconClock />} onClick={() => { closePop(); setReuseAsk(true); }}>{t('沿用上轮结论…（{n} 处）', { n: reusable.length })}</MenuItem>}
         {!activeTh && A && B && A.file.path && B.file.path && <MenuItem icon={<I.IconPlusDoc />} onClick={() => { closePop(); saveAsThread(); }}>{t('存为往来稿')}</MenuItem>}
