@@ -47,7 +47,7 @@ const decideOn = async (win, re, key) => { await win.evaluate((r) => [...documen
   await clickText(win, '.ver-pop .btn', '加入新版本');
   await win.waitForSelector('.tpl-dlg');
   await pickNext(F('V3'));
-  await clickText(win, '.tpl-dlg .pair-row.pick', 'V3|选择');
+  await win.evaluate(() => document.querySelector('.tpl-dlg .dlg-drop').click());
   await win.waitForTimeout(400);
   const dlg = await text(win, '.tpl-dlg');
   ok('add-version dialog defaults to “我方” after their version', /我方改的/.test(dlg));

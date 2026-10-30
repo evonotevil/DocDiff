@@ -4,6 +4,9 @@ import * as I from './icons';
 import { Popover, MenuItem } from './Popover';
 import { Modal } from './Modal';
 import { Notice } from './Panel';
+import { Seg } from './ui';
+import { useDrop } from '../lib/drop';
+import type { FileInfo } from '../lib/model';
 import type { Thread, ThreadVersion, Side, Template } from '../lib/library';
 import type { Hint } from '../lib/hints';
 import type { RoundItem, Round } from '../lib/library';
@@ -28,7 +31,7 @@ export function ThreadsCard({ threads, onOpen, onRename, onArchive, onDelete, ch
         {arch.length > 0 && <button type="button" className="btn sm plain" onClick={() => setShowArch(!showArch)}>{showArch ? t('返回') : t('已归档 {n}', { n: arch.length })}</button>}
       </h2>
       {list.length === 0 && !showArch
-        ? <p className="lib-empty">{t('一份合同来回改好几轮时，把它存成往来稿：每一版都留着，下次只放对方的新稿，默认和上一版比，上一轮的结论也会提示你。')}</p>
+        ? <p className="lib-empty">{t('一份合同来回改好几轮时，存成往来稿：每一版都留着，下次只放对方的新稿，默认和上一版比，上一轮的结论也会提示你。')}</p>
         : <div className="lib-rows">{list.map((th) => <ThreadRow key={th.id} th={th} onOpen={onOpen} onRename={onRename} onArchive={onArchive} onDelete={onDelete} />)}</div>}
       {children}
     </section>
@@ -113,35 +116,38 @@ export function VersionChip({ th, a, b, tpl, progress, onPick, onAdd, onRename }
   );
 }
 
-/** 加入新版本：选文件、是谁的、和哪一版比 */
-export function AddVersionDialog({ th, onPick, file, busy, onDone, onClose }: {
-  th: Thread; file: { name: string } | null; busy: boolean; onPick: () => void;
+/** 加入新版本：放文件、是谁的、和哪一版比（设计稿 05） */
+export function AddVersionDialog({ th, onPick, onDropFiles, file, busy, onDone, onClose }: {
+  th: Thread; file: { name: string; ext?: string } | null; busy: boolean; onPick: () => void; onDropFiles: (f: FileInfo[]) => void;
   onDone: (side: Side, against: string) => void; onClose: () => void;
 }) {
   const last = th.versions[th.versions.length - 1];
   const [side, setSide] = useState<Side>(last?.side === 'theirs' ? 'ours' : 'theirs');
   const [against, setAgainst] = useState(last?.id || '');
   const n = (last?.n || 0) + 1;
+  const drop = useDrop(onDropFiles);
   return (
-    <Modal title={t('加入新版本')} onClose={onClose} className="tpl-dlg"
+    <Modal title={t('加入新版本')} onClose={onClose} className="tpl-dlg add-ver"
       footer={<><button type="button" className="btn" onClick={onClose}>{t('取消')}</button><button type="button" className="btn primary" disabled={!file || busy} onClick={() => onDone(side, against)}>{t('加入并比较')}</button></>}>
-      <div className="pair">
-        <button type="button" className="pair-row pick" onClick={onPick} disabled={busy}>
-          <span className="role">V{n}</span>
-          {file ? <><I.FileGlyph type={/\.pdf$/i.test(file.name) ? 'pdf' : 'docx'} size={22} /><span className="nm">{file.name}</span></> : <span className="nm hint">{busy ? t('正在读取…') : t('选择新的一版…')}</span>}
-        </button>
+      <button type="button" className={`dlg-drop ${drop.over ? 'over' : ''} ${file ? 'has' : ''}`} onClick={onPick} disabled={busy} {...drop.props}>
+        {file
+          ? <><I.FileGlyph type={file.ext || (/\.pdf$/i.test(file.name) ? 'pdf' : 'docx')} size={28} /><span className="nm">{file.name}</span><span className="sub">{t('V{n} · 点击或拖入可以换一份', { n })}</span></>
+          : <><I.IconUpload /><span className="nm">{busy ? t('正在读取…') : t('拖入新的一版，或点击选择')}</span><span className="sub">{t('也可以直接拖到首页，DocDiff 会认出是哪份往来稿')}</span></>}
+      </button>
+      <div className="dlg-field">
+        <div className="lbl">{t('这一版是')}</div>
+        <Seg full value={side} onChange={setSide} label={t('这一版是')} options={[['theirs', t('对方发来的')], ['ours', t('我方改的')]]} />
       </div>
-      <div className="choice" role="radiogroup" aria-label={t('这一版是')}>
-        <div className="grp">{t('这一版是')}</div>
-        {(['theirs', 'ours'] as Side[]).map((s) => (
-          <button key={s} type="button" role="radio" aria-checked={side === s} className={`menu-item ${side === s ? 'on' : ''}`} onClick={() => setSide(s)}>
-            {side === s ? <I.IconCheck /> : <span className="sp" />}<span className="grow">{s === 'theirs' ? t('对方发来的') : t('我方改的')}</span>
-          </button>
-        ))}
-        <div className="grp">{t('和哪一版比较')}</div>
-        <select className="ver-sel" value={against} onChange={(e) => setAgainst(e.target.value)} aria-label={t('和哪一版比较')}>
-          {[...th.versions].reverse().map((v) => <option key={v.id} value={v.id}>{`V${v.n} · ${sideLabel(v.side)} · ${v.file.name}`}</option>)}
-        </select>
+      <div className="dlg-field">
+        <div className="lbl">{t('和哪一版比较')}</div>
+        <div className="ver-list pick" role="radiogroup" aria-label={t('和哪一版比较')}>
+          {[...th.versions].reverse().map((v) => (
+            <button key={v.id} type="button" role="radio" aria-checked={against === v.id} className={`ver-row ${against === v.id ? 'on' : ''}`} onClick={() => setAgainst(v.id)}>
+              <span className={`vn ${v.side}`}>V{v.n}</span><span className="sd">{sideLabel(v.side)}</span><span className="fn">{v.file.name}</span>
+              <span className="pg">{v.id === last?.id ? t('上一版') : md(v.added)}</span>
+            </button>
+          ))}
+        </div>
       </div>
       <p className="cap">{t('文件会复制一份存进往来稿，原文件挪走、改名都不影响版本链。')}</p>
     </Modal>

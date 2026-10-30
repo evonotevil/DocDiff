@@ -1,10 +1,11 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { getSetting, setSetting } from '../lib/persist';
 import { t } from '../lib/i18n';
 import * as I from './icons';
 import { Popover } from './Popover';
 import { Modal } from './Modal';
 import { Notice } from './Panel';
-import { Opt, Switch } from './ui';
+import { Seg } from './ui';
 import type { DraftState, DraftSync } from '../lib/draft/client';
 import { baseOf, dirOf, draftName } from '../lib/draft/client';
 import type { Reason } from '../lib/draft/ooxml';
@@ -38,6 +39,12 @@ export function DraftChip({ state, sync, bPath, narrow, decided, pending, finalP
   const ref = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
   const [final, setFinal] = useState(false);
+  // 第一次生成审阅稿时说明一次：决定是自动写进去的，发给对方的就是它
+  const [tip, setTip] = useState(false);
+  useEffect(() => {
+    if (state.s === 'saved' && state.path && !getSetting('draft-tip-seen')) setTip(true);
+  }, [state.s, state.path]);
+  const closeTip = () => { setTip(false); setSetting('draft-tip-seen', 1); };
   if (state.s === 'none') return null;
   const tone = TONE[state.s];
   const un = state.unwritten || [];
@@ -61,6 +68,13 @@ export function DraftChip({ state, sync, bPath, narrow, decided, pending, finalP
         {!narrow && <span className="lbl">{quiet ? t('审阅稿') : label}</span>}
         <I.IconDown />
       </button>
+      <Popover anchor={ref} open={tip && !open} onClose={closeTip} width={320} className="draft-tip">
+        <div className="tip-b">
+          <b>{t('决定会自动写进审阅稿')}</b>
+          <p>{t('你做的每个决定都已经写进「{f}」，不用再导出。对方原文件不动；要发给对方的就是这份。', { f: name })}</p>
+          <div className="acts"><button type="button" className="btn sm" onClick={() => { closeTip(); api.reveal?.(state.path); }}>{t('在文件夹中显示')}</button><button type="button" className="btn sm primary" onClick={closeTip}>{t('知道了')}</button></div>
+        </div>
+      </Popover>
       <Popover anchor={ref} open={open} onClose={() => setOpen(false)} width={340} title={<><span className={`ddot ${dotTone}`} aria-hidden="true" />{t('审阅稿')}</>}>
         <div className="draft-pop">
           {state.path && (
@@ -107,13 +121,12 @@ export function DraftChip({ state, sync, bPath, narrow, decided, pending, finalP
 
 function FinalDialog({ sync, bPath, pending, pattern, onClose, flash }: { sync: DraftSync; bPath: string; pending: number; pattern: string; onClose: () => void; flash: (m: string) => void }) {
   const [pend, setPend] = useState<'b' | 'a'>('b');
-  const [keepCm, setKeepCm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const go = async () => {
     setBusy(true); setErr('');
     try {
-      const p = await sync.makeFinal({ pending: pend, keepComments: keepCm, pattern });
+      const p = await sync.makeFinal({ pending: pend, keepComments: false, pattern });
       onClose();
       flash(t('已生成定稿：{f}', { f: baseOf(p) }));
       api.reveal?.(p);
@@ -124,17 +137,13 @@ function FinalDialog({ sync, bPath, pending, pattern, onClose, flash }: { sync: 
   return (
     <Modal title={t('生成定稿')} onClose={onClose} className="final-dlg"
       footer={<><button type="button" className="btn" onClick={onClose}>{t('取消')}</button><button type="button" className="btn primary" disabled={busy} onClick={go}>{busy ? t('正在生成…') : t('生成定稿')}</button></>}>
-      <p>{t('把接受的修订落定、拒绝的改回原文、去掉修订标记，另存一份干净的文件。审阅稿本身保留，随时可以回来改。')}</p>
+      <p>{t('定稿是一份干净的 Word：你接受的改动直接采用，拒绝的改回原文，没有修订标记，也没有批注。审阅稿不受影响。')}</p>
       {pending > 0 && (
-        <>
-          <Notice tone="warn" title={t('还有 {n} 处未决定或待议', { n: pending })}>{t('定稿里这些地方怎么处理：')}</Notice>
-          <div className="choice" role="radiogroup">
-            <button type="button" role="radio" aria-checked={pend === 'b'} className={`menu-item ${pend === 'b' ? 'on' : ''}`} onClick={() => setPend('b')}>{pend === 'b' ? <I.IconCheck /> : <span className="sp" />}{t('保持对方的写法')}</button>
-            <button type="button" role="radio" aria-checked={pend === 'a'} className={`menu-item ${pend === 'a' ? 'on' : ''}`} onClick={() => setPend('a')}>{pend === 'a' ? <I.IconCheck /> : <span className="sp" />}{t('恢复成原文')}</button>
-          </div>
-        </>
+        <div className="dlg-field">
+          <div className="lbl">{t('还有 {n} 处没有决定（含待议），定稿里：', { n: pending })}</div>
+          <Seg full value={pend} onChange={setPend} label={t('没有决定的处')} options={[['b', t('用对方的改动')], ['a', t('改回我方原文')]]} />
+        </div>
       )}
-      <Opt label={t('保留批注')} hint={t('关掉后，定稿里不带任何批注')}><Switch on={keepCm} onChange={setKeepCm} label={t('保留批注')} /></Opt>
       <p className="cap">{t('将生成：{f} · 和审阅稿同一个文件夹', { f: draftName(pattern, sync.ctx.bName) })}</p>
       {err && <Notice tone="err" title={t('没能生成定稿')}>{err}</Notice>}
     </Modal>

@@ -52,7 +52,9 @@ function call(req: Omit<DraftReq, 'id'>): Promise<DraftRes> {
 const sep = (p: string) => (p.includes('\\') && !p.includes('/') ? '\\' : '/');
 export const dirOf = (p: string) => p.slice(0, Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\')));
 export const baseOf = (p: string) => p.slice(Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\')) + 1);
-const stem = (p: string) => baseOf(p).replace(/\.docx$/i, '');
+/** 文件名去掉扩展名，以及 DocDiff 自己加的后缀（避免“-定稿-定稿”“-我方意见-我方意见”） */
+export const cleanStem = (p: string) => baseOf(p).replace(/\.(docx|pdf|txt|md)$/i, '').replace(/( \(\d+\))+$/, '').replace(/(-(我方意见|定稿|our comments|final))+$/i, '') || baseOf(p);
+const stem = cleanStem;
 const clean = (s: string) => s.replace(/[\\/:*?"<>|]/g, '_').trim() || 'DocDiff';
 export function draftName(pattern: string, bPath: string, suffix = '') {
   return clean((pattern || '{name}-我方意见').split('{name}').join(stem(bPath))) + suffix + '.docx';

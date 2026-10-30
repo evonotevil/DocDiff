@@ -160,7 +160,7 @@ export function SettingsModal({ v, set, onClose, upd, initialTab = 'general' }: 
 }) {
   const [tab, setTab] = useState<Tab>(initialTab);
   const tabs: [Tab, string, React.ReactNode][] = [
-    ['general', t('通用'), <I.IconGear key="g" />], ['review', t('审阅'), <I.ModeRedline key="r" />], ['risk', t('风险'), <I.IconWarn key="w" />],
+    ['general', t('通用'), <I.IconGear key="g" />], ['review', t('审阅'), <I.IconRedline key="r" />], ['risk', t('风险'), <I.IconWarn key="w" />],
     ['keys', t('快捷键'), <I.IconKeyboard key="k" />], ['about', t('关于与更新'), <I.IconDownload key="a" />],
   ];
   return (
@@ -185,7 +185,7 @@ export function SettingsModal({ v, set, onClose, upd, initialTab = 'general' }: 
           )}
           {tab === 'review' && (
             <>
-              <p className="set-intro">{t('你在修订审阅里做的每个决定，导出到 Word 后都是一条署这个名字的批注。')}</p>
+              <p className="set-intro">{t('你在修订审阅里做的每个决定都署这个名字：写进审阅稿的修订和批注、导出的报告都用它。')}</p>
               <div className="field-row">
                 <div className="field grow"><label htmlFor="rv-name">{t('审阅人姓名')}</label><input id="rv-name" value={v.reviewerName} onChange={(e) => { set('reviewerName', e.target.value); if (!v.reviewerInitials || v.reviewerInitials === initialsOf(v.reviewerName)) set('reviewerInitials', initialsOf(e.target.value)); }} /></div>
                 <div className="field narrow"><label htmlFor="rv-ini">{t('缩写')}</label><input id="rv-ini" value={v.reviewerInitials} maxLength={4} onChange={(e) => set('reviewerInitials', e.target.value)} /></div>

@@ -7,6 +7,14 @@ import type { Risk } from './insight';
 const SEP = () => (isEn() ? ', ' : '，');
 const dflt = () => t('默认');
 
+// Word 的标准突出显示色和常见颜色：显示成颜色名，不显示 #FFFF00 这样的代码
+const COLOR_NAME: Record<string, string> = {
+  '#FFFF00': '黄色', '#00FF00': '亮绿色', '#00FFFF': '青色', '#FF00FF': '粉红色', '#0000FF': '蓝色', '#FF0000': '红色',
+  '#000080': '深蓝色', '#008080': '蓝绿色', '#008000': '绿色', '#800080': '紫色', '#800000': '深红色', '#808000': '橄榄色',
+  '#808080': '灰色', '#C0C0C0': '浅灰色', '#000000': '黑色', '#FFFFFF': '白色',
+};
+const colorName = (c: string) => (c && COLOR_NAME[c.toUpperCase()] ? t(COLOR_NAME[c.toUpperCase()]) : c);
+
 /** 'b+;sz:10>12' → '加粗，字号 10 → 12' */
 export function fmtText(sig?: FmtSig): string {
   if (!sig) return '';
@@ -21,9 +29,9 @@ export function fmtText(sig?: FmtSig): string {
     else if (part === 's+') out.push(t('删除线'));
     else if (part === 's-') out.push(t('取消删除线'));
     else if (part === 'hl-') out.push(t('取消突出显示'));
-    else if (part.startsWith('hl+')) out.push(t('突出显示 {c}', { c: part.slice(3) }));
+    else if (part.startsWith('hl+')) out.push(t('突出显示 {c}', { c: colorName(part.slice(3)) }));
     else if (part.startsWith('sz:')) { const [a, b] = part.slice(3).split('>'); out.push(t('字号 {a} → {b}', { a: a || dflt(), b: b || dflt() })); }
-    else if (part.startsWith('color:')) { const [a, b] = part.slice(6).split('>'); out.push(t('颜色 {a} → {b}', { a: a || dflt(), b: b || dflt() })); }
+    else if (part.startsWith('color:')) { const [a, b] = part.slice(6).split('>'); out.push(t('颜色 {a} → {b}', { a: colorName(a) || dflt(), b: colorName(b) || dflt() })); }
     else if (part.startsWith('font:')) { const [a, b] = part.slice(5).split('>'); out.push(t('字体 {a} → {b}', { a: a || dflt(), b: b || dflt() })); }
   }
   return out.join(SEP());

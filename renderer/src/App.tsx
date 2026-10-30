@@ -33,10 +33,11 @@ import { ImageView, ImgMode, useImagePages } from './views/ImageView';
 import { DetailsView } from './views/DetailsView';
 import { noteText, riskTag } from './lib/describe';
 import { useDiff } from './lib/useDiff';
+import { useDrop } from './lib/drop';
 import { buildPlan } from './lib/draft/plan';
-import { DraftSync, type DraftState } from './lib/draft/client';
+import { DraftSync, cleanStem, type DraftState } from './lib/draft/client';
 import { DraftChip } from './components/DraftChip';
-import { TemplatesCard, TemplateCompareDialog, MatchNotice } from './components/Library';
+import { TemplatesCard, TemplateCompareDialog, MatchNotice, RecentRow } from './components/Library';
 import { ThreadsCard, VersionChip, AddVersionDialog, HintLine, ClauseHistory } from './components/Thread';
 import { hintsFor, clauseHistory } from './lib/hints';
 import { type Library, type Template, type TplVersion, type Thread, type ThreadVersion, type Side as LibSide, type Round, EMPTY_LIB, loadLibrary, loadRounds, saveLibrary, putFile, readVersion, fingerprint, pick, versionLabel, stemOf, live, uid, UNDO_MS } from './lib/library';
@@ -102,27 +103,7 @@ function chime(kind: 'ok' | 'no' | 'hold' | 'done') {
   } catch {}
 }
 
-// ---------- 拖放 ----------
-async function filesFromDrop(e: React.DragEvent): Promise<FileInfo[]> {
-  const out: FileInfo[] = [];
-  for (const f of Array.from(e.dataTransfer.files)) {
-    const p = api.pathForFile(f);
-    if (p) out.push(await api.readPath(p));
-    else out.push({ path: '', name: f.name, ext: f.name.split('.').pop()!.toLowerCase(), size: f.size, mtime: f.lastModified, birthtime: f.lastModified, data: new Uint8Array(await f.arrayBuffer()) });
-  }
-  return out;
-}
-function useDrop(onFiles: (f: FileInfo[]) => void) {
-  const [over, setOver] = useState(false);
-  return {
-    over,
-    props: {
-      onDragOver: (e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); setOver(true); },
-      onDragLeave: () => setOver(false),
-      onDrop: async (e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); setOver(false); onFiles(await filesFromDrop(e)); },
-    },
-  };
-}
+// ---------- 拖放（1.8 起放在 lib/drop.ts，弹窗里也能拖） ----------
 function textFile(text: string, side: Side): FileInfo {
   const data = new TextEncoder().encode(text);
   const now = Date.now();
@@ -424,7 +405,7 @@ export default function App() {
         ? { id: uid(), n: 1, side: 'ours', added: now, file: tplRef.v.file, fp: tplRef.v.fp, orig: tplRef.v.orig, tpl: { tid: tplRef.tid, vid: tplRef.v.id } }
         : { id: uid(), n: 1, side: 'ours', added: now, file: (A.file as any).lib ? { sha: A.sha256!, ext: A.file.ext, size: A.file.size, name: A.file.name, mtime: A.file.mtime } : await putFile(A.file.path), fp: fingerprint(A), orig: (A.file as any).lib ? undefined : A.file.path };
       const v2: ThreadVersion = { id: uid(), n: 2, side: 'theirs', added: now, file: (B.file as any).lib ? { sha: B.sha256!, ext: B.file.ext, size: B.file.size, name: B.file.name, mtime: B.file.mtime } : await putFile(B.file.path), fp: fingerprint(B), orig: (B.file as any).lib ? undefined : B.file.path };
-      const th: Thread = { id: uid(), name: stemOf(B.file.name), created: now, updated: now, versions: [v1, v2], rounds: [], tpl: tplRef ? { tid: tplRef.tid, vid: tplRef.v.id } : undefined };
+      const th: Thread = { id: uid(), name: cleanStem(B.file.name), created: now, updated: now, versions: [v1, v2], rounds: [], tpl: tplRef ? { tid: tplRef.tid, vid: tplRef.v.id } : undefined };
       await commitLib({ ...libRef.current, threads: [...libRef.current.threads, th] });
       setThread({ id: th.id, a: v1.id, b: v2.id });
       if (!tplRef) flash(t('已存为往来稿「{n}」', { n: th.name }));
@@ -1119,28 +1100,19 @@ export default function App() {
             <div className="lib-cols">
             <div className="lib-col">
             <ThreadsCard threads={live(lib.threads)} onOpen={(th) => openThread(th)} onRename={(th, name) => updThread(th.id, (x) => ({ ...x, name, updated: Date.now() }))}
-              onArchive={(th, on) => updThread(th.id, (x) => ({ ...x, archived: on ? Date.now() : undefined }))} onDelete={deleteThread} />
-            {recent.length > 0 && (
-              <div className="recent">
-                <h2>{t('最近比较')}<span className="grow" />
-                  <button className="btn sm plain" onClick={async () => { await api.recentClear?.(); setRecent([]); }}>{t('清空')}</button>
-                </h2>
-                <div className="recent-grid">
-                  {recent.map((r, i) => {
-                    const prog = r.a.sha && r.b.sha ? reviewProgress(pairKey(r.a.sha, r.b.sha)) : null;
-                    return (
-                      <div key={i} className="recent-item" role="button" tabIndex={0} onClick={() => openRecent(r)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openRecent(r); } }}>
-                        <div className="row"><span className={`badge ${r.a.ext}`}>{r.a.ext.toUpperCase()}</span><span className="name" title={r.a.name}>{midEllipsis(r.a.name)}</span></div>
-                        <div className="row"><span className={`badge ${r.b.ext}`}>{r.b.ext.toUpperCase()}</span><span className="name" title={r.b.name}>{midEllipsis(r.b.name)}</span></div>
-                        <div className="time">{timeAgo(r.time)}{prog && <><span className="mini-prog" aria-hidden="true"><i style={{ width: `${prog.total ? (prog.decided / prog.total) * 100 : 0}%` }} /></span><span className={`tag ${prog.decided >= prog.total ? 'brand' : 'hold'}`}>{prog.decided >= prog.total ? t('已审完') : t('已审 {d}/{n}', { d: prog.decided, n: prog.total })}</span></>}</div>
-                        <button className="btn sm plain save-th" onClick={(e) => { e.stopPropagation(); setPendingSave(true); openRecent(r); }} title={t('把这两份存成往来稿：原始 = V1（我方），修改后 = V2（对方）')}>{t('存为往来稿')}</button>
-                        <button className="btn sm icon x" title={t('从列表移除')} aria-label={t('从列表移除')} onClick={(e) => { e.stopPropagation(); api.recentRemove(i).then(setRecent); }}><I.IconX /></button>
-                      </div>
-                    );
-                  })}
+              onArchive={(th, on) => updThread(th.id, (x) => ({ ...x, archived: on ? Date.now() : undefined }))} onDelete={deleteThread}>
+              {recent.length > 0 && (
+                <div className="lib-group">
+                  <div className="lib-gh"><span>{t('最近比较')}</span><span className="grow" /><button type="button" className="btn sm plain" onClick={async () => { await api.recentClear?.(); setRecent([]); }}>{t('清空')}</button></div>
+                  <div className="lib-rows">
+                    {recent.map((r, i) => (
+                      <RecentRow key={i} a={{ ...r.a, name: midEllipsis(r.a.name, 24) }} b={{ ...r.b, name: midEllipsis(r.b.name, 24) }} full={[r.a.name, r.b.name]} time={timeAgo(r.time)} prog={r.a.sha && r.b.sha ? reviewProgress(pairKey(r.a.sha, r.b.sha)) : null}
+                        onOpen={() => openRecent(r)} onSave={() => { setPendingSave(true); openRecent(r); }} onRemove={() => api.recentRemove(i).then(setRecent)} />
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+            </ThreadsCard>
             </div>
             <div className="lib-col">
               <TemplatesCard lib={lib} threadCount={(tid) => live(lib.threads).filter((x) => x.tpl?.tid === tid).length} busy={libBusy} onUse={(tp) => setTplDlg(tp.id)} onNew={newTemplate} onAddVersion={addTplVersion}
@@ -1154,7 +1126,7 @@ export default function App() {
             ? <><span className="hint">{t('也可以直接按')} <Kbd>Enter</Kbd></span><button className="btn primary big" onClick={startCompare}>{t('开始比较')}</button></>
             : <><span className="hint">{busy[0] || busy[1] ? t('正在读取文档…') : t('还差 {n} 个文档', { n: missing })}</span><button className="btn primary big" disabled>{t('开始比较')}</button></>}
         </div>
-        {tplOpen && <TemplateCompareDialog tpl={tplOpen} B={B} bBusy={busy[1]} onPickB={() => open(1)} onStart={startFromTemplate} onClose={() => setTplDlg(null)} />}
+        {tplOpen && <TemplateCompareDialog tpl={tplOpen} B={B} bBusy={busy[1]} onPickB={() => open(1)} onDropB={(fs) => fs[0] && loadFile(1, fs[fs.length - 1])} onStart={startFromTemplate} onClose={() => setTplDlg(null)} />}
         {modals}
       </div>
     );
@@ -1575,7 +1547,7 @@ export default function App() {
         </Modal>
       )}
       {addVer && (() => { const th = lib.threads.find((x) => x.id === addVer.id); return th ? (
-        <AddVersionDialog th={th} file={addVer.f} busy={libBusy} onClose={() => setAddVer(null)}
+        <AddVersionDialog th={th} file={addVer.f} busy={libBusy} onClose={() => setAddVer(null)} onDropFiles={(fs) => { if (fs[0]?.path) setAddVer({ id: th.id, f: fs[0] }); else if (fs[0]) flash(t('这个文件没有路径，请用“选择”打开')); }}
           onPick={async () => { const f: FileInfo | null = await api.openDialog(); if (f) setAddVer({ id: th.id, f }); }}
           onDone={(side, against) => { const f = addVer.f!; setAddVer(null); addThreadVersion(th, f, side, against); }} />) : null; })()}
       {modals}

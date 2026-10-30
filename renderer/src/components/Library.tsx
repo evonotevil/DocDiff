@@ -4,7 +4,8 @@ import * as I from './icons';
 import { Popover, MenuItem } from './Popover';
 import { Modal } from './Modal';
 import { Notice } from './Panel';
-import type { DocModel } from '../lib/model';
+import type { DocModel, FileInfo } from '../lib/model';
+import { useDrop } from '../lib/drop';
 import { type Template, type TplVersion, type Library as Lib, pick, live, fingerprint } from '../lib/library';
 
 const pct = (x: number) => `${Math.round(x * 100)}%`;
@@ -71,10 +72,11 @@ function TemplateRow({ tpl, n, onUse, onAddVersion, onRename, onDelete, onDelete
 }
 
 /** 用模板比较：放入对方文件 → 自动选出对方是在哪一版上改的 → 开始比较 */
-export function TemplateCompareDialog({ tpl, B, bBusy, onPickB, onStart, onClose }: {
+export function TemplateCompareDialog({ tpl, B, bBusy, onPickB, onDropB, onStart, onClose }: {
   tpl: Template; B: DocModel | null; bBusy: boolean;
-  onPickB: () => void; onStart: (v: TplVersion) => void; onClose: () => void;
+  onPickB: () => void; onDropB: (f: FileInfo[]) => void; onStart: (v: TplVersion) => void; onClose: () => void;
 }) {
+  const drop = useDrop(onDropB);
   const res = useMemo(() => (B ? pick(fingerprint(B), tpl.versions) : null), [B, tpl]);
   const [sel, setSel] = useState<string | null>(null);
   const chosen = sel ?? (res?.best && !res.tie ? res.best.item.id : tpl.versions.length === 1 ? tpl.versions[0].id : null);
@@ -89,10 +91,10 @@ export function TemplateCompareDialog({ tpl, B, bBusy, onPickB, onStart, onClose
       <div className="pair">
         <div className="pair-row"><span className="role">{t('原始文档')}</span><I.FileGlyph type={tpl.versions[0]?.file.ext || 'docx'} size={22} /><span className="nm">{tpl.name}</span>
           <span className="tag">{chosen ? tpl.versions.find((v) => v.id === chosen)?.label : t('待选版本')}</span></div>
-        <button type="button" className="pair-row pick" onClick={onPickB} disabled={bBusy}>
+        <button type="button" className={`pair-row pick ${drop.over ? 'over' : ''}`} onClick={onPickB} disabled={bBusy} {...drop.props}>
           <span className="role">{t('修改后文档')}</span>
           {B ? <><I.FileGlyph type={B.type} size={22} /><span className="nm">{B.file.name}</span><span className="tag">{t('对方')}</span></>
-            : <span className="nm hint">{bBusy ? t('正在读取…') : t('选择对方发来的文件…')}</span>}
+            : <span className="nm hint">{bBusy ? t('正在读取…') : t('拖入对方发来的文件，或点击选择')}</span>}
         </button>
       </div>
       {B && res && tpl.versions.length > 1 && (
@@ -127,5 +129,30 @@ export function MatchNotice({ title, body, action, onUse, onDismiss }: { title: 
       action={<button type="button" className="btn sm primary" onClick={onUse}>{action}</button>} onClose={onDismiss} closeLabel={t('不用')}>
       {body}
     </Notice>
+  );
+}
+
+/** 「最近比较」的一行（放在往来稿卡片里，和模板、往来稿的行同样式） */
+export function RecentRow({ a, b, full, time, prog, onOpen, onSave, onRemove }: {
+  a: { name: string; ext: string }; b: { name: string; ext: string }; full?: [string, string]; time: string;
+  prog: { total: number; decided: number } | null;
+  onOpen: () => void; onSave: () => void; onRemove: () => void;
+}) {
+  const more = useRef<HTMLButtonElement>(null);
+  const [menu, setMenu] = useState(false);
+  const done = prog && prog.total && prog.decided >= prog.total;
+  return (
+    <div className="lib-row recent-row" role="button" tabIndex={0} onClick={onOpen} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); } }}>
+      <I.FileGlyph type={b.ext} size={22} />
+      <span className="nm two" title={full ? `${full[0]}\n→ ${full[1]}` : `${a.name}\n→ ${b.name}`}><span className="a">{a.name}</span><span className="arr">→</span><span className="b">{b.name}</span></span>
+      <span className="meta">{time}{prog ? ' · ' + (done ? t('已审完') : t('已审 {d}/{n}', { d: prog.decided, n: prog.total })) : ''}</span>
+      <button ref={more} type="button" className="btn sm plain icon" aria-label={t('更多')} title={t('更多')} onClick={(e) => { e.stopPropagation(); setMenu(!menu); }}><I.IconMore /></button>
+      <Popover anchor={more} open={menu} onClose={() => setMenu(false)} width={260}>
+        <div onClick={(e) => e.stopPropagation()}>
+          <MenuItem icon={<I.IconPlusDoc />} onClick={() => { setMenu(false); onSave(); }}>{t('存为往来稿')}</MenuItem>
+          <MenuItem icon={<I.IconX />} onClick={() => { setMenu(false); onRemove(); }}>{t('从列表移除')}</MenuItem>
+        </div>
+      </Popover>
+    </div>
   );
 }
