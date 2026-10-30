@@ -5,7 +5,8 @@ import { initialsOf, refreshReviewIndex } from '../lib/review';
 import { fmtBytes, fmtDate } from '../lib/model';
 import { DEFAULT_KEYWORDS } from '../lib/insight';
 import { Modal } from './Modal';
-import { Switch, Opt, Seg, Kbd } from './ui';
+import { Switch, Opt, Seg, Kbd, Info } from './ui';
+import { NameEditor } from './NameEditor';
 import * as I from './icons';
 
 declare const __APP_VERSION__: string;
@@ -17,10 +18,16 @@ export interface UpdInfo { status: 'new' | 'latest' | 'error' | 'off'; current: 
 export interface SettingsValues {
   lang: Lang; theme: 'light' | 'dark'; paperFollowTheme: boolean; sound: boolean; celebrate: boolean;
   reviewerName: string; reviewerInitials: string; authorName: string; commentAccepted: boolean;
+  draftName: string; finalName: string;
+  draftMissing: 'auto' | 'ask';
   riskMoney: boolean; riskDate: boolean; keywords: string[];
   autoCheckUpdate: boolean;
 }
-type Tab = 'general' | 'review' | 'risk' | 'keys' | 'about';
+export type Tab = 'general' | 'review' | 'files' | 'risk' | 'keys' | 'storage' | 'about';
+
+const SH = ({ id, children, info }: { id: string; children: React.ReactNode; info?: React.ReactNode }) => (
+  <h4 className="set-sh" id={id}>{children}{info && <Info label={typeof children === 'string' ? children : ''}>{info}</Info>}</h4>
+);
 
 function ShortcutRows() {
   const groups: [string, [string, string][]][] = [
@@ -116,7 +123,8 @@ function ReviewStorage() {
   const [ask, setAsk] = useState<null | 'old' | 'all'>(null);
   const [msg, setMsg] = useState('');
   const load = () => api.reviewUsage?.().then(setU).catch(() => setU(null));
-  useEffect(() => { load(); }, []);
+  const [lib, setLibU] = useState<{ files: number; bytes: number } | null>(null);
+  useEffect(() => { load(); api.libUsage?.().then(setLibU).catch(() => {}); }, []);
   if (!api.reviewUsage) return null;
   const ix: Record<string, { updated: number }> = (() => { try { return api.reviewIndex() || {}; } catch { return {}; } })();
   const cutoff = Date.now() - 90 * DAY;
@@ -127,38 +135,42 @@ function ReviewStorage() {
     refreshReviewIndex();
     if (r?.ok) { setU(r.usage); setMsg(t('已删除 {n} 组审阅记录', { n: r.n })); } else setMsg(t('没能删除：{e}', { e: r?.error || '' }));
   };
+  const md = (ms: number) => { const d = new Date(ms); return t('{m}月{d}日', { m: d.getMonth() + 1, d: d.getDate() }); };
   return (
-    <div className="field review-storage">
-      <label>{t('审阅记录')}</label>
-      <div className="rs-usage">
-        {u ? (u.count ? t('本机保存了 {n} 组比较的审阅结论，共 {s}；最早一组在 {d}。', { n: u.count, s: fmtBytes(u.bytes), d: fmtDate(u.oldest) }) : t('本机还没有保存审阅结论。')) : t('正在读取…')}
+    <section className="set-sec review-storage" aria-labelledby="rv-s3">
+      <SH id="rv-s3" info={t('都存在这台电脑的应用数据目录里，不会自动删除。删除模板或往来稿时，它的拷贝会一起清掉。')}>{t('本机保存的数据')}</SH>
+      <div className="rs-list">
+        <div className="rs-row"><span className="l">{t('审阅结论')}</span><span className="m">{u ? (u.count ? t('{n} 组 · {s} · 最早 {d}', { n: u.count, s: fmtBytes(u.bytes), d: md(u.oldest) }) : t('还没有')) : t('正在读取…')}</span></div>
+        {lib && lib.files > 0 && <div className="rs-row"><span className="l">{t('模板和往来稿的文件拷贝')}</span><span className="m">{t('{n} 个 · {s}', { n: lib.files, s: fmtBytes(lib.bytes) })}</span></div>}
       </div>
-      <small>{t('结论按两份文件的内容保存在本机应用数据目录，不会自动删除。')}</small>
+      <small className="set-cap">{t('都在这台电脑上，不会自动删除。')}</small>
       {u && u.count > 0 && (ask ? (
         <div className="rs-ask" role="alert">
           <span>{ask === 'all' ? t('删除全部 {n} 组审阅记录？删除后不能恢复。', { n: u.count }) : t('删除 90 天前的 {n} 组审阅记录？删除后不能恢复。', { n: oldN })}</span>
-          <button className="btn sm plain" onClick={() => setAsk(null)}>{t('取消')}</button>
-          <button className="btn sm red" onClick={() => run(ask)}>{t('删除')}</button>
+          <span className="grow" />
+          <button className="btn" onClick={() => setAsk(null)}>{t('取消')}</button>
+          <button className="btn red" onClick={() => run(ask)}>{t('删除')}</button>
         </div>
       ) : (
         <div className="rs-acts">
-          <button className="btn sm" disabled={!oldN} onClick={() => { setMsg(''); setAsk('old'); }}>{t('清理 90 天前的记录（{n} 组）', { n: oldN })}</button>
-          <button className="btn sm danger-outline" onClick={() => { setMsg(''); setAsk('all'); }}>{t('全部清空…')}</button>
+          <button className="btn" disabled={!oldN} onClick={() => { setMsg(''); setAsk('old'); }}>{t('清理 90 天前的记录（{n} 组）', { n: oldN })}</button>
+          <button className="btn danger-outline" onClick={() => { setMsg(''); setAsk('all'); }}>{t('全部清空…')}</button>
         </div>
       ))}
-      {msg && <small role="status">{msg}</small>}
-    </div>
+      {msg && <small role="status" className="set-cap">{msg}</small>}
+    </section>
   );
 }
 
-export function SettingsModal({ v, set, onClose, upd, initialTab = 'general' }: {
+export function SettingsModal({ v, set, onClose, upd, initialTab = 'general', sample }: {
+  sample?: string;
   v: SettingsValues; set: <K extends keyof SettingsValues>(k: K, val: SettingsValues[K]) => void; onClose: () => void;
   upd: Omit<React.ComponentProps<typeof UpdateSection>, 'auto' | 'setAuto'>; initialTab?: Tab;
 }) {
   const [tab, setTab] = useState<Tab>(initialTab);
   const tabs: [Tab, string, React.ReactNode][] = [
-    ['general', t('通用'), <I.IconGear key="g" />], ['review', t('审阅'), <I.ModeRedline key="r" />], ['risk', t('风险'), <I.IconWarn key="w" />],
-    ['keys', t('快捷键'), <I.IconKeyboard key="k" />], ['about', t('关于与更新'), <I.IconDownload key="a" />],
+    ['general', t('通用'), <I.IconGear key="g" />], ['review', t('审阅'), <I.IconOk key="r" />], ['files', t('审阅稿与定稿'), <I.IconExport key="f" />], ['risk', t('风险'), <I.IconWarn key="w" />],
+    ['keys', t('快捷键'), <I.IconKeyboard key="k" />], ['storage', t('存储'), <I.IconCopy key="s" />], ['about', t('关于与更新'), <I.IconDownload key="a" />],
   ];
   return (
     <Modal title={t('设置')} onClose={onClose} className="settings-modal">
@@ -181,21 +193,39 @@ export function SettingsModal({ v, set, onClose, upd, initialTab = 'general' }: 
             </>
           )}
           {tab === 'review' && (
-            <>
-              <p className="set-intro">{t('你在修订审阅里做的每个决定，导出到 Word 后都是一条署这个名字的批注。')}</p>
-              <div className="field-row">
-                <div className="field grow"><label htmlFor="rv-name">{t('审阅人姓名')}</label><input id="rv-name" value={v.reviewerName} onChange={(e) => { set('reviewerName', e.target.value); if (!v.reviewerInitials || v.reviewerInitials === initialsOf(v.reviewerName)) set('reviewerInitials', initialsOf(e.target.value)); }} /></div>
-                <div className="field narrow"><label htmlFor="rv-ini">{t('缩写')}</label><input id="rv-ini" value={v.reviewerInitials} maxLength={4} onChange={(e) => set('reviewerInitials', e.target.value)} /></div>
-              </div>
-              <div className="field">
-                <label htmlFor="rv-author">{t('修订作者的默认名称')}</label>
-                <input id="rv-author" value={v.authorName} placeholder={t('从对方文件读取，读不到时用“修改方”')} onChange={(e) => set('authorName', e.target.value)} />
-                <small>{t('Word 里的修订记的是“谁改了文字”，也就是对方。导出时还可以针对每份文件单独修改。')}</small>
-              </div>
-              <Opt label={t('接受的修订也加批注')} hint={t('关掉后，只有拒绝和待议带批注')}><Switch on={v.commentAccepted} onChange={(x) => set('commentAccepted', x)} label={t('接受的修订也加批注')} /></Opt>
-              <ReviewStorage />
-            </>
+            <div className="set-review">
+              <section className="set-sec" aria-labelledby="rv-s1">
+                <SH id="rv-s1">{t('审阅人')}</SH>
+                <div className="field-row">
+                  <div className="field grow"><label htmlFor="rv-name">{t('姓名')}<Info label={t('姓名')}>{t('审阅稿里的修订和批注、导出的报告都署这个名字。改名后，已经做过的决定也会改用新名字。')}</Info></label><input id="rv-name" value={v.reviewerName} onChange={(e) => { set('reviewerName', e.target.value); if (!v.reviewerInitials || v.reviewerInitials === initialsOf(v.reviewerName)) set('reviewerInitials', initialsOf(e.target.value)); }} /></div>
+                  <div className="field narrow"><label htmlFor="rv-ini">{t('缩写')}</label><input id="rv-ini" value={v.reviewerInitials} maxLength={4} onChange={(e) => set('reviewerInitials', e.target.value)} /></div>
+                </div>
+                <div className="field">
+                  <label htmlFor="rv-author">{t('修订作者的默认名称')}<Info label={t('修订作者的默认名称')}>{t('Word 里的修订记的是“谁改了文字”，也就是对方。导出时还可以按文件单独改。')}</Info></label>
+                  <input id="rv-author" value={v.authorName} placeholder={t('从对方文件读取，读不到时用“修改方”')} onChange={(e) => set('authorName', e.target.value)} />
+                </div>
+                <Opt label={t('接受的修订也加批注')} hint={t('关掉后，只有拒绝和待议带批注')}><Switch on={v.commentAccepted} onChange={(x) => set('commentAccepted', x)} label={t('接受的修订也加批注')} /></Opt>
+              </section>
+            </div>
           )}
+          {tab === 'files' && (
+            <div className="set-review">
+              <section className="set-sec" aria-labelledby="rv-s2">
+                <SH id="rv-s2" info={<>{t('“对方文件名”会去掉 DocDiff 加过的后缀（-我方意见、-定稿）。')}<br />{t('“版本号”只在往来稿里有值；没有值时，连同旁边的“-”一起省掉。')}<br />{t('审阅稿要发回给对方，名字里别写只给自己看的内容。')}</>}>{t('文件名')}</SH>
+                <NameEditor id="rv-draft" label={t('审阅稿文件名')} value={v.draftName} fallback={t('{name}-我方意见')} sample={sample || t('对方的文件.docx')} vars={{ ver: 'V4', who: v.reviewerName }} onChange={(x) => set('draftName', x)} />
+                <NameEditor id="rv-final" label={t('定稿文件名')} value={v.finalName} fallback={t('{name}-定稿')} sample={sample || t('对方的文件.docx')} vars={{ ver: 'V4', who: v.reviewerName }} onChange={(x) => set('finalName', x)} />
+              </section>
+              <section className="set-sec" aria-labelledby="rv-s4">
+                <SH id="rv-s4" info={<>{t('在修订审阅里点“生成审阅稿”才会生成；同一对文件开始后，每个决定自动同步。往来稿的新一轮要再点一次。')}<br />{t('下面的选择只对已经开始过审阅稿的那一对文件生效。')}</>}>{t('审阅稿')}</SH>
+                <div className="field">
+                  <label>{t('以前的审阅稿被删了或挪走了')}</label>
+                  <Seg full value={v.draftMissing || 'auto'} onChange={(x) => set('draftMissing', x)} label={t('以前的审阅稿被删了或挪走了')} options={[['auto', t('自动重新生成')], ['ask', t('先问我')]]} />
+                  <small>{v.draftMissing === 'ask' ? t('工具栏的“审阅稿”会显示“不见了”，你点“重新生成”才生成。') : t('按 DocDiff 里的决定重建，在 Word 里直接改的内容不会保留。')}</small>
+                </div>
+              </section>
+            </div>
+          )}
+          {tab === 'storage' && <div className="set-review"><ReviewStorage /></div>}
           {tab === 'risk' && (
             <>
               <p className="set-intro">{t('比较完成后，命中下面规则的变化会放在右栏最上方的「需要留意」里。判断完全靠规则，离线完成。')}</p>

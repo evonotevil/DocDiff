@@ -1,7 +1,7 @@
 // 本机持久化（1.7.3）：应用数据目录里的 JSON 文件。
 // - 原子写入：先写 .tmp 并刷盘，再改名替换；替换前把上一份留作 .bak。写到一半断电也不会留下坏文件。
 // - 失败不再静默：write 失败会抛出，调用方把错误告诉界面。
-// - 读取时主文件坏了就用 .bak。
+// - 读取时主文件坏了就用 .bak；主文件坏了时不会拿它覆盖 .bak（1.8 beta.5）。
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -11,10 +11,22 @@ function createStore(rootDir) {
   const file = (n) => path.join(root(), n);
   const ensureDir = (p) => fs.mkdirSync(path.dirname(p), { recursive: true });
 
+  // 已知完好的主文件（读出来能解析、或是我们刚写成功的）：路径 → 当时的修改时间和大小
+  const good = new Map();
+  const statOf = (p) => { try { const s = fs.statSync(p); return { m: s.mtimeMs, z: s.size }; } catch { return null; } };
+  const markGood = (p) => { const s = statOf(p); if (s) good.set(p, s); else good.delete(p); };
+  /** 主文件现在是不是完好的：和记下的一致就不用再解析；否则解析一遍确认 */
+  function mainIsValid(p) {
+    const s = statOf(p);
+    if (!s) return false;
+    const g = good.get(p);
+    if (g && g.m === s.m && g.z === s.z) return true;
+    try { JSON.parse(fs.readFileSync(p, 'utf8')); good.set(p, s); return true; } catch { return false; }
+  }
+
   function readFile(p) {
-    for (const f of [p, p + '.bak']) {
-      try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch {}
-    }
+    try { const v = JSON.parse(fs.readFileSync(p, 'utf8')); markGood(p); return v; } catch {}
+    try { return JSON.parse(fs.readFileSync(p + '.bak', 'utf8')); } catch {}
     return undefined;
   }
 
@@ -30,8 +42,11 @@ function createStore(rootDir) {
       fs.fsyncSync(fd);
     } finally { fs.closeSync(fd); }
     try {
-      if (fs.existsSync(p)) fs.copyFileSync(p, p + '.bak');
+      // 只把“完好的”主文件轮换成备份。主文件坏了（读的时候已经退回到 .bak）就保留现有的 .bak，
+      // 直到新的主文件替换成功——中途失败时，.bak 仍然是一份能读的数据（1.8 beta.5）
+      if (mainIsValid(p)) fs.copyFileSync(p, p + '.bak');
       fs.renameSync(tmp, p);
+      markGood(p);
     } catch (e) {
       try { fs.unlinkSync(tmp); } catch {}
       throw e;
@@ -39,6 +54,7 @@ function createStore(rootDir) {
   }
 
   function removeFile(p) {
+    good.delete(p);
     for (const f of [p, p + '.bak']) { try { fs.unlinkSync(f); } catch (e) { if (e.code !== 'ENOENT') throw e; } }
   }
 

@@ -130,8 +130,8 @@ export async function buildDocx(rows: Row[], blocksA: Block[], blocksB: Block[],
     if (c?.kind === 'fmt' && c.desc?.k === 'fmt') paras.push(new Paragraph({ children: [new TextRun({ text: t('格式：{f}', { f: fmtText(c.desc.sig) }), italics: true })] }));
     if (where && c) paras.push(new Paragraph({ children: [new TextRun({ text: c.kind === 'mod' ? `“${c.before}” → “${c.after}”` : c.kind === 'ins' ? `${t('新增')}：${c.after}` : c.kind === 'del' ? `${t('删除')}：${c.before}` : c.before, italics: true })] }));
     const id = comments.length;
-    const by = d.by || o.reviewer.name;
-    comments.push({ id, author: by, initials: by === o.reviewer.name ? o.reviewer.initials : initialsOf(by), date: new Date(d.at || Date.now()), children: paras });
+    const by = o.reviewer.name;
+    comments.push({ id, author: by, initials: o.reviewer.initials, date: new Date(d.at || Date.now()), children: paras });
     commentOf.set(cid, id);
     return id;
   };

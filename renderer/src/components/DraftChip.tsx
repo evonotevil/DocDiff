@@ -1,0 +1,215 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { t } from '../lib/i18n';
+import * as I from './icons';
+import { Popover } from './Popover';
+import { Modal } from './Modal';
+import { Notice } from './Panel';
+import { Seg, MidName, TypeTag } from './ui';
+import type { DraftState, DraftSync } from '../lib/draft/client';
+import { baseOf, dirOf, draftName } from '../lib/draft/client';
+import type { Reason } from '../lib/draft/ooxml';
+
+const api = (window as any).api || {};
+
+/** 审阅稿（1.8 · beta.7 手动开始）：没开始时是“生成审阅稿”按钮，开始后变成状态片。工具栏右侧、导出左边 */
+const TONE: Record<DraftState['s'], 'ok' | 'warn' | 'err' | 'busy'> = {
+  none: 'ok', saving: 'busy', saved: 'ok', locked: 'warn', modified: 'err', gone: 'err', nowrite: 'err', error: 'err',
+};
+export const REASON: Record<Reason, string> = {
+  section: '页眉、页脚或脚注里的修改暂不写入',
+  mismatch: '对方文件和比较时读到的内容对不上',
+  field: '在域（自动编号、日期等）里',
+  textbox: '在文本框里',
+  image: '涉及图片，没法还原',
+  cell: '表格的列数或单元格边界对不上',
+  place: '这个位置放不下（表格内外交错）',
+  range: '位置对不上',
+};
+const hm = (ms?: number) => { if (!ms) return ''; const d = new Date(ms); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
+
+export function DraftChip({ state, sync, bPath, narrow, decided, pending, held = 0, finalPattern, onJump, flash, finalReq = 0, hideTip, origLabel, onFinal }: {
+  /** pending 里有几处是“待议”（已写成批注、等对方回复） */
+  held?: number;
+  /** 定稿生成后（完成页据此回到完成页并显示文件） */
+  onFinal?: (path: string) => boolean | void;
+  /** 原始文档是谁（如“模板「标准合同」2026-10 版”“V1”），定稿弹窗里写明“恢复原始文档”指的是哪一份 */
+  origLabel?: string;
+  /** 完成页开着时不弹首次提示（完成页已经说明了审阅稿） */
+  hideTip?: boolean;
+  /** 完成页的“生成定稿…”：数字一变就打开定稿弹窗 */
+  finalReq?: number;
+  state: DraftState; sync: DraftSync; bPath: string; narrow: boolean;
+  /** 已决定的处数、未决定或待议的处数 */
+  decided: number; pending: number;
+  finalPattern: string;
+  onJump: (cid: number) => void;
+  flash: (m: string) => void;
+}) {
+  const ref = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
+  const [final, setFinal] = useState(false);
+  // 只响应这次点击：换到新的一对文件时片会重新挂载，之前的请求不能再打开定稿（1.8 · R4）
+  const seenReq = useRef(finalReq);
+  useEffect(() => { if (finalReq && finalReq !== seenReq.current) { seenReq.current = finalReq; setFinal(true); } }, [finalReq]);
+  // 每次手动开始、第一次写好后说明一次：审阅稿已生成，之后自动同步（E2）；完成页开着时由完成页说明
+  const [tip, setTip] = useState(false);
+  useEffect(() => { if (state.s === 'saved' && state.path && state.fresh && !hideTip) setTip(true); }, [state.s, state.path, state.fresh]);
+  const closeTip = () => setTip(false);
+  const finalDlg = final && <FinalDialog sync={sync} bPath={bPath} pending={pending} held={held} pattern={finalPattern} onClose={() => setFinal(false)} flash={flash} onJump={onJump} origLabel={origLabel} onFinal={onFinal} hasDraft={state.s !== 'none'} />;
+  if (state.s === 'none') return (
+    <>
+      <button type="button" className="btn blue tb-start" onClick={() => sync.start(t('选择放审阅稿的文件夹'))}
+        title={t('在对方文件旁边生成一份 Word 审阅稿，把你的决定写成修订和批注；之后自动同步')} aria-label={t('生成审阅稿')}>
+        <I.IconPlusDoc /><span className="lbl">{t('生成审阅稿')}</span>
+      </button>
+      {finalDlg}
+    </>
+  );
+  const tone = state.s === 'nowrite' && sync.ctx.noDir ? 'warn' : TONE[state.s];
+  const un = state.unwritten || [];
+  // 正常时片上只写“审阅稿”（状态看圆点、悬停和弹出层），省出工具栏宽度；出问题时才把状态写在片上
+  const quiet = state.s === 'saving' || (state.s === 'saved' && !(state.unwritten || []).length);
+  const label = state.s === 'saving' ? t('审阅稿 · 保存中')
+    : state.s === 'saved' ? (un.length ? t('审阅稿 · {n} 处没写进', { n: un.length }) : t('审阅稿 · 已保存'))
+    : state.s === 'locked' ? t('Word 正在用审阅稿')
+    : state.s === 'modified' ? t('审阅稿被改过')
+    : state.s === 'gone' ? t('审阅稿不见了')
+    : state.s === 'nowrite' ? (sync.ctx.noDir ? t('审阅稿 · 选文件夹') : t('审阅稿写不进'))
+    : t('审阅稿没保存');
+  const dotTone = state.s === 'saved' && un.length ? 'warn' : tone;
+  const name = state.path ? baseOf(state.path) : '';
+  const sameDir = state.path && dirOf(state.path) === dirOf(bPath);
+  return (
+    <>
+      <button ref={ref} type="button" className={`btn draft-chip ${narrow ? 'narrow' : ''}`} data-ms={state.ms ?? ''} data-parts={state.parts ? JSON.stringify(state.parts) : ''} onClick={() => setOpen(!open)} aria-expanded={open}
+        title={state.s === 'saved' ? t('{f} · {t} 已保存', { f: name, t: hm(state.at) }) : label} aria-label={label}>
+        <span className={`ddot ${dotTone}`} aria-hidden="true" />
+        {!narrow && <span className="lbl">{quiet ? t('审阅稿') : label}</span>}
+        <I.IconDown />
+      </button>
+      <Popover anchor={ref} open={tip && !open && !hideTip} onClose={closeTip} width={320} className="draft-tip" noFocus label={t('审阅稿已生成')}>
+        <div className="tip-b">
+          <div className="tip-t">{t('审阅稿已生成')}</div>
+          <div className="file-row"><TypeTag type="docx" /><MidName name={name} /></div>
+          <p>{decided ? t('已经做的 {n} 个决定都写进去了；之后每个决定约 0.3 秒内自动写入。', { n: decided }) : t('之后每个决定约 0.3 秒内自动写入。')}</p>
+          <p>{t('对方原文件不动；要发给对方的就是这份。')}</p>
+          <div className="acts"><button type="button" className="btn sm" onClick={() => { closeTip(); api.reveal?.(state.path); }}>{t('在文件夹中显示')}</button><button type="button" className="btn sm primary" onClick={closeTip}>{t('知道了')}</button></div>
+        </div>
+      </Popover>
+      <Popover anchor={ref} open={open} onClose={() => setOpen(false)} width={340} label={t('审阅稿')} title={<><span className={`ddot ${dotTone}`} aria-hidden="true" />{t('审阅稿')}</>}>
+        <div className="draft-pop">
+          {state.path && (
+            <button type="button" className="draft-file" onClick={() => api.reveal?.(state.path)} title={t('在文件夹中显示')}>
+              <TypeTag type="docx" /><MidName name={name} title={false} />
+            </button>
+          )}
+          <p className="cap">{sameDir ? t('和对方文件在同一个文件夹 · 对方原文件不动') : state.path ? t('在 {d}', { d: dirOf(state.path) }) : ''}</p>
+          {state.s === 'saved' && <p className="cap strong">{t('已写入 {n} 处决定 · {t} 保存', { n: decided, t: hm(state.at) })}</p>}
+          {state.s === 'saving' && <p className="cap strong">{t('正在写入…')}</p>}
+          {state.s === 'saved' && state.prior > 0 && <p className="cap">{t('对方文件里原有的 {n} 处修订已按“接受”处理。', { n: state.prior })}</p>}
+          {state.s === 'saved' && state.wordOpen && !un.length && <Notice tone="info" title={t('Word 正在打开这份审阅稿')}>{t('所有决定都已写进去。之后再做决定，要先在 Word 里关掉它，DocDiff 才能接着写。')}</Notice>}
+          {state.s === 'locked' && <Notice tone="warn" title={t('Word 正在打开这份审阅稿')}>{t('决定先记在 DocDiff 里，关掉 Word 后自动补写，不会丢。')}</Notice>}
+          {state.s === 'modified' && <Notice tone="err" title={t('审阅稿在 DocDiff 之外被改过')}>{t('为了不覆盖那些改动，已暂停写入。你的决定都还在。')}</Notice>}
+          {state.s === 'gone' && <Notice tone="err" title={t('审阅稿被移走或删除了')}>{t('你的决定都还在，可以重新生成一份。')}</Notice>}
+          {state.s === 'nowrite' && (sync.ctx.noDir
+            ? <Notice tone="warn" title={t('对方的原文件找不到了')}>{t('它可能被挪走或改了名。选一个文件夹放审阅稿，之后都写到那里。')}</Notice>
+            : <Notice tone="err" title={t('对方文件所在的文件夹写不进去')}>{t('选一个文件夹放审阅稿，之后都写到那里。')}</Notice>)}
+          {state.s === 'error' && <Notice tone="err" title={t('没能保存审阅稿')}>{/verify failed|split changed/.test(state.error || '') ? t('这份文件的结构比较特殊，审阅稿没写进去。结论都保存在 DocDiff 里。') : state.error}</Notice>}
+          {un.length > 0 && (
+            <div className="draft-un">
+              <Notice tone="warn" title={t('有 {n} 处没写进去', { n: un.length })}>{t('这些结论仍保存在 DocDiff 里，审阅稿里保持对方的写法。')}</Notice>
+              <ul>
+                {un.slice(0, 50).map((u) => (
+                  <li key={u.cid}><button type="button" className="menu-item" onClick={() => { setOpen(false); onJump(u.cid); }}>
+                    <span className="n">{t('第 {i} 处', { i: u.cid })}</span><span className="r">{t(REASON[u.reason])}</span>
+                  </button></li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <p className="cap">{t('接受 → 落定；拒绝 → 以你的名义改回；未决定 / 待议 → 保留为对方的修订；待议和备注 → 批注')}</p>
+          <div className="acts">
+            {state.s === 'modified' && <><button type="button" className="btn sm" onClick={() => { setOpen(false); sync.saveAsNew(); }}>{t('另存为新审阅稿')}</button><button type="button" className="btn sm" onClick={() => api.openExternalFile?.(state.path)}>{t('用 Word 打开')}</button></>}
+            {state.s === 'gone' && <button type="button" className="btn sm" onClick={() => { setOpen(false); sync.saveAsNew(); }}>{t('重新生成')}</button>}
+            {state.s === 'nowrite' && <button type="button" className="btn sm" onClick={() => sync.chooseFolder(t('选择放审阅稿的文件夹'))}>{sync.ctx.noDir ? t('选择文件夹…') : t('换个文件夹…')}</button>}
+            {state.s === 'error' && <button type="button" className="btn sm" onClick={() => sync.update((sync as any).decisions)}>{t('重试')}</button>}
+            {(state.s === 'saved' || state.s === 'locked') && state.path && <button type="button" className="btn sm" onClick={() => api.reveal?.(state.path)}>{t('在文件夹中显示')}</button>}
+            <button type="button" className="btn sm primary" onClick={() => { setOpen(false); setFinal(true); }}>{t('生成定稿…')}</button>
+          </div>
+        </div>
+      </Popover>
+      {finalDlg}
+    </>
+  );
+}
+
+function FinalDialog({ sync, bPath, pending, held, pattern, onClose, flash, onJump, origLabel, onFinal, hasDraft }: { sync: DraftSync; bPath: string; pending: number; held: number; pattern: string; onClose: () => void; flash: (m: string) => void; onJump: (cid: number) => void; origLabel?: string; onFinal?: (p: string) => boolean | void; hasDraft: boolean }) {
+  const [pend, setPend] = useState<'b' | 'a'>('b');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  // 先生成、检查有没有没落实的处；有就停下来列出来，用户确认后才保存（beta.5）
+  const [built, setBuilt] = useState<{ pend: 'a' | 'b'; r: Awaited<ReturnType<DraftSync['buildFinal']>> } | null>(null);
+  const missed = built && built.pend === pend ? built.r.missed : null;
+  const fname = draftName(pattern, sync.ctx.bName, '', sync.vars());
+  const save = async (r: Awaited<ReturnType<DraftSync['buildFinal']>>) => {
+    const p = await sync.saveFinal(r.out, pattern, t('选择放定稿的文件夹'));
+    onClose();
+    // 回到完成页时那里已经写了“定稿已生成”，不再重复弹提示（有没落实的处时照常提醒）
+    const shown = onFinal?.(p);
+    if (!shown || r.missed.length) flash(r.missed.length ? t('已生成定稿：{f}。有 {n} 处没能改回原文，定稿里仍是对方的写法，请在 Word 里核对。', { f: baseOf(p), n: r.missed.length }) : t('已生成定稿：{f}', { f: baseOf(p) }));
+    if (!onFinal) api.reveal?.(p);
+  };
+  const go = async () => {
+    setBusy(true); setErr('');
+    try {
+      if (missed) { await save(built!.r); return; }
+      const r = await sync.buildFinal({ pending: pend });
+      if (r.missed.length) { setBuilt({ pend, r }); return; }
+      await save(r);
+    } catch (e: any) {
+      if (String(e?.message) === 'cancel') return;
+      setErr(String(e?.message) === 'nowrite' ? t('对方文件所在的文件夹写不进去') : String(e?.message || e));
+    } finally { setBusy(false); }
+  };
+  return (
+    <Modal title={t('生成定稿')} onClose={onClose} className="final-dlg spec"
+      footer={<><button type="button" className="btn big" onClick={onClose}>{t('取消')}</button><button type="button" className={`btn big ${missed?.length ? 'red' : 'primary'}`} disabled={busy} onClick={go}>{busy ? t('正在生成…') : missed?.length ? t('仍然生成定稿') : t('生成定稿')}</button></>}>
+      <p>{hasDraft ? t('定稿是双方谈完后的干净版：接受的改动直接采用，拒绝的改回原文，没有修订标记和批注。审阅稿不受影响。')
+        : t('定稿是双方谈完后的干净版：接受的改动直接采用，拒绝的改回原文，没有修订标记和批注。')}</p>
+      {held > 0 && (
+        <Notice tone="info" title={t('还有 {n} 处待议，建议和对方谈定后再生成', { n: held })}>
+          {hasDraft ? t('待议的处已在审阅稿里写成批注，等对方回复。现在生成，这些处要先按下面的选择处理。')
+            : t('待议的处还在等对方回复。现在生成，这些处要先按下面的选择处理。')}
+        </Notice>
+      )}
+      {pending > 0 && (
+        <div className="dlg-field">
+          <div className="lbl">{held && pending - held ? t('这 {n} 处（待议 {h} 处、还没决定 {u} 处）在定稿里：', { n: pending, h: held, u: pending - held })
+            : held ? t('这 {n} 处待议在定稿里：', { n: pending }) : t('还有 {n} 处没有决定，在定稿里：', { n: pending })}</div>
+          <Seg full value={pend} onChange={setPend} label={t('没有决定的处')} options={[['b', t('保留对方的改动')], ['a', t('恢复原始文档')]]} />
+          <div className="dlg-hint">{pend === 'a'
+            ? t('这些处恢复成原始文档{o}的写法，不采纳对方的修改。', { o: origLabel ? t('（{x}）', { x: origLabel }) : '' })
+            : t('这些处采用对方的写法。想逐处决定，可以先回去审阅，定稿随时可以再生成。')}</div>
+        </div>
+      )}
+      <div className="dlg-field">
+        <div className="lbl">{t('将生成')}</div>
+        <div className="file-row"><TypeTag type="docx" /><MidName name={fname} /></div>
+        <div className="dlg-hint">{hasDraft ? t('和审阅稿放在同一个文件夹 · 命名规则在 设置 · 审阅稿与定稿') : t('放在对方文件旁边 · 命名规则在 设置 · 审阅稿与定稿')}</div>
+      </div>
+      {missed && missed.length > 0 && (
+        <div className="draft-un">
+          <Notice tone="err" title={t('有 {n} 处决定没能落实到定稿', { n: missed.length })}>{t('这些处应该改回原文，但写不进去，定稿里仍会是对方的写法。点一处可以回去查看；或者在 Word 里手动改。')}</Notice>
+          <ul>
+            {missed.slice(0, 50).map((u) => (
+              <li key={u.cid}><button type="button" className="menu-item" onClick={() => { onClose(); onJump(u.cid); }}>
+                <span className="n">{t('第 {i} 处', { i: u.cid })}</span><span className="r">{t(REASON[u.reason])}</span>
+              </button></li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {err && <Notice tone="err" title={t('没能生成定稿')}>{err}</Notice>}
+    </Modal>
+  );
+}
