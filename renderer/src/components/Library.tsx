@@ -6,6 +6,7 @@ import { Modal } from './Modal';
 import { Notice } from './Panel';
 import type { DocModel, FileInfo } from '../lib/model';
 import { useDrop } from '../lib/drop';
+import { MidName, TypeTag } from './ui';
 import { type Template, type TplVersion, type Library as Lib, pick, live, fingerprint } from '../lib/library';
 
 const pct = (x: number) => `${Math.round(x * 100)}%`;
@@ -85,9 +86,9 @@ export function TemplateCompareDialog({ tpl, B, bBusy, onPickB, onDropB, onStart
   const best = res?.best;
   const others = res?.ranked.filter((r) => r.item.id !== best?.item.id) || [];
   return (
-    <Modal title={t('用模板比较')} onClose={onClose} className="tpl-dlg"
-      footer={<><button type="button" className="btn" onClick={onClose}>{t('取消')}</button>
-        <button type="button" className="btn primary" disabled={!B || !chosen} onClick={() => onStart(tpl.versions.find((v) => v.id === chosen)!)}>{t('开始比较')}</button></>}>
+    <Modal title={t('用模板比较')} onClose={onClose} className="tpl-dlg spec"
+      footer={<><button type="button" className="btn big" onClick={onClose}>{t('取消')}</button>
+        <button type="button" className="btn big primary" disabled={!B || !chosen} onClick={() => onStart(tpl.versions.find((v) => v.id === chosen)!)}>{t('开始比较')}</button></>}>
       <div className="pair">
         <div className="pair-row"><span className="role">{t('原始文档')}</span><I.FileGlyph type={tpl.versions[0]?.file.ext || 'docx'} size={22} /><span className="nm">{tpl.name}</span>
           <span className="tag">{chosen ? tpl.versions.find((v) => v.id === chosen)?.label : t('待选版本')}</span></div>
@@ -132,20 +133,32 @@ export function MatchNotice({ title, body, action, onUse, onDismiss }: { title: 
   );
 }
 
-/** 「最近比较」的一行（放在往来稿卡片里，和模板、往来稿的行同样式） */
-export function RecentRow({ a, b, full, time, prog, onOpen, onSave, onRemove }: {
-  a: { name: string; ext: string }; b: { name: string; ext: string }; full?: [string, string]; time: string;
+/** 「最近比较」的一行（beta.3 两行式）：第一行两份文件各带类型标签、中间省略、→ 在固定列；第二行时间 · 进度条 · 已审 */
+export function RecentRow({ a, b, time, prog, onOpen, onSave, onRemove }: {
+  a: { name: string; ext: string }; b: { name: string; ext: string }; time: string;
   prog: { total: number; decided: number } | null;
   onOpen: () => void; onSave: () => void; onRemove: () => void;
 }) {
   const more = useRef<HTMLButtonElement>(null);
   const [menu, setMenu] = useState(false);
-  const done = prog && prog.total && prog.decided >= prog.total;
+  const has = !!(prog && prog.total);
+  const done = has && prog!.decided >= prog!.total;
   return (
-    <div className="lib-row recent-row" role="button" tabIndex={0} onClick={onOpen} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); } }}>
-      <I.FileGlyph type={b.ext} size={22} />
-      <span className="nm two" title={full ? `${full[0]}\n→ ${full[1]}` : `${a.name}\n→ ${b.name}`}><span className="a">{a.name}</span><span className="arr">→</span><span className="b">{b.name}</span></span>
-      <span className="meta">{time}{prog ? ' · ' + (done ? t('已审完') : t('已审 {d}/{n}', { d: prog.decided, n: prog.total })) : ''}</span>
+    <div className="lib-row recent-row" role="button" tabIndex={0} title={`${a.name}\n→ ${b.name}`} onClick={onOpen} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); } }}>
+      <div className="rr-main">
+        <div className="rr-files">
+          <span className="rr-side"><TypeTag type={a.ext} /><MidName name={a.name} title={false} /></span>
+          <span className="rr-arr" aria-label={t('到')}>→</span>
+          <span className="rr-side"><TypeTag type={b.ext} /><MidName name={b.name} title={false} /></span>
+        </div>
+        <div className="rr-meta">
+          <span className="rr-time">{time}</span>
+          {has
+            ? <><span className="rr-bar" aria-hidden="true"><i style={{ width: `${Math.round((prog!.decided / prog!.total) * 100)}%` }} /></span>
+                <span className="rr-prog">{done ? t('已审完') : t('已审 {d} / {n}', { d: prog!.decided, n: prog!.total })}</span></>
+            : <span className="rr-prog">{t('未开始审阅')}</span>}
+        </div>
+      </div>
       <button ref={more} type="button" className="btn sm plain icon" aria-label={t('更多')} title={t('更多')} onClick={(e) => { e.stopPropagation(); setMenu(!menu); }}><I.IconMore /></button>
       <Popover anchor={more} open={menu} onClose={() => setMenu(false)} width={260}>
         <div onClick={(e) => e.stopPropagation()}>

@@ -507,7 +507,7 @@ select.sel { height: 36px; border-radius: var(--r-m); border: 2px solid var(--bo
 [data-platform='mac'][data-fullscreen='1'] .nav-h { padding-left: var(--space-4); }
 .tbar .tb-nav { margin-right: 2px; }
 .tbar .btn { flex: none; }
-.filechip { flex: 0 1 280px; min-width: 120px; display: flex; align-items: center; gap: var(--space-2); height: var(--control-m); padding: 0 var(--space-3) 0 6px; border: 2px solid var(--swan); border-radius: var(--radius-m); background: var(--surface); cursor: pointer; position: relative; }
+.filechip { flex: none; max-width: min(280px, 25%); min-width: 96px; display: flex; align-items: center; gap: var(--space-2); height: var(--control-m); padding: 0 var(--space-3) 0 6px; border: 2px solid var(--swan); border-radius: var(--radius-m); background: var(--surface); cursor: pointer; position: relative; }
 .filechip:hover { background: var(--hover); }
 .filechip.over { border-color: var(--macaw); background: var(--macaw-tint); }
 .filechip .badge { flex: none; min-width: 0; height: 22px; padding: 0 6px; border-radius: 6px; }
@@ -516,9 +516,9 @@ select.sel { height: 36px; border-radius: var(--r-m); border: 2px solid var(--bo
 .filechip .fn-h { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .filechip .fn-t { flex: none; }
 .filechip .chg-dot { position: absolute; top: -4px; right: -4px; width: 10px; height: 10px; border-radius: 50%; background: var(--macaw); box-shadow: 0 0 0 2px var(--surface); }
-.tb-mid { flex: 1 0 auto; display: flex; align-items: center; justify-content: center; gap: var(--space-1); }
+.tb-mid { flex: 1 1 0; min-width: auto; display: flex; align-items: center; justify-content: center; gap: var(--space-1); }
 .tb-pos { font-size: 13px; font-weight: 800; color: var(--text-2); font-variant-numeric: tabular-nums; white-space: nowrap; padding: 0 4px; }
-.tb-prog { width: 200px; max-width: 30vw; height: 12px; border-radius: var(--radius-pill); background: var(--swan); overflow: hidden; margin-right: 6px; }
+.tb-prog { flex: none; width: clamp(96px, 14vw, 200px); height: 12px; border-radius: var(--radius-pill); background: var(--swan); overflow: hidden; margin-right: 6px; }
 .tb-prog i { display: block; height: 100%; background: var(--feather); border-radius: inherit; box-shadow: inset 0 3px 0 #ffffff4d; transition: width .3s var(--ease); }
 .spinner.sm { width: 20px; height: 20px; border-width: 3px; flex: none; }
 @media (max-width: 1360px) { .tbar .btn.has-label-hide .lbl { display: none; } }
@@ -666,8 +666,6 @@ select.sel { height: 36px; border-radius: var(--r-m); border: 2px solid var(--bo
 .shell.narrow { grid-template-columns: var(--navw) minmax(0, 1fr) 0; }
 .shell.narrow .insp.drawer { position: absolute; grid-row: auto; grid-column: auto; top: var(--toolbar-h); right: 0; bottom: 0; width: min(var(--inspector-w), 86vw); z-index: 45; box-shadow: var(--shadow-float); }
 .drawer-scrim { position: absolute; inset: var(--toolbar-h) 0 0 0; z-index: 44; background: #0000001f; }
-.shell.narrow .tbar .tb-copy { width: var(--control-m); padding: 0; }
-.shell.narrow .tbar .tb-copy .lbl { display: none; }
 .shell.narrow .tbar .btn { padding: 0 10px; }
 
 /* 完成页 */
@@ -941,7 +939,6 @@ select.sel { height: 36px; border-radius: var(--r-m); border: 2px solid var(--bo
 }
 :lang(en) .sh, :lang(en) .ch { text-transform: uppercase; letter-spacing: .06em; }
 .filechip .badge { font-size: 12px; }
-.shell.narrow .filechip .who { display: none; }
 
 /* 兜底错误页（1.7.2） */
 .app.crash { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-3); padding: var(--space-8); text-align: center; background: var(--surface); }
@@ -1021,7 +1018,6 @@ select.sel { height: 36px; border-radius: var(--r-m); border: 2px solid var(--bo
 .final-dlg .chk { display: flex; align-items: center; gap: 8px; font-weight: 700; margin: 6px 0; }
 .final-dlg .cap { color: var(--hare); font-size: 13px; font-weight: 700; }
 /* 有审阅稿片时，中等宽度下“复制摘要”只留图标，给两侧文件名让位 */
-@media (max-width: 1360px) { .tbar.has-draft .tb-copy { width: var(--control-m); padding: 0; } .tbar.has-draft .tb-copy .lbl { display: none; } }
 
 /* ---------- 首页：往来稿 / 模板两栏（1.8 · 设计稿 01） ---------- */
 .lib-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-6); margin-top: 28px; align-items: start; }
@@ -1036,9 +1032,23 @@ select.sel { height: 36px; border-radius: var(--r-m); border: 2px solid var(--bo
 .lib-row:focus-visible { outline: 2px solid var(--macaw); outline-offset: -2px; }
 .lib-row > svg { flex: none; }
 .lib-row .nm { font-weight: 900; color: var(--title); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 auto; }
-.lib-row .nm.two { display: flex; align-items: baseline; gap: 6px; }
-.lib-row .nm.two .a, .lib-row .nm.two .b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 0 1 auto; }
-.lib-row .nm.two .arr { flex: none; color: var(--hare); font-weight: 800; }
+/* 中间省略的文件名（beta.3） */
+.mid-name { display: flex; min-width: 0; overflow: hidden; white-space: nowrap; }
+.mid-name .mn-h { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.mid-name .mn-t { flex: none; }
+/* 最近比较：两行式紧凑行（beta.3）。两份文件各占一半，→ 在固定列；第二行时间列定宽，进度条对齐 */
+.recent-row { padding-top: 6px; padding-bottom: 6px; align-items: center; }
+.recent-row .rr-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.recent-row .rr-files { display: grid; grid-template-columns: minmax(0, 1fr) 20px minmax(0, 1fr); column-gap: 8px; align-items: center; }
+.recent-row .rr-side { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.recent-row .rr-side .badge { flex: none; }
+.recent-row .rr-side .mid-name { font-size: 15px; font-weight: 700; color: var(--eel); }
+.recent-row .rr-arr { color: var(--hare); font-weight: 900; text-align: center; }
+.recent-row .rr-meta { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: var(--text-3); white-space: nowrap; min-width: 0; }
+.recent-row .rr-time { flex: none; min-width: 76px; }
+.recent-row .rr-bar { flex: none; width: 96px; height: 8px; border-radius: var(--radius-pill); background: var(--swan); overflow: hidden; }
+.recent-row .rr-bar i { display: block; height: 100%; background: var(--feather); border-radius: inherit; }
+.recent-row .rr-prog { font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; }
 .lib-row .meta { flex: none; font-size: 12px; font-weight: 800; color: var(--text-3); white-space: nowrap; }
 .lib-row .lib-edit { flex: 1; min-width: 0; height: 30px; }
 .lib-row .btn.icon { flex: none; color: var(--wolf); }
@@ -1101,7 +1111,7 @@ select.sel { height: 36px; border-radius: var(--r-m); border: 2px solid var(--bo
 .clause-hist .vd.a { color: var(--feather-ink); } .clause-hist .vd.r { color: var(--cardinal-ink); } .clause-hist .vd.h { color: var(--bee-ink); }
 
 /* 审阅稿首次说明、弹窗里的放文件区和字段（1.8 beta.2） */
-.draft-tip { border-color: var(--macaw); }
+/* 首次提示和其他浮层一样：2px swan + 阴影 */
 .draft-tip .tip-b { padding: var(--space-4); display: flex; flex-direction: column; gap: 6px; }
 .draft-tip .tip-b b { color: var(--title); font-size: 15px; }
 .draft-tip .tip-b p { margin: 0; color: var(--text-2); font-size: 13px; font-weight: 700; line-height: 1.55; }
@@ -1118,3 +1128,71 @@ select.sel { height: 36px; border-radius: var(--r-m); border: 2px solid var(--bo
 .dlg-field .seg.full { width: 100%; }
 .ver-list.pick { max-height: 200px; overflow: auto; border: 2px solid var(--border); border-radius: var(--radius-m); padding: 4px; }
 .final-dlg p { line-height: 1.6; }
+
+/* 工具栏放不下时依次收起（beta.3）：版本片最多占约 1/3、中间省略；复制摘要 → 导出 → 审阅稿（只留圆点）依次收成图标；计数永不换行 */
+.tbar .ver-chip { flex: none; max-width: 33%; }
+/* 4：按钮都收完了还放不下（窗口极窄）——这时才让文件片、版本片和进度条继续变窄 */
+.tbar.tb-l4 .ver-chip, .tbar.tb-l4 .filechip { flex: 0 1 auto; min-width: 96px; }
+.tbar.tb-l4 .tb-prog { flex: 0 1 96px; min-width: 32px; }
+.tbar .ver-chip .mid-name { font-weight: 900; color: var(--title); }
+.tbar.tb-l1 .tb-copy, .tbar.tb-l2 .tb-copy, .tbar.tb-l3 .tb-copy, .tbar.tb-l4 .tb-copy,
+.tbar.tb-l2 .tb-export, .tbar.tb-l3 .tb-export, .tbar.tb-l4 .tb-export { width: var(--control-m); padding: 0; }
+.tbar.tb-l1 .tb-copy .lbl, .tbar.tb-l2 .tb-copy .lbl, .tbar.tb-l3 .tb-copy .lbl, .tbar.tb-l4 .tb-copy .lbl,
+.tbar.tb-l2 .tb-export .lbl, .tbar.tb-l3 .tb-export .lbl, .tbar.tb-l4 .tb-export .lbl,
+.tbar.tb-l2 .filechip .who, .tbar.tb-l3 .filechip .who, .tbar.tb-l4 .filechip .who { display: none; }
+
+/* 弹窗按规范（beta.3）：标题 22/900，内边距 32，段间距 24，控件 48，按钮右对齐、不加分隔线 */
+.modal-head h3 { font-size: 22px; }
+.modal.spec { border-radius: var(--radius-float); }
+.modal.spec .modal-head { padding: 28px 20px 0 32px; }
+.modal.spec .modal-body { padding: 20px 32px 4px; display: flex; flex-direction: column; gap: var(--space-6); }
+.modal.spec .modal-body > * { margin: 0; }
+.modal.spec .modal-body > p { color: var(--text-2); }
+.modal.spec .modal-body .dlg-sub { color: var(--text-2); margin-top: -12px; }
+.modal.spec .acts { border-top: 0; padding: var(--space-6) 32px 32px; gap: var(--space-3); }
+.modal.spec .dlg-field { margin: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.modal.spec .dlg-field .lbl { font-size: 15px; font-weight: 700; color: var(--eel); margin: 0; }
+.modal.spec .dlg-field .grp { font-size: 12px; font-weight: 800; color: var(--text-2); }
+.dlg-hint { font-size: 13px; font-weight: 700; color: var(--text-3); }
+.modal.spec .seg { height: var(--control-l); padding: 4px; gap: 4px; }
+.modal.spec .seg button { height: 36px; font-size: 15px; }
+.modal.spec .dlg-drop { min-height: 128px; gap: 6px; }
+.modal.spec .dlg-drop svg { width: 24px; height: 24px; }
+.modal.spec .ver-row { grid-template-columns: 34px 34px minmax(0, 1fr) auto; }
+.modal.spec .ver-row .mid-name { font-weight: 700; }
+/* 文件行：类型标签 + 中间省略的文件名，高 48（弹窗、提示里统一用它） */
+.file-row { display: flex; align-items: center; gap: var(--space-3); min-height: var(--control-l); padding: 0 var(--space-3); border-radius: var(--radius-m); background: var(--surface-2); min-width: 0; }
+.file-row.over { outline: 2px solid var(--macaw); }
+.file-row .mid-name { flex: 1; font-weight: 700; color: var(--eel); }
+.file-row .badge { flex: none; }
+.file-row .link-btn { flex: none; color: var(--macaw-ink); }
+.draft-file .mid-name { flex: 1; }
+/* 审阅稿首次提示（beta.3）：标题 → 文件行 → 两行说明 → 右对齐按钮 */
+.draft-tip .tip-b { padding: var(--space-6); display: flex; flex-direction: column; gap: var(--space-4); }
+.draft-tip .tip-b .tip-t { font-size: 13px; font-weight: 800; color: var(--title); }
+.draft-tip .tip-b p { margin: 0; color: var(--text-2); }
+.draft-tip .tip-b p + p { margin-top: calc(-1 * var(--space-2)); }
+.draft-tip .tip-b .acts { display: flex; justify-content: flex-end; gap: var(--space-2); }
+/* 文件名规则编辑器（beta.3） */
+.name-ed { display: flex; flex-direction: column; gap: var(--space-2); }
+.name-box { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; min-height: var(--control-l); padding: 6px 10px; border: 2px solid var(--swan); border-radius: var(--radius-m); background: var(--surface); cursor: text; box-sizing: border-box; }
+.name-box:focus-within { border-color: var(--macaw); }
+.name-box .name-txt { border: 0 !important; outline: 0; background: transparent; padding: 0 1px !important; height: 28px !important; min-width: 6px; width: auto; font: inherit; font-size: 15px; color: var(--eel); box-shadow: none !important; }
+.name-tag { display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 4px 0 10px; border: 0; border-radius: var(--radius-s); background: var(--macaw-tint); color: var(--macaw-ink); font: inherit; font-size: 13px; font-weight: 800; cursor: default; white-space: nowrap; }
+.name-tag svg { width: 12px; height: 12px; }
+.name-tag .x { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 6px; opacity: .6; cursor: pointer; }
+.name-tag .x:hover { opacity: 1; background: #ffffff80; }
+.name-head { display: flex; align-items: center; justify-content: space-between; min-height: 30px; }
+.name-head label { margin: 0; }
+.name-ins { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.name-pre, .name-fmt { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.name-fmt .cap { font-size: 13px; font-weight: 700; color: var(--text-3); }
+.name-tag.on { box-shadow: 0 0 0 2px var(--macaw); }
+.name-tag:has(svg:first-of-type) { cursor: pointer; }
+.name-pre .badge { flex: none; }
+.name-ins .cap, .name-pre .cap { font-size: 13px; font-weight: 700; color: var(--text-3); }
+.name-pre .pv { font-weight: 700; color: var(--eel); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.menu-item .meta { margin-left: auto; font-size: 12px; font-weight: 800; color: var(--text-3); }
+.menu-item .sp { width: 16px; display: inline-block; flex: none; }
+.mid-name .mn-h:not(:empty), .filechip .fn-h:not(:empty) { min-width: 1.2em; }
+.modal.spec .dlg-field .grp { background: none; padding: 0; margin: 0; position: static; }

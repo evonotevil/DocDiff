@@ -33,8 +33,10 @@ export interface DraftCtx {
   initials: string;
   theirs: string;
   theirsDate: number;
-  /** 文件名规则，{name} = 对方文件名（不含扩展名） */
+  /** 文件名规则，见 fillName */
   pattern: string;
+  /** 往来稿里对方这一版的版本号（V4），文件名标签 {ver} 用 */
+  ver?: string;
 }
 
 let worker: Worker | null = null;
@@ -56,8 +58,23 @@ export const baseOf = (p: string) => p.slice(Math.max(p.lastIndexOf('/'), p.last
 export const cleanStem = (p: string) => baseOf(p).replace(/\.(docx|pdf|txt|md)$/i, '').replace(/( \(\d+\))+$/, '').replace(/(-(我方意见|定稿|our comments|final))+$/i, '') || baseOf(p);
 const stem = cleanStem;
 const clean = (s: string) => s.replace(/[\\/:*?"<>|]/g, '_').trim() || 'DocDiff';
-export function draftName(pattern: string, bPath: string, suffix = '') {
-  return clean((pattern || '{name}-我方意见').split('{name}').join(stem(bPath))) + suffix + '.docx';
+/** 文件名里可用的标签（beta.3）：{name} 对方文件名、{date} 日期（{date:YYYY-MM-DD} 带横线）、{ver} 版本号、{who} 审阅人 */
+export interface NameVars { now?: number; ver?: string; who?: string }
+export function fillName(pattern: string, bPath: string, v: NameVars = {}) {
+  const d = new Date(v.now ?? Date.now());
+  const y = String(d.getFullYear()), m = String(d.getMonth() + 1).padStart(2, '0'), dd = String(d.getDate()).padStart(2, '0');
+  const E = '\u0000';
+  let s = (pattern || '{name}-我方意见').replace(/\{(name|date|ver|who)(?::([^}]*))?\}/g, (_, k: string, f?: string) => {
+    const val = k === 'name' ? stem(bPath) : k === 'date' ? (f && /-/.test(f) ? `${y}-${m}-${dd}` : `${y}${m}${dd}`) : k === 'ver' ? (v.ver || '') : (v.who || '');
+    return clean2(val) || E;
+  });
+  // 没有值的标签连同一侧的分隔符一起去掉，不会出现“--”
+  s = s.replace(/([-_ ·])?\u0000([-_ ·])?/g, (_, a?: string, b?: string) => (a && b ? a : ''));
+  return s;
+}
+const clean2 = (s: string) => s.replace(/[\\/:*?"<>|]/g, '_').trim();
+export function draftName(pattern: string, bPath: string, suffix = '', v: NameVars = {}) {
+  return clean(fillName(pattern, bPath, v)) + suffix + '.docx';
 }
 async function freePath(dir: string, name: string): Promise<string> {
   const s = sep(dir + '/');
@@ -83,6 +100,7 @@ export class DraftSync {
     this.meta = getDraftMeta(ctx.pk);
     if (this.meta) { this.set({ s: 'saved', path: this.meta.path, at: this.meta.at }); this.check(); }
   }
+  vars(): NameVars { return { ver: this.ctx.ver, who: this.ctx.reviewer }; }
   subscribe(f: (s: DraftState) => void) { this.subs.add(f); f(this.state); return () => { this.subs.delete(f); }; }
   private set(p: Partial<DraftState>) { this.state = { ...this.state, ...p }; for (const f of this.subs) f(this.state); }
   dispose() { this.disposed = true; clearTimeout(this.timer); clearInterval(this.poll); this.subs.clear(); }
@@ -129,7 +147,7 @@ export class DraftSync {
     try {
       const out = await this.build('draft');
       const tBuilt = performance.now();
-      let path = this.meta?.path || (await freePath(this.meta?.dir || dirOf(this.ctx.bPath), draftName(this.ctx.pattern, this.ctx.bName)));
+      let path = this.meta?.path || (await freePath(this.meta?.dir || dirOf(this.ctx.bPath), draftName(this.ctx.pattern, this.ctx.bName, '', this.vars())));
       let expect = this.meta?.stat || null;
       for (let tries = 0; tries < 5; tries++) {
         const res = await api.draftSave({ path, data: out.bytes, expect });
@@ -163,14 +181,14 @@ export class DraftSync {
   /** 被别人改过 / 被移走之后：另存一份新的审阅稿，此后同步到新文件 */
   async saveAsNew() {
     const dir = this.meta?.dir || dirOf(this.meta?.path || this.ctx.bPath);
-    this.meta = { dir: this.meta?.dir, path: await freePath(dir, draftName(this.ctx.pattern, this.ctx.bName)), at: 0 };
+    this.meta = { dir: this.meta?.dir, path: await freePath(dir, draftName(this.ctx.pattern, this.ctx.bName, '', this.vars())), at: 0 };
     await this.run();
   }
   /** 写不进对方文件所在的文件夹：换一个文件夹 */
   async chooseFolder(title: string) {
     const dir = await api.pickFolder?.({ title, defaultPath: dirOf(this.ctx.bPath) });
     if (!dir) return;
-    this.meta = { dir, path: await freePath(dir, draftName(this.ctx.pattern, this.ctx.bName)), at: 0 };
+    this.meta = { dir, path: await freePath(dir, draftName(this.ctx.pattern, this.ctx.bName, '', this.vars())), at: 0 };
     await this.run();
   }
 
@@ -178,7 +196,7 @@ export class DraftSync {
   async makeFinal(o: { pending: 'a' | 'b'; keepComments: boolean; pattern: string }): Promise<string> {
     const out = await this.build('final', o);
     const dir = this.meta?.dir || dirOf(this.meta?.path || this.ctx.bPath);
-    let path = await freePath(dir, draftName(o.pattern, this.ctx.bName));
+    let path = await freePath(dir, draftName(o.pattern, this.ctx.bName, '', this.vars()));
     for (let i = 0; i < 5; i++) {
       const res = await api.draftSave({ path, data: out.bytes, expect: null });
       if (res?.ok) return path;

@@ -6,6 +6,7 @@ import { fmtBytes, fmtDate } from '../lib/model';
 import { DEFAULT_KEYWORDS } from '../lib/insight';
 import { Modal } from './Modal';
 import { Switch, Opt, Seg, Kbd } from './ui';
+import { NameEditor } from './NameEditor';
 import * as I from './icons';
 
 declare const __APP_VERSION__: string;
@@ -154,7 +155,8 @@ function ReviewStorage() {
   );
 }
 
-export function SettingsModal({ v, set, onClose, upd, initialTab = 'general' }: {
+export function SettingsModal({ v, set, onClose, upd, initialTab = 'general', sample }: {
+  sample?: string;
   v: SettingsValues; set: <K extends keyof SettingsValues>(k: K, val: SettingsValues[K]) => void; onClose: () => void;
   upd: Omit<React.ComponentProps<typeof UpdateSection>, 'auto' | 'setAuto'>; initialTab?: Tab;
 }) {
@@ -196,11 +198,9 @@ export function SettingsModal({ v, set, onClose, upd, initialTab = 'general' }: 
                 <small>{t('Word 里的修订记的是“谁改了文字”，也就是对方。导出时还可以针对每份文件单独修改。')}</small>
               </div>
               <Opt label={t('接受的修订也加批注')} hint={t('关掉后，只有拒绝和待议带批注')}><Switch on={v.commentAccepted} onChange={(x) => set('commentAccepted', x)} label={t('接受的修订也加批注')} /></Opt>
-              <div className="field-row">
-                <div className="field grow"><label htmlFor="rv-draft">{t('审阅稿文件名')}</label><input id="rv-draft" value={v.draftName} placeholder={t('{name}-我方意见')} onChange={(e) => set('draftName', e.target.value)} /></div>
-                <div className="field grow"><label htmlFor="rv-final">{t('定稿文件名')}</label><input id="rv-final" value={v.finalName} placeholder={t('{name}-定稿')} onChange={(e) => set('finalName', e.target.value)} /></div>
-              </div>
-              <small className="set-hint">{t('{name} 会换成对方文件的名字。审阅稿会发回给对方，名字里别带只给自己看的字。')}</small>
+              <NameEditor id="rv-draft" label={t('审阅稿文件名')} value={v.draftName} fallback={t('{name}-我方意见')} sample={sample || t('对方的文件.docx')} vars={{ ver: 'V4', who: v.reviewerName }} onChange={(x) => set('draftName', x)} />
+              <NameEditor id="rv-final" label={t('定稿文件名')} value={v.finalName} fallback={t('{name}-定稿')} sample={sample || t('对方的文件.docx')} vars={{ ver: 'V4', who: v.reviewerName }} onChange={(x) => set('finalName', x)} />
+              <small className="set-hint">{t('对方文件名会自动去掉“-我方意见”“-定稿”这类 DocDiff 加过的后缀；版本号只在往来稿里有值，没有时连同前后的“-”一起省掉。审阅稿会发回给对方，名字里别带只给自己看的字。')}</small>
               <ReviewStorage />
             </>
           )}

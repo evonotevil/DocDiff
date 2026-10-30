@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { DocModel, FileInfo } from './lib/model';
 import { compareBlocks, docPlainText, fmtBytes } from './lib/model';
 import { loadDoc } from './lib/load';
@@ -24,7 +24,7 @@ import { SettingsModal, SettingsValues, UpdInfo, APP_VERSION } from './component
 import { Modal } from './components/Modal';
 import { Mascot, Confetti } from './components/Mascot';
 import { Wordmark } from './components/Logo';
-import { Switch, Opt, Seg, Kbd, useMedia } from './components/ui';
+import { Switch, Opt, Seg, Kbd, useMedia, splitName, MidName, TypeTag } from './components/ui';
 import * as I from './components/icons';
 import { RichView } from './views/RichView';
 import { PlainView } from './views/PlainView';
@@ -118,15 +118,6 @@ async function sampleFile(name: string): Promise<FileInfo> {
 const docStat = (d: DocModel) => `${d.type.toUpperCase()} · ${fmtBytes(d.file.size)}${d.pageCount ? ` · ${t('{n} 页', { n: d.pageCount })}` : ''}`;
 
 /** 长文件名从中间省略，保留扩展名（法务文件名的版本信息常在尾部） */
-function midEllipsis(name: string, max = 34) {
-  if (name.length <= max) return name;
-  const dot = name.lastIndexOf('.');
-  const ext = dot > 0 && name.length - dot <= 6 ? name.slice(dot) : '';
-  const stem = ext ? name.slice(0, dot) : name;
-  const keep = max - ext.length - 1;
-  const head = Math.ceil(keep * 0.6), tail = Math.floor(keep * 0.4);
-  return `${stem.slice(0, head)}…${stem.slice(stem.length - tail)}${ext}`;
-}
 
 function timeAgo(ts: number) {
   const s = (Date.now() - ts) / 1000;
@@ -170,15 +161,6 @@ function DropZone({ side, doc, loading, error, onOpen, onFiles, onClear, onPaste
   );
 }
 
-/** 文件名拆成两段：开头可以被省略号截掉，结尾（扩展名前 6 个字 + 扩展名）永远完整显示（1.7.1） */
-function splitName(name: string): [string, string] {
-  const dot = name.lastIndexOf('.');
-  const ext = dot > 0 && name.length - dot <= 6 ? name.slice(dot) : '';
-  const stem = ext ? name.slice(0, dot) : name;
-  const chars = Array.from(stem);
-  if (chars.length <= 6) return ['', stem + ext]; // 1.7.3：短文件名整个放在结尾段，不会被截成只剩扩展名
-  return [chars.slice(0, -6).join(''), chars.slice(-6).join('') + ext];
-}
 
 /** 文件片（规范 3.0）：工具栏左侧，高 36。点一下换文件，也可以直接把文件拖上来替换 */
 function FilePill({ side, doc, onOpen, onFiles, changed }: { side: Side; doc: DocModel; onOpen: () => void; onFiles: (f: FileInfo[]) => void; changed: boolean }) {
@@ -684,7 +666,8 @@ export default function App() {
     if (decFor.current === richRes) sync.update(decisions);
     return () => { off(); sync.dispose(); };
   }, [richRes, pk]);
-  useEffect(() => { if (draftSync) { draftSync.ctx.reviewer = reviewer; draftSync.ctx.pattern = prefs.draftName.trim() || t('{name}-我方意见'); draftSync.ctx.theirs = prefs.authorName.trim() || B?.meta['最后修改者'] || B?.meta['作者'] || t('修改方'); } }, [draftSync, reviewer, prefs.draftName, prefs.authorName]);
+  const draftVer = activeTh && thread ? activeTh.versions.find((v) => v.id === thread.b) : null;
+  useEffect(() => { if (draftSync) { draftSync.ctx.ver = draftVer ? `V${draftVer.n}` : undefined; draftSync.ctx.reviewer = reviewer; draftSync.ctx.pattern = prefs.draftName.trim() || t('{name}-我方意见'); draftSync.ctx.theirs = prefs.authorName.trim() || B?.meta['最后修改者'] || B?.meta['作者'] || t('修改方'); } }, [draftSync, reviewer, prefs.draftName, prefs.authorName, draftVer]);
   // 往来稿：这一轮的结论摘要存进往来稿（只存有结论或备注的处），供下一轮的“上轮”提示和条款历史使用
   const roundTimer = useRef<any>(0);
   useEffect(() => {
@@ -1008,7 +991,7 @@ export default function App() {
     <>
       {pwd && <PasswordModal name={pwd.file.name} wrong={pwd.wrong} onCancel={() => setPwd(null)} onOk={(p) => { const x = pwd; setPwd(null); loadFile(x.side, x.file, p); }} />}
       {pasteSide !== null && <PasteModal side={pasteSide} onCancel={() => setPasteSide(null)} onOk={(t) => { const s = pasteSide; setPasteSide(null); loadFile(s, textFile(t, s)); }} />}
-      {showSettings && <SettingsModal v={settingsValues} set={setSetting} onClose={() => setShowSettings(false)} initialTab={showSettings}
+      {showSettings && <SettingsModal v={settingsValues} set={setSetting} onClose={() => setShowSettings(false)} initialTab={showSettings} sample={B?.type === 'docx' ? B.file.name : undefined}
         upd={{ info: upd, checking: checkingUpd, onCheck: () => checkUpdate(true), onSkip: (v) => { set('skipVersion')(v); flash(t('已跳过 {v}，下次有更新的版本再提醒你', { v })); } }} />}
       {exportOpen && richRes && (
         <ExportDialog total={richRes.changes.length} undecided={richRes.changes.length - richRes.changes.filter((c) => decisions[c.id]?.v).length} risks={risks.length}
@@ -1051,6 +1034,33 @@ export default function App() {
   );
 
   // =================== 首页 ===================
+  // 工具栏放不下时依次收起（beta.3）：0 全部带文字 → 1 复制摘要只留图标 → 2 导出也只留图标、文件片去掉“原始/修改后” → 3 审阅稿只留圆点。
+  // 每次渲染后量一下有没有溢出，溢出就再收一级；窗口变宽或内容换了再从 0 开始量（都在绘制前完成，不会闪）
+  const tbRef = useRef<HTMLElement | null>(null);
+  const [tbLevel, setTbLevel] = useState(0);
+  const tbW = useRef(0);
+  const tbContent = `${A?.file.name || ''}|${B?.file.name || ''}|${activeTh?.name || ''}|${thread?.a || ''}|${thread?.b || ''}|${draftState.s}|${(draftState.unwritten || []).length}`;
+  // 只在工具栏内容或档位变了时量（量一次要强制排版，别每次渲染都量；窗口大小变化交给 ResizeObserver）
+  const tbSig = `${tab}|${activeTh?.id || ''}|${draftState.s === 'none'}|${!!curRes}|${tbContent}`;
+  const tbSigPrev = useRef('');
+  useLayoutEffect(() => {
+    // 内容换了：先回到 0 档再重新量
+    if (tbSigPrev.current !== tbSig) { tbSigPrev.current = tbSig; if (tbLevel !== 0) { setTbLevel(0); return; } }
+    const el = tbRef.current;
+    if (el && tbLevel < 4 && el.scrollWidth > el.clientWidth + 1) setTbLevel(tbLevel + 1);
+  }, [tbLevel, tbSig]);
+  useEffect(() => {
+    const el = tbRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => {
+      const w = el.clientWidth;
+      if (w > tbW.current + 4) setTbLevel(0);
+      else if (el.scrollWidth > w + 1) setTbLevel((l) => Math.min(4, l + 1));
+      tbW.current = w;
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [!!(compared && A && B)]);
   if (!compared || !A || !B) {
     const openRecent = async (r: any) => {
       const ok = await Promise.all([api.exists(r.a.path), api.exists(r.b.path)]);
@@ -1106,7 +1116,7 @@ export default function App() {
                   <div className="lib-gh"><span>{t('最近比较')}</span><span className="grow" /><button type="button" className="btn sm plain" onClick={async () => { await api.recentClear?.(); setRecent([]); }}>{t('清空')}</button></div>
                   <div className="lib-rows">
                     {recent.map((r, i) => (
-                      <RecentRow key={i} a={{ ...r.a, name: midEllipsis(r.a.name, 24) }} b={{ ...r.b, name: midEllipsis(r.b.name, 24) }} full={[r.a.name, r.b.name]} time={timeAgo(r.time)} prog={r.a.sha && r.b.sha ? reviewProgress(pairKey(r.a.sha, r.b.sha)) : null}
+                      <RecentRow key={i} a={r.a} b={r.b} time={timeAgo(r.time)} prog={r.a.sha && r.b.sha ? reviewProgress(pairKey(r.a.sha, r.b.sha)) : null}
                         onOpen={() => openRecent(r)} onSave={() => { setPendingSave(true); openRecent(r); }} onRemove={() => api.recentRemove(i).then(setRecent)} />
                     ))}
                   </div>
@@ -1361,7 +1371,7 @@ export default function App() {
         </div>
       </nav>
 
-      <header className={`tbar drag${draftState.s !== 'none' && isRichTab ? ' has-draft' : ''}`}>
+      <header ref={tbRef} className={`tbar drag tb-l${tbLevel}${draftState.s !== 'none' && isRichTab ? ' has-draft' : ''}`}>
         {!navOpen && <button type="button" className="ibtn tb-nav" onClick={toggleNav} title={toggleTitle(false, '侧栏', navKey)} aria-label={t('展开侧栏')} aria-expanded={false}><I.IconPanelLeft /></button>}
         {activeTh && thread ? (
           <VersionChip th={activeTh} a={thread.a} b={thread.b} tpl={activeTh.tpl ? lib.templates.find((x) => x.id === activeTh.tpl!.tid) : null}
@@ -1391,11 +1401,11 @@ export default function App() {
         {tab !== 5 && <button ref={gearRef} type="button" className="ibtn" onClick={() => setPop(pop === 'settings' ? null : 'settings')} title={t('比较设置')} aria-label={t('比较设置')} aria-expanded={pop === 'settings'}><I.IconGear /></button>}
         {curRes && <button type="button" className="btn tb-copy" onClick={copySummary} title={t('复制为 Markdown，可粘贴到邮件 / 飞书 / 文档')} aria-label={t('复制摘要')}><I.IconCopy /><span className="lbl">{t('复制摘要')}</span></button>}
         {richRes && isRichTab && draftSync && draftState.s !== 'none' && B && (
-          <DraftChip state={draftState} sync={draftSync} bPath={B.file.path} narrow={narrow} decided={richRes.changes.filter((c) => decisions[c.id]?.v).length}
+          <DraftChip state={draftState} sync={draftSync} bPath={B.file.path} narrow={tbLevel >= 3} decided={richRes.changes.filter((c) => decisions[c.id]?.v).length}
             pending={richRes.changes.filter((c) => !decisions[c.id]?.v || decisions[c.id]?.v === 'h').length} finalPattern={prefs.finalName.trim() || t('{name}-定稿')}
             onJump={(cid) => { setTab(2); setFilter('all'); setSelCid(cid); }} flash={flash} />
         )}
-        {richRes && isRichTab && <button type="button" className={`btn ${tab === 2 ? '' : 'primary'}`} onClick={openExport}><I.IconExport />{t('导出')}</button>}
+        {richRes && isRichTab && <button type="button" className={`btn tb-export ${tab === 2 ? '' : 'primary'}`} onClick={openExport} title={t('导出')} aria-label={t('导出')}><I.IconExport /><span className="lbl">{t('导出')}</span></button>}
         {hasInsp && <button type="button" className="ibtn" onClick={toggleAside} title={toggleTitle(inspOpen, '检查器', inspKey)} aria-label={t(inspOpen ? '收起检查器' : '展开检查器')} aria-expanded={inspOpen}><I.IconPanelRight /></button>}
       </header>
 

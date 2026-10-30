@@ -5,7 +5,7 @@ import * as I from './icons';
 import { Popover } from './Popover';
 import { Modal } from './Modal';
 import { Notice } from './Panel';
-import { Seg } from './ui';
+import { Seg, MidName, TypeTag } from './ui';
 import type { DraftState, DraftSync } from '../lib/draft/client';
 import { baseOf, dirOf, draftName } from '../lib/draft/client';
 import type { Reason } from '../lib/draft/ooxml';
@@ -70,8 +70,10 @@ export function DraftChip({ state, sync, bPath, narrow, decided, pending, finalP
       </button>
       <Popover anchor={ref} open={tip && !open} onClose={closeTip} width={320} className="draft-tip">
         <div className="tip-b">
-          <b>{t('决定会自动写进审阅稿')}</b>
-          <p>{t('你做的每个决定都已经写进「{f}」，不用再导出。对方原文件不动；要发给对方的就是这份。', { f: name })}</p>
+          <div className="tip-t">{t('决定会自动写进审阅稿')}</div>
+          <div className="file-row"><TypeTag type="docx" /><MidName name={name} /></div>
+          <p>{t('每个决定约 0.3 秒内自动写入，不用导出。')}</p>
+          <p>{t('对方原文件不动；要发给对方的就是这份。')}</p>
           <div className="acts"><button type="button" className="btn sm" onClick={() => { closeTip(); api.reveal?.(state.path); }}>{t('在文件夹中显示')}</button><button type="button" className="btn sm primary" onClick={closeTip}>{t('知道了')}</button></div>
         </div>
       </Popover>
@@ -79,7 +81,7 @@ export function DraftChip({ state, sync, bPath, narrow, decided, pending, finalP
         <div className="draft-pop">
           {state.path && (
             <button type="button" className="draft-file" onClick={() => api.reveal?.(state.path)} title={t('在文件夹中显示')}>
-              <I.FileGlyph type="docx" size={22} /><span className="nm">{name}</span>
+              <TypeTag type="docx" /><MidName name={name} title={false} />
             </button>
           )}
           <p className="cap">{sameDir ? t('和对方文件在同一个文件夹 · 对方原文件不动') : state.path ? t('在 {d}', { d: dirOf(state.path) }) : ''}</p>
@@ -123,6 +125,7 @@ function FinalDialog({ sync, bPath, pending, pattern, onClose, flash }: { sync: 
   const [pend, setPend] = useState<'b' | 'a'>('b');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const fname = draftName(pattern, sync.ctx.bName, '', sync.vars());
   const go = async () => {
     setBusy(true); setErr('');
     try {
@@ -135,16 +138,20 @@ function FinalDialog({ sync, bPath, pending, pattern, onClose, flash }: { sync: 
     } finally { setBusy(false); }
   };
   return (
-    <Modal title={t('生成定稿')} onClose={onClose} className="final-dlg"
-      footer={<><button type="button" className="btn" onClick={onClose}>{t('取消')}</button><button type="button" className="btn primary" disabled={busy} onClick={go}>{busy ? t('正在生成…') : t('生成定稿')}</button></>}>
-      <p>{t('定稿是一份干净的 Word：你接受的改动直接采用，拒绝的改回原文，没有修订标记，也没有批注。审阅稿不受影响。')}</p>
+    <Modal title={t('生成定稿')} onClose={onClose} className="final-dlg spec"
+      footer={<><button type="button" className="btn big" onClick={onClose}>{t('取消')}</button><button type="button" className="btn big primary" disabled={busy} onClick={go}>{busy ? t('正在生成…') : t('生成定稿')}</button></>}>
+      <p>{t('一份干净的 Word：接受的改动直接采用，拒绝的改回原文，没有修订标记和批注。审阅稿不受影响。')}</p>
       {pending > 0 && (
         <div className="dlg-field">
-          <div className="lbl">{t('还有 {n} 处没有决定（含待议），定稿里：', { n: pending })}</div>
+          <div className="lbl">{t('还有 {n} 处没有决定（含待议），在定稿里：', { n: pending })}</div>
           <Seg full value={pend} onChange={setPend} label={t('没有决定的处')} options={[['b', t('用对方的改动')], ['a', t('改回我方原文')]]} />
         </div>
       )}
-      <p className="cap">{t('将生成：{f} · 和审阅稿同一个文件夹', { f: draftName(pattern, sync.ctx.bName) })}</p>
+      <div className="dlg-field">
+        <div className="lbl">{t('将生成')}</div>
+        <div className="file-row"><TypeTag type="docx" /><MidName name={fname} /></div>
+        <div className="dlg-hint">{t('和审阅稿放在同一个文件夹 · 命名规则在 设置 · 审阅')}</div>
+      </div>
       {err && <Notice tone="err" title={t('没能生成定稿')}>{err}</Notice>}
     </Modal>
   );

@@ -4,7 +4,7 @@ import * as I from './icons';
 import { Popover, MenuItem } from './Popover';
 import { Modal } from './Modal';
 import { Notice } from './Panel';
-import { Seg } from './ui';
+import { Seg, MidName, TypeTag } from './ui';
 import { useDrop } from '../lib/drop';
 import type { FileInfo } from '../lib/model';
 import type { Thread, ThreadVersion, Side, Template } from '../lib/library';
@@ -81,7 +81,7 @@ export function VersionChip({ th, a, b, tpl, progress, onPick, onAdd, onRename }
   return (
     <>
       <button ref={ref} type="button" className="btn ver-chip" onClick={() => setOpen(!open)} aria-expanded={open} title={th.name}>
-        <span className="nm">{th.name}</span>
+        <MidName name={th.name} title={false} />
         <span className="vv">{va ? `V${va.n}` : '?'} → {vb ? `V${vb.n}` : '?'}</span>
         <I.IconDown />
       </button>
@@ -125,31 +125,36 @@ export function AddVersionDialog({ th, onPick, onDropFiles, file, busy, onDone, 
   const [side, setSide] = useState<Side>(last?.side === 'theirs' ? 'ours' : 'theirs');
   const [against, setAgainst] = useState(last?.id || '');
   const n = (last?.n || 0) + 1;
+  const base = th.versions.find((v) => v.id === against);
   const drop = useDrop(onDropFiles);
+  const prog = (v: ThreadVersion) => { const r = th.rounds.find((x) => x.b === v.id); return r ? (r.decided >= r.total ? t('已审完') : t('已审 {d} / {n}', { d: r.decided, n: r.total })) : ''; };
+  const ext = file ? (file.ext || (/\.pdf$/i.test(file.name) ? 'pdf' : /\.(txt|md)$/i.test(file.name) ? 'txt' : 'docx')) : 'docx';
   return (
-    <Modal title={t('加入新版本')} onClose={onClose} className="tpl-dlg add-ver"
-      footer={<><button type="button" className="btn" onClick={onClose}>{t('取消')}</button><button type="button" className="btn primary" disabled={!file || busy} onClick={() => onDone(side, against)}>{t('加入并比较')}</button></>}>
-      <button type="button" className={`dlg-drop ${drop.over ? 'over' : ''} ${file ? 'has' : ''}`} onClick={onPick} disabled={busy} {...drop.props}>
-        {file
-          ? <><I.FileGlyph type={file.ext || (/\.pdf$/i.test(file.name) ? 'pdf' : 'docx')} size={28} /><span className="nm">{file.name}</span><span className="sub">{t('V{n} · 点击或拖入可以换一份', { n })}</span></>
-          : <><I.IconUpload /><span className="nm">{busy ? t('正在读取…') : t('拖入新的一版，或点击选择')}</span><span className="sub">{t('也可以直接拖到首页，DocDiff 会认出是哪份往来稿')}</span></>}
-      </button>
+    <Modal title={t('加入新版本')} onClose={onClose} className="tpl-dlg add-ver spec"
+      footer={<><button type="button" className="btn big" onClick={onClose}>{t('取消')}</button>
+        <button type="button" className="btn big primary" disabled={!file || busy} onClick={() => onDone(side, against)}>{t('加入并比较 V{a} → V{b}', { a: base?.n ?? '?', b: n })}</button></>}>
+      <p className="dlg-sub">{t('{name} · 目前到 V{n}', { name: th.name, n: last?.n ?? 0 })}</p>
+      {file
+        ? <div className={`file-row ${drop.over ? 'over' : ''}`} {...drop.props}><TypeTag type={ext} /><MidName name={file.name} /><button type="button" className="btn sm plain link-btn" onClick={onPick} disabled={busy}>{t('更换')}</button></div>
+        : <button type="button" className={`dlg-drop ${drop.over ? 'over' : ''}`} onClick={onPick} disabled={busy} {...drop.props}>
+            <I.IconUpload /><span className="nm">{busy ? t('正在读取…') : t('拖入新版本，或点击选择')}</span><span className="sub">{t('.docx / .pdf / .txt · 也可以直接拖到首页，DocDiff 会认出是哪份往来稿')}</span>
+          </button>}
       <div className="dlg-field">
-        <div className="lbl">{t('这一版是')}</div>
-        <Seg full value={side} onChange={setSide} label={t('这一版是')} options={[['theirs', t('对方发来的')], ['ours', t('我方改的')]]} />
+        <div className="lbl">{t('这一版是谁改的')}</div>
+        <Seg full value={side} onChange={setSide} label={t('这一版是谁改的')} options={[['theirs', t('对方改的')], ['ours', t('我方改的')]]} />
+        {last && <div className="dlg-hint">{last.side === 'theirs' ? t('上一版（V{n}）是对方的，所以默认“我方改的”。', { n: last.n }) : t('上一版（V{n}）是我方的，所以默认“对方改的”。', { n: last.n })}</div>}
       </div>
       <div className="dlg-field">
-        <div className="lbl">{t('和哪一版比较')}</div>
+        <div className="grp">{t('将加为 V{n} · 和哪一版比较', { n })}</div>
         <div className="ver-list pick" role="radiogroup" aria-label={t('和哪一版比较')}>
           {[...th.versions].reverse().map((v) => (
-            <button key={v.id} type="button" role="radio" aria-checked={against === v.id} className={`ver-row ${against === v.id ? 'on' : ''}`} onClick={() => setAgainst(v.id)}>
-              <span className={`vn ${v.side}`}>V{v.n}</span><span className="sd">{sideLabel(v.side)}</span><span className="fn">{v.file.name}</span>
-              <span className="pg">{v.id === last?.id ? t('上一版') : md(v.added)}</span>
+            <button key={v.id} type="button" role="radio" aria-checked={against === v.id} className={`ver-row ${against === v.id ? 'on' : ''}`} onClick={() => setAgainst(v.id)} title={v.file.name}>
+              <span className={`vn ${v.side}`}>V{v.n}</span><span className="sd">{sideLabel(v.side)}</span><MidName name={v.file.name} title={false} />
+              <span className="pg">{[md(v.added), prog(v)].filter(Boolean).join(' · ')}</span>
             </button>
           ))}
         </div>
       </div>
-      <p className="cap">{t('文件会复制一份存进往来稿，原文件挪走、改名都不影响版本链。')}</p>
     </Modal>
   );
 }
