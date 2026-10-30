@@ -68,30 +68,42 @@ function ThreadRow({ th, onOpen, onRename, onArchive, onDelete }: { th: Thread; 
 }
 
 /** 往来稿里的工具栏：合同名 + 正在比的两版，点开是版本链（代替两个文件片） */
-export function VersionChip({ th, a, b, tpl, progress, onPick, onAdd, onRename }: {
+export function VersionChip({ th, a, b, tpl, progress, onPick, onAdd, onRename, onDropFiles }: {
   th: Thread; a: string; b: string; tpl?: Template | null;
   progress: (v: ThreadVersion) => string;
   onPick: (a: ThreadVersion, b: ThreadVersion) => void; onAdd: () => void; onRename: (n: string) => void;
+  /** 1.8：把新版本直接拖到版本片或弹出层上 */
+  onDropFiles: (f: FileInfo[]) => void;
 }) {
   const ref = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
   const [edit, setEdit] = useState<string | null>(null);
   const va = th.versions.find((v) => v.id === a), vb = th.versions.find((v) => v.id === b);
   const tv = tpl && th.tpl ? tpl.versions.find((v) => v.id === th.tpl!.vid) : null;
+  const nextN = Math.max(0, ...th.versions.map((v) => v.n)) + 1;
+  const drop = useDrop((fs) => { setOpen(false); onDropFiles(fs); });
+  // 拖着文件经过版本片：弹出层自动打开，整块变成放置区
+  const chipDrag = {
+    onDragEnter: (e: React.DragEvent) => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); setOpen(true); } },
+    onDragOver: drop.props.onDragOver, onDragLeave: drop.props.onDragLeave, onDrop: drop.props.onDrop,
+  };
   return (
     <>
-      <button ref={ref} type="button" className="btn ver-chip" onClick={() => setOpen(!open)} aria-expanded={open} title={th.name}>
+      <button ref={ref} type="button" className={`btn ver-chip ${drop.over ? 'over' : ''}`} onClick={() => setOpen(!open)} aria-expanded={open} title={th.name} {...chipDrag}>
         <MidName name={th.name} title={false} />
         <span className="vv">{va ? `V${va.n}` : '?'} → {vb ? `V${vb.n}` : '?'}</span>
         <I.IconDown />
       </button>
-      <Popover anchor={ref} open={open} onClose={() => setOpen(false)} width={360} align="start"
+      <Popover anchor={ref} open={open} onClose={() => setOpen(false)} width={380} align="start" className={drop.over ? 'ver-dropping' : ''}
         title={edit !== null
           ? <input className="lib-edit" autoFocus value={edit} onChange={(e) => setEdit(e.target.value)} aria-label={t('往来稿名称')}
               onKeyDown={(e) => { if (e.key === 'Enter' && edit.trim()) { onRename(edit.trim()); setEdit(null); } if (e.key === 'Escape') setEdit(null); }}
               onBlur={() => { if (edit.trim()) onRename(edit.trim()); setEdit(null); }} />
-          : <button type="button" className="ver-title" onClick={() => setEdit(th.name)} title={t('重命名')}>{th.name}<I.IconEdit /></button>}>
-        <div className="ver-pop">
+          : <span className="ver-head"><span className="ver-name" title={th.name}>{th.name}</span><button type="button" className="link-btn" onClick={() => setEdit(th.name)}>{t('重命名')}</button></span>}>
+        <div className="ver-pop" {...drop.props}>
+          {drop.over ? (
+            <div className="ver-drop"><I.IconUpload /><b>{t('松手加入为 V{n}', { n: nextN })}</b><span>{t('下一步确认是谁改的、和哪一版比较')}</span></div>
+          ) : <>
           {tpl && tv && <p className="cap">{t('基于模板：{n} {v}', { n: tpl.name, v: tv.label })}</p>}
           <div className="ver-list">
             {th.versions.map((v, i) => {
@@ -102,14 +114,15 @@ export function VersionChip({ th, a, b, tpl, progress, onPick, onAdd, onRename }
                   onClick={() => { if (i > 0) { setOpen(false); onPick(th.versions[i - 1], v); } }}>
                   <span className={`vn ${v.side}`}>V{v.n}</span>
                   <span className="sd">{sideLabel(v.side)}</span>
-                  <span className="fn">{v.file.name}</span>
+                  <MidName name={v.file.name} />
                   <span className="pg">{i > 0 ? progress(v) : md(v.added)}</span>
                 </button>
               );
             })}
           </div>
-          <p className="cap">{t('点一版就和它的上一版比较。')}</p>
+          <p className="cap">{t('点一版就和它的上一版比较 · 也可以把新版本拖到这里')}</p>
           <div className="acts"><button type="button" className="btn sm" onClick={() => { setOpen(false); onAdd(); }}><I.IconUpload />{t('加入新版本…')}</button></div>
+          </>}
         </div>
       </Popover>
     </>

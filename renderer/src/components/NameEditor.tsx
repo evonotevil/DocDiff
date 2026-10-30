@@ -1,12 +1,13 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { t } from '../lib/i18n';
 import * as I from './icons';
 import { Seg, TypeTag } from './ui';
 import { draftName } from '../lib/draft/client';
 
 /**
- * 文件名规则编辑器（1.8 beta.3）：标签（日期 / 对方文件名 / 版本号 / 审阅人）+ 标签之间随便打字，下面实时预览。
- * 存的仍然是文本规则，如 {date}-{name}-legal，旧的 {name}-定稿 原样兼容。
+ * 文件名规则编辑器（1.8）：标签（日期 / 对方文件名 / 版本号 / 审阅人）和文字在一个框里，文字随便打、随便删，不自动补“-”；
+ * 全部删空也可以（框里灰字写出默认值，用默认规则）。插入按钮只在编辑这个框时出现。下面一行实时预览。
+ * 存的仍然是文本规则，如 {date}-{name}-legal，旧的 {name}-定稿 原样兼容；空字符串表示用默认。
  */
 type Key = 'name' | 'date' | 'ver' | 'who';
 type Part = { k: Key; f?: string } | { s: string };
@@ -32,14 +33,22 @@ export function NameEditor({ id, label, value, fallback, sample, vars, onChange 
   id: string; label: string; value: string; fallback: string; sample: string;
   vars: { ver?: string; who?: string }; onChange: (v: string) => void;
 }) {
-  const pattern = value.trim() || fallback;
-  const parts = parse(pattern);
+  // 框里显示的是本地草稿：删空时不会马上弹回默认值
+  const [draft, setDraft] = useState(value || fallback);
+  const sent = useRef(value);
+  useEffect(() => { if (value !== sent.current) { sent.current = value; setDraft(value || fallback); } }, [value, fallback]);
+  const [active, setActive] = useState(false);
+  const pattern = draft.trim() || fallback;
+  const parts = parse(draft);
   const caret = useRef<{ i: number; pos: number } | null>(null);
   const inputs = useRef<(HTMLInputElement | null)[]>([]);
   const [menu, setMenu] = useState<number | null>(null);
   const commit = (ps: Part[], focus?: { i: number; pos: number }) => {
     const v = join(ps);
-    onChange(v === fallback ? '' : v);
+    setDraft(v);
+    const out = !v.trim() || v === fallback ? '' : v;
+    sent.current = out;
+    onChange(out);
     if (focus) requestAnimationFrame(() => { const el = inputs.current[focus.i]; if (el) { el.focus(); el.setSelectionRange(focus.pos, focus.pos); } });
   };
   const setText = (i: number, s: string) => { const ps = parts.slice(); ps[i] = { s }; commit(ps); };
@@ -50,30 +59,21 @@ export function NameEditor({ id, label, value, fallback, sample, vars, onChange 
     commit(ps, { i: i - 1, pos: a.length });
   };
   const insert = (k: Key) => {
-    // 插在上次光标所在的位置；没有就加在最后，前面补一个“-”
-    const at = caret.current && parts[caret.current.i] && !('k' in parts[caret.current.i]) ? caret.current : null;
-    let ps: Part[];
-    if (at) {
-      const s = (parts[at.i] as { s: string }).s;
-      const before = s.slice(0, at.pos), after = s.slice(at.pos);
-      // 和旁边的标签或文字之间自动补一个“-”，不会粘在一起
-      const sepB = (before ? !/[-_ ]$/.test(before) : at.i > 0) ? '-' : '';
-      const sepA = (after ? !/^[-_ ]/.test(after) : at.i < parts.length - 1) ? '-' : '';
-      ps = [...parts.slice(0, at.i), { s: before + sepB }, { k }, { s: sepA + after }, ...parts.slice(at.i + 1)];
-      commit(ps, { i: at.i + 2, pos: sepA.length });
-    } else {
-      const lastS = (parts[parts.length - 1] as { s: string }).s;
-      const sep = lastS ? (/[-_ ]$/.test(lastS) ? '' : '-') : parts.length === 1 ? '' : '-';
-      ps = [...parts.slice(0, -1), { s: lastS + sep }, { k }, { s: '' }];
-      commit(ps, { i: ps.length - 1, pos: 0 });
-    }
+    // 插在光标所在的位置（没有光标就加在最后），不自动补“-”，分隔符由用户自己打
+    const at = caret.current && parts[caret.current.i] && !('k' in parts[caret.current.i]) ? caret.current : { i: parts.length - 1, pos: (parts[parts.length - 1] as { s: string }).s.length };
+    const s = (parts[at.i] as { s: string }).s;
+    const ps: Part[] = [...parts.slice(0, at.i), { s: s.slice(0, at.pos) }, { k }, { s: s.slice(at.pos) }, ...parts.slice(at.i + 1)];
+    commit(ps, { i: at.i + 2, pos: 0 });
   };
   const setFmt = (i: number, f?: string) => { const ps = parts.slice(); ps[i] = { k: 'date', f }; commit(ps); };
   const preview = draftName(pattern, sample, '', vars);
+  const human = parse(fallback).map((x) => ('k' in x ? t(LABEL[x.k]) : x.s)).join('');
+  const wrap = useRef<HTMLDivElement>(null);
   return (
-    <div className="field name-ed">
-      <div className="name-head"><label htmlFor={`${id}-0`}>{label}</label>{value.trim() && <button type="button" className="btn sm plain" onClick={() => onChange('')}>{t('恢复默认')}</button>}</div>
-      <div className="name-box" onMouseDown={(e) => { if (e.target === e.currentTarget) { e.preventDefault(); const el = inputs.current[parts.length - 1]; el?.focus(); } }}>
+    <div ref={wrap} className={`field name-ed ${active ? 'active' : ''}`} onFocus={() => setActive(true)}
+      onBlur={(e) => { if (!wrap.current?.contains(e.relatedTarget as Node)) { setActive(false); setMenu(null); } }}>
+      <div className="name-head"><label htmlFor={`${id}-0`}>{label}</label>{value.trim() && <button type="button" className="btn sm plain" onClick={() => { caret.current = null; setMenu(null); onChange(''); }}>{t('恢复默认')}</button>}</div>
+      <div className={`name-box ${draft ? '' : 'empty'}`} data-ph={t('留空则用默认：{d}', { d: human })} onMouseDown={(e) => { if (e.target === e.currentTarget) { e.preventDefault(); const el = inputs.current[parts.length - 1]; el?.focus(); } }}>
         {parts.map((p, i) => 'k' in p ? (
           <button key={i} type="button" className={`name-tag ${menu === i ? 'on' : ''}`} aria-expanded={p.k === 'date' ? menu === i : undefined}
             onClick={() => (p.k === 'date' ? setMenu(menu === i ? null : i) : undefined)}
@@ -106,12 +106,12 @@ export function NameEditor({ id, label, value, fallback, sample, vars, onChange 
             onChange={(x) => setFmt(menu, x === 'dash' ? DASH : undefined)} options={[['ymd', '20261030'], ['dash', '2026-10-30']]} />
         </div>
       )}
-      <div className="name-ins">
+      {active && <div className="name-ins">
         <span className="cap">{t('插入')}</span>
         {(['date', 'name', 'ver', 'who'] as Key[]).map((k) => (
           <button key={k} type="button" className="btn sm" onMouseDown={(e) => e.preventDefault()} onClick={() => insert(k)}><I.IconPlusDoc />{t(LABEL[k])}</button>
         ))}
-      </div>
+      </div>}
       <div className="name-pre"><span className="cap">{t('预览')}</span><TypeTag type="docx" /><span className="pv" title={preview}>{preview}</span></div>
     </div>
   );

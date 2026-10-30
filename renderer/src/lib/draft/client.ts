@@ -100,6 +100,8 @@ export class DraftSync {
     this.meta = getDraftMeta(ctx.pk);
     if (this.meta) { this.set({ s: 'saved', path: this.meta.path, at: this.meta.at }); this.check(); }
   }
+  /** 署名等写入参数变了：已有审阅稿时重写一次 */
+  touch() { if (this.meta && (this.state.s === 'saved' || this.state.s === 'locked')) this.schedule(250); }
   vars(): NameVars { return { ver: this.ctx.ver, who: this.ctx.reviewer }; }
   subscribe(f: (s: DraftState) => void) { this.subs.add(f); f(this.state); return () => { this.subs.delete(f); }; }
   private set(p: Partial<DraftState>) { this.state = { ...this.state, ...p }; for (const f of this.subs) f(this.state); }

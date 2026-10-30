@@ -255,7 +255,7 @@ export default function App() {
   const [doneOpen, setDoneOpen] = useState(false);
   // 批量操作先确认，做完可撤销（1.7.3）
   const [bulkAsk, setBulkAsk] = useState<null | 'a' | 'r' | 'reset'>(null);
-  const [undoToast, setUndoToast] = useState<null | { msg: string; undo: () => void }>(null);
+  const [undoToast, setUndoToast] = useState<null | { msg: string; obj?: string; undo: () => void }>(null);
   const undoTimer = useRef<any>(0);
   const [dismissDegraded, setDismissDegraded] = useState(false);
   const [dismissCross, setDismissCross] = useState('');
@@ -414,7 +414,7 @@ export default function App() {
   const deleteThread = (th: Thread) => softDelete(
     (l) => ({ ...l, threads: l.threads.map((y) => (y.id === th.id ? { ...y, deleted: Date.now() } : y)) }),
     (l) => ({ ...l, threads: l.threads.map((y) => (y.id === th.id ? { ...y, deleted: undefined } : y)) }),
-    t('已删除往来稿「{n}」', { n: th.name }));
+    t('已删除往来稿'), th.name);
   const commitLib = async (next: Library, purge = false) => {
     setLib(next);
     const r = await saveLibrary(next, purge);
@@ -452,10 +452,10 @@ export default function App() {
   };
   const renameTpl = (tpl: Template, name: string) => commitLib({ ...libRef.current, templates: libRef.current.templates.map((y) => (y.id === tpl.id ? { ...y, name, updated: Date.now() } : y)) });
   /** 删除：先做标记，10 秒内可撤销，之后真正清掉（连同库里不再用到的文件） */
-  const softDelete = (apply: (l: Library) => Library, restore: (l: Library) => Library, msg: string) => {
+  const softDelete = (apply: (l: Library) => Library, restore: (l: Library) => Library, msg: string, obj?: string) => {
     commitLib(apply(libRef.current));
     clearTimeout(undoTimer.current);
-    setUndoToast({ msg, undo: () => { clearTimeout(undoTimer.current); setUndoToast(null); commitLib(restore(libRef.current)); flash(t('已撤销删除')); } });
+    setUndoToast({ msg, obj, undo: () => { clearTimeout(undoTimer.current); setUndoToast(null); commitLib(restore(libRef.current)); flash(t('已撤销删除')); } });
     undoTimer.current = setTimeout(() => {
       setUndoToast(null);
       const l = libRef.current;
@@ -465,7 +465,7 @@ export default function App() {
   const deleteTpl = (tpl: Template) => softDelete(
     (l) => ({ ...l, templates: l.templates.map((y) => (y.id === tpl.id ? { ...y, deleted: Date.now() } : y)) }),
     (l) => ({ ...l, templates: l.templates.map((y) => (y.id === tpl.id ? { ...y, deleted: undefined } : y)) }),
-    t('已删除模板「{n}」。用过它的往来稿不受影响。', { n: tpl.name }));
+    t('已删除模板'), tpl.name);
   const deleteTplVersion = (tpl: Template, v: TplVersion) => {
     const idx = tpl.versions.findIndex((x) => x.id === v.id);
     softDelete(
@@ -667,7 +667,7 @@ export default function App() {
     return () => { off(); sync.dispose(); };
   }, [richRes, pk]);
   const draftVer = activeTh && thread ? activeTh.versions.find((v) => v.id === thread.b) : null;
-  useEffect(() => { if (draftSync) { draftSync.ctx.ver = draftVer ? `V${draftVer.n}` : undefined; draftSync.ctx.reviewer = reviewer; draftSync.ctx.pattern = prefs.draftName.trim() || t('{name}-我方意见'); draftSync.ctx.theirs = prefs.authorName.trim() || B?.meta['最后修改者'] || B?.meta['作者'] || t('修改方'); } }, [draftSync, reviewer, prefs.draftName, prefs.authorName, draftVer]);
+  useEffect(() => { if (draftSync) { draftSync.ctx.ver = draftVer ? `V${draftVer.n}` : undefined; const renamed = draftSync.ctx.reviewer !== reviewer || draftSync.ctx.initials !== (prefs.reviewerInitials.trim() || initialsOf(reviewer)); draftSync.ctx.initials = prefs.reviewerInitials.trim() || initialsOf(reviewer); if (renamed) { draftSync.ctx.reviewer = reviewer; draftSync.touch(); } draftSync.ctx.reviewer = reviewer; draftSync.ctx.pattern = prefs.draftName.trim() || t('{name}-我方意见'); draftSync.ctx.theirs = prefs.authorName.trim() || B?.meta['最后修改者'] || B?.meta['作者'] || t('修改方'); } }, [draftSync, reviewer, prefs.reviewerInitials, prefs.draftName, prefs.authorName, draftVer]);
   // 往来稿：这一轮的结论摘要存进往来稿（只存有结论或备注的处），供下一轮的“上轮”提示和条款历史使用
   const roundTimer = useRef<any>(0);
   useEffect(() => {
@@ -1004,7 +1004,8 @@ export default function App() {
       {toast && !undoToast && <div className="toast" role="status" aria-live="polite">{toast}</div>}
       {undoToast && (
         <div className="toast undo" role="status" aria-live="polite">
-          <span>{undoToast.msg}</span>
+          <span className="tm">{undoToast.msg}</span>
+          {undoToast.obj && <span className="to" title={undoToast.obj}>「<MidName name={undoToast.obj} title={false} />」</span>}
           <button type="button" className="toast-btn" onClick={undoToast.undo}>{t('撤销')} <Kbd>U</Kbd></button>
           <button type="button" className="toast-x" aria-label={t('关闭')} onClick={() => { clearTimeout(undoTimer.current); setUndoToast(null); }}><I.IconX /></button>
         </div>
@@ -1377,6 +1378,7 @@ export default function App() {
           <VersionChip th={activeTh} a={thread.a} b={thread.b} tpl={activeTh.tpl ? lib.templates.find((x) => x.id === activeTh.tpl!.tid) : null}
             progress={(v) => { const r = activeTh.rounds.find((x) => x.b === v.id); return r ? (r.decided >= r.total ? t('已审完') : t('已审 {d} / {n}', { d: r.decided, n: r.total })) : t('未审'); }}
             onPick={(a, b) => openThread(activeTh, a, b)} onAdd={() => setAddVer({ id: activeTh.id, f: null })}
+            onDropFiles={(fs) => { if (fs[0]?.path) setAddVer({ id: activeTh.id, f: fs[0] }); else if (fs[0]) flash(t('这个文件没有路径，请用“选择”打开')); }}
             onRename={(name) => updThread(activeTh.id, (x) => ({ ...x, name, updated: Date.now() }))} />
         ) : (<>
         <FilePill side={0} doc={A} onOpen={() => open(0)} onFiles={(f) => onFiles(0, f)} changed={changedSides.includes(0)} />

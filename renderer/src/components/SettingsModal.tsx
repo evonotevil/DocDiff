@@ -130,28 +130,30 @@ function ReviewStorage() {
     refreshReviewIndex();
     if (r?.ok) { setU(r.usage); setMsg(t('已删除 {n} 组审阅记录', { n: r.n })); } else setMsg(t('没能删除：{e}', { e: r?.error || '' }));
   };
+  const md = (ms: number) => { const d = new Date(ms); return t('{m}月{d}日', { m: d.getMonth() + 1, d: d.getDate() }); };
   return (
-    <div className="field review-storage">
-      <label>{t('审阅记录')}</label>
-      <div className="rs-usage">
-        {u ? (u.count ? t('本机保存了 {n} 组比较的审阅结论，共 {s}；最早一组在 {d}。', { n: u.count, s: fmtBytes(u.bytes), d: fmtDate(u.oldest) }) : t('本机还没有保存审阅结论。')) : t('正在读取…')}
+    <section className="set-sec review-storage" aria-labelledby="rv-s3">
+      <h4 className="set-sh" id="rv-s3">{t('审阅记录')}</h4>
+      <div className="rs-list">
+        <div className="rs-row"><span className="l">{t('审阅结论')}</span><span className="m">{u ? (u.count ? t('{n} 组 · {s} · 最早 {d}', { n: u.count, s: fmtBytes(u.bytes), d: md(u.oldest) }) : t('还没有')) : t('正在读取…')}</span></div>
+        {lib && lib.files > 0 && <div className="rs-row"><span className="l">{t('模板和往来稿的文件拷贝')}</span><span className="m">{t('{n} 个 · {s}', { n: lib.files, s: fmtBytes(lib.bytes) })}</span></div>}
       </div>
-      <small>{t('结论按两份文件的内容保存在本机应用数据目录，不会自动删除。')}</small>
-      {lib && lib.files > 0 && <small>{t('模板和往来稿存了 {n} 个文件的拷贝，共 {s}。在首页删除模板或往来稿时一起清掉。', { n: lib.files, s: fmtBytes(lib.bytes) })}</small>}
+      <small className="set-cap">{t('都存在这台电脑的应用数据目录里，不会自动删除。删除模板或往来稿时，它的拷贝会一起清掉。')}</small>
       {u && u.count > 0 && (ask ? (
         <div className="rs-ask" role="alert">
           <span>{ask === 'all' ? t('删除全部 {n} 组审阅记录？删除后不能恢复。', { n: u.count }) : t('删除 90 天前的 {n} 组审阅记录？删除后不能恢复。', { n: oldN })}</span>
-          <button className="btn sm plain" onClick={() => setAsk(null)}>{t('取消')}</button>
-          <button className="btn sm red" onClick={() => run(ask)}>{t('删除')}</button>
+          <span className="grow" />
+          <button className="btn" onClick={() => setAsk(null)}>{t('取消')}</button>
+          <button className="btn red" onClick={() => run(ask)}>{t('删除')}</button>
         </div>
       ) : (
         <div className="rs-acts">
-          <button className="btn sm" disabled={!oldN} onClick={() => { setMsg(''); setAsk('old'); }}>{t('清理 90 天前的记录（{n} 组）', { n: oldN })}</button>
-          <button className="btn sm danger-outline" onClick={() => { setMsg(''); setAsk('all'); }}>{t('全部清空…')}</button>
+          <button className="btn" disabled={!oldN} onClick={() => { setMsg(''); setAsk('old'); }}>{t('清理 90 天前的记录（{n} 组）', { n: oldN })}</button>
+          <button className="btn danger-outline" onClick={() => { setMsg(''); setAsk('all'); }}>{t('全部清空…')}</button>
         </div>
       ))}
-      {msg && <small role="status">{msg}</small>}
-    </div>
+      {msg && <small role="status" className="set-cap">{msg}</small>}
+    </section>
   );
 }
 
@@ -186,23 +188,29 @@ export function SettingsModal({ v, set, onClose, upd, initialTab = 'general', sa
             </>
           )}
           {tab === 'review' && (
-            <>
-              <p className="set-intro">{t('你在修订审阅里做的每个决定都署这个名字：写进审阅稿的修订和批注、导出的报告都用它。')}</p>
-              <div className="field-row">
-                <div className="field grow"><label htmlFor="rv-name">{t('审阅人姓名')}</label><input id="rv-name" value={v.reviewerName} onChange={(e) => { set('reviewerName', e.target.value); if (!v.reviewerInitials || v.reviewerInitials === initialsOf(v.reviewerName)) set('reviewerInitials', initialsOf(e.target.value)); }} /></div>
-                <div className="field narrow"><label htmlFor="rv-ini">{t('缩写')}</label><input id="rv-ini" value={v.reviewerInitials} maxLength={4} onChange={(e) => set('reviewerInitials', e.target.value)} /></div>
-              </div>
-              <div className="field">
-                <label htmlFor="rv-author">{t('修订作者的默认名称')}</label>
-                <input id="rv-author" value={v.authorName} placeholder={t('从对方文件读取，读不到时用“修改方”')} onChange={(e) => set('authorName', e.target.value)} />
-                <small>{t('Word 里的修订记的是“谁改了文字”，也就是对方。导出时还可以针对每份文件单独修改。')}</small>
-              </div>
-              <Opt label={t('接受的修订也加批注')} hint={t('关掉后，只有拒绝和待议带批注')}><Switch on={v.commentAccepted} onChange={(x) => set('commentAccepted', x)} label={t('接受的修订也加批注')} /></Opt>
-              <NameEditor id="rv-draft" label={t('审阅稿文件名')} value={v.draftName} fallback={t('{name}-我方意见')} sample={sample || t('对方的文件.docx')} vars={{ ver: 'V4', who: v.reviewerName }} onChange={(x) => set('draftName', x)} />
-              <NameEditor id="rv-final" label={t('定稿文件名')} value={v.finalName} fallback={t('{name}-定稿')} sample={sample || t('对方的文件.docx')} vars={{ ver: 'V4', who: v.reviewerName }} onChange={(x) => set('finalName', x)} />
-              <small className="set-hint">{t('对方文件名会自动去掉“-我方意见”“-定稿”这类 DocDiff 加过的后缀；版本号只在往来稿里有值，没有时连同前后的“-”一起省掉。审阅稿会发回给对方，名字里别带只给自己看的字。')}</small>
+            <div className="set-review">
+              <section className="set-sec" aria-labelledby="rv-s1">
+                <h4 className="set-sh" id="rv-s1">{t('审阅人')}</h4>
+                <div className="field-row">
+                  <div className="field grow"><label htmlFor="rv-name">{t('姓名')}</label><input id="rv-name" value={v.reviewerName} onChange={(e) => { set('reviewerName', e.target.value); if (!v.reviewerInitials || v.reviewerInitials === initialsOf(v.reviewerName)) set('reviewerInitials', initialsOf(e.target.value)); }} /></div>
+                  <div className="field narrow"><label htmlFor="rv-ini">{t('缩写')}</label><input id="rv-ini" value={v.reviewerInitials} maxLength={4} onChange={(e) => set('reviewerInitials', e.target.value)} /></div>
+                </div>
+                <small className="set-cap">{t('审阅稿里的修订和批注、导出的报告都署这个名字。改名后，已经做过的决定也会改用新名字。')}</small>
+                <div className="field">
+                  <label htmlFor="rv-author">{t('修订作者的默认名称')}</label>
+                  <input id="rv-author" value={v.authorName} placeholder={t('从对方文件读取，读不到时用“修改方”')} onChange={(e) => set('authorName', e.target.value)} />
+                  <small>{t('Word 里的修订记的是“谁改了文字”，也就是对方。导出时还可以按文件单独改。')}</small>
+                </div>
+                <Opt label={t('接受的修订也加批注')} hint={t('关掉后，只有拒绝和待议带批注')}><Switch on={v.commentAccepted} onChange={(x) => set('commentAccepted', x)} label={t('接受的修订也加批注')} /></Opt>
+              </section>
+              <section className="set-sec" aria-labelledby="rv-s2">
+                <h4 className="set-sh" id="rv-s2">{t('文件名')}</h4>
+                <NameEditor id="rv-draft" label={t('审阅稿文件名')} value={v.draftName} fallback={t('{name}-我方意见')} sample={sample || t('对方的文件.docx')} vars={{ ver: 'V4', who: v.reviewerName }} onChange={(x) => set('draftName', x)} />
+                <NameEditor id="rv-final" label={t('定稿文件名')} value={v.finalName} fallback={t('{name}-定稿')} sample={sample || t('对方的文件.docx')} vars={{ ver: 'V4', who: v.reviewerName }} onChange={(x) => set('finalName', x)} />
+                <small className="set-cap">{t('“对方文件名”会去掉 DocDiff 加过的后缀（-我方意见、-定稿）。“版本号”只在往来稿里有值。审阅稿要发回给对方，名字里别写只给自己看的内容。')}</small>
+              </section>
               <ReviewStorage />
-            </>
+            </div>
           )}
           {tab === 'risk' && (
             <>

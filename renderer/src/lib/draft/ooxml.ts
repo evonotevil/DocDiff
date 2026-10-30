@@ -683,9 +683,10 @@ export async function writeReview(inp: WriteInput & { prepared?: Prepared }): Pr
       }
       const cm = commentsXml.createElementNS(W, 'w:comment');
       cm.setAttributeNS(W, 'w:id', id);
-      cm.setAttributeNS(W, 'w:author', d?.by || inp.reviewer);
+      // 批注和修订一样署现在的审阅人（改名后重新生成，旧决定也用新名字）
+      cm.setAttributeNS(W, 'w:author', inp.reviewer);
       cm.setAttributeNS(W, 'w:date', iso(d?.at || inp.now));
-      cm.setAttributeNS(W, 'w:initials', inp.reviewerInitials || (d?.by || inp.reviewer).slice(0, 2));
+      cm.setAttributeNS(W, 'w:initials', inp.reviewerInitials || inp.reviewer.slice(0, 2));
       for (const line of wantComment(cid).split('\n')) {
         const p = commentsXml.createElementNS(W, 'w:p');
         const r = commentsXml.createElementNS(W, 'w:r');
