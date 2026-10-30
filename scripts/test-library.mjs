@@ -53,3 +53,12 @@ test('hints: reverted beats related; repeat offers reuse; related has no reuse',
   assert.equal(L.clauseHistory(th, '第八条', 'd').length, 1);
   assert.equal(L.clauseHistory(th, '第八条', 'b').length, 0);
 });
+test('home recognition: two near-identical negotiations → ambiguous, offers both (beta.5)', () => {
+  const base = ['甲方应在收到发票后三十日内付款', '乙方保证所供货物符合国家标准', '违约金为合同总额的百分之二十', '本合同自双方签字盖章之日起生效', '争议提交甲方所在地人民法院'];
+  const th = (id, extra) => ({ id, name: id, versions: [{ id: id + 'v1', n: 1, fp: L.fingerprint(doc(...base, extra)) }], rounds: [] });
+  const fp = L.fingerprint(doc(...base, '附件一 报价单'));
+  const m = L.matchThreads(fp, [th('A', '附件二 交货计划'), th('B', '附件三 售后条款')]);
+  assert.ok(m && m.alt, 'ambiguous');
+  const m2 = L.matchThreads(L.fingerprint(doc(...base, '附件二 交货计划')), [th('A', '附件二 交货计划'), th('B', '附件三 售后条款')]);
+  assert.equal(m2.th.id, 'A'); assert.equal(m2.alt, undefined);
+});

@@ -40,7 +40,7 @@ import { DraftChip } from './components/DraftChip';
 import { TemplatesCard, TemplateCompareDialog, MatchNotice, RecentRow } from './components/Library';
 import { ThreadsCard, VersionChip, AddVersionDialog, HintLine, ClauseHistory } from './components/Thread';
 import { hintsFor, clauseHistory } from './lib/hints';
-import { type Library, type Template, type TplVersion, type Thread, type ThreadVersion, type Side as LibSide, type Round, EMPTY_LIB, loadLibrary, loadRounds, saveLibrary, putFile, readVersion, fingerprint, pick, versionLabel, stemOf, live, uid, UNDO_MS } from './lib/library';
+import { type Library, type Template, type TplVersion, type Thread, type ThreadVersion, type Side as LibSide, type Round, EMPTY_LIB, loadLibrary, loadRounds, saveLibrary, putFile, readVersion, fingerprint, pick, versionLabel, stemOf, live, uid, UNDO_MS, defaultPair, roundOf, matchThreads } from './lib/library';
 
 const api = (window as any).api;
 type Side = 0 | 1;
@@ -257,6 +257,8 @@ export default function App() {
   const [bulkAsk, setBulkAsk] = useState<null | 'a' | 'r' | 'reset'>(null);
   const [undoToast, setUndoToast] = useState<null | { msg: string; obj?: string; undo: () => void }>(null);
   const undoTimer = useRef<any>(0);
+  /** 删除模板 / 往来稿后真正清掉的计时器，和撤销提示的计时器分开：中途做别的批量操作不会把清理取消掉 */
+  const purgeTimer = useRef<any>(0);
   const [dismissDegraded, setDismissDegraded] = useState(false);
   const [dismissCross, setDismissCross] = useState('');
   const persist = usePersistStatus();
@@ -365,7 +367,8 @@ export default function App() {
   };
   const openThread = async (th: Thread, a?: ThreadVersion, b?: ThreadVersion) => {
     const vs = th.versions;
-    const vb = b || vs[vs.length - 1], va = a || vs[vs.indexOf(vb) - 1];
+    const dp = !a && !b ? defaultPair(th) : null;
+    const vb = b || dp?.b || vs[vs.length - 1], va = a || dp?.a || vs[vs.indexOf(vb) - 1];
     if (!va || !vb) { flash(t('这份往来稿只有一版，加入新版本后才能比较')); return; }
     setThread(null);
     if (!(await loadPair(va, vb))) return;
@@ -373,6 +376,12 @@ export default function App() {
     setCompared(true); setTab(2);
   };
   const updThread = (id: string, f: (th: Thread) => Thread) => commitLib({ ...libRef.current, threads: libRef.current.threads.map((x) => (x.id === id ? f(x) : x)) });
+  // 记住这份往来稿上次比较的是哪一对（可能不相邻），首页再点它时回到这一对
+  useEffect(() => {
+    if (!thread) return;
+    const th = libRef.current.threads.find((x) => x.id === thread.id);
+    if (th && (th.last?.a !== thread.a || th.last?.b !== thread.b)) updThread(th.id, (x) => ({ ...x, last: { a: thread.a, b: thread.b } }));
+  }, [thread?.id, thread?.a, thread?.b]);
   /** 把当前的一对文件存成往来稿：原始 = V1（我方），修改后 = V2（对方） */
   const saveAsThread = async (tplRef?: { tid: string; v: TplVersion }) => {
     if (!A || !B) return;
@@ -455,9 +464,10 @@ export default function App() {
   const softDelete = (apply: (l: Library) => Library, restore: (l: Library) => Library, msg: string, obj?: string) => {
     commitLib(apply(libRef.current));
     clearTimeout(undoTimer.current);
+    clearTimeout(purgeTimer.current);
     setUndoToast({ msg, obj, undo: () => { clearTimeout(undoTimer.current); setUndoToast(null); commitLib(restore(libRef.current)); flash(t('已撤销删除')); } });
-    undoTimer.current = setTimeout(() => {
-      setUndoToast(null);
+    undoTimer.current = setTimeout(() => setUndoToast(null), UNDO_MS);
+    purgeTimer.current = setTimeout(() => {
       const l = libRef.current;
       commitLib({ ...l, templates: l.templates.filter((y) => !y.deleted), threads: l.threads.filter((y) => !y.deleted) }, true);
     }, UNDO_MS);
@@ -477,11 +487,10 @@ export default function App() {
   const homeMatch = useMemo(() => {
     if (compared || A || !B || B.sha256 === matchOff) return null;
     const fp = fingerprint(B);
-    const ths = live(lib.threads).filter((x) => !x.archived).flatMap((th) => th.versions.map((v) => ({ ...v, th })));
-    const tb = ths.length ? pick(fp, ths).best : null;
+    const tm = matchThreads(fp, live(lib.threads).filter((x) => !x.archived));
     const vs = live(lib.templates).flatMap((tp) => tp.versions.map((v) => ({ ...v, tpl: tp })));
     const pb = vs.length ? pick(fp, vs).best : null;
-    if (tb && (!pb || tb.score >= pb.score)) return { th: tb.item.th, tv: tb.item as ThreadVersion, score: tb.score } as any;
+    if (tm && (!pb || tm.score >= pb.score)) return tm as any;
     return pb ? { tpl: pb.item.tpl, v: pb.item as TplVersion, score: pb.score } : null;
   }, [compared, A, B, lib, matchOff]);
   const startFromTemplate = async (v: TplVersion) => {
@@ -652,6 +661,9 @@ export default function App() {
   // ---------- 审阅稿（1.8）：修改后文档是 Word 时，决定自动写进它旁边的一份拷贝 ----------
   const [draftSync, setDraftSync] = useState<DraftSync | null>(null);
   const [draftState, setDraftState] = useState<DraftState>({ s: 'none', unwritten: [], prior: 0 });
+  const draftReady = (draftState.s === 'saved' || draftState.s === 'locked') && !!draftState.path;
+  const [finalReq, setFinalReq] = useState(0);
+  const baseOfPath = (p: string) => p.slice(Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\')) + 1);
   useEffect(() => {
     if (!richRes || !RA || !RB || !B || B.type !== 'docx' || !B.file.path || !pk) { setDraftSync(null); setDraftState({ s: 'none', unwritten: [], prior: 0 }); return; }
     const plan = buildPlan(richRes, RA.blocks, RB.blocks);
@@ -954,7 +966,14 @@ export default function App() {
     const onKey = (e: KeyboardEvent) => {
       const a = actions.current;
       const t = e.target as HTMLElement;
-      if (a.modal || /INPUT|TEXTAREA|SELECT/.test(t.tagName) || t.isContentEditable || modPressed(e) || e.altKey) return;
+      if (e.defaultPrevented || a.modal || /INPUT|TEXTAREA|SELECT/.test(t.tagName) || t.isContentEditable || modPressed(e) || e.altKey) return;
+      // 任何弹窗开着、或焦点在弹出层里时，A/R/H/J/K/U 等都不作用到后台（beta.5：统一按界面判断，新加的弹窗不会漏掉）。
+      // 审阅稿首次提示只是说明，不拦快捷键。
+      if (document.querySelector('.modal-bg')) return;
+      const inPop = t.closest?.('.pop');
+      if (inPop && !inPop.classList.contains('draft-tip')) return;
+      // 撤销提示在的时候，U 在哪个页面都能撤销（首页删除往来稿 / 模板后也一样）
+      if (e.key.toLowerCase() === 'u' && a.undoBulk && (!a.compared || a.tab !== 2)) { e.preventDefault(); a.undoBulk(); return; }
       if (!a.compared) { if (e.key === 'Enter' && t.tagName !== 'BUTTON') a.startCompare(); return; }
       const k = e.key.toLowerCase();
       if (k === 'j') { a.go(1); e.preventDefault(); }
@@ -999,7 +1018,8 @@ export default function App() {
           reviewer={prefs.reviewerName} setReviewer={(v) => { setPrefs((p) => ({ ...p, reviewerName: v, reviewerInitials: initialsOf(v), reviewerAsked: true })); }}
           commentAccepted={prefs.commentAccepted} setCommentAccepted={set('commentAccepted')}
           hasSections={richRes.rows.some((r) => r.sec && r.sec !== 'body')}
-          onExport={doExport} onHoldPending={() => decideAll('h', true)} onClose={() => setExportOpen(false)} busy={exportBusy} />
+          onExport={doExport} onHoldPending={() => decideAll('h', true)} onClose={() => setExportOpen(false)} busy={exportBusy}
+          draft={draftReady ? { name: baseOfPath(draftState.path!), open: () => api.openExternalFile?.(draftState.path) } : null} />
       )}
       {toast && !undoToast && <div className="toast" role="status" aria-live="polite">{toast}</div>}
       {undoToast && (
@@ -1035,35 +1055,38 @@ export default function App() {
   );
 
   // =================== 首页 ===================
-  // 工具栏放不下时依次收起（beta.3）：0 全部带文字 → 1 复制摘要只留图标 → 2 导出也只留图标、文件片去掉“原始/修改后” → 3 审阅稿只留圆点。
-  // 每次渲染后量一下有没有溢出，溢出就再收一级；窗口变宽或内容换了再从 0 开始量（都在绘制前完成，不会闪）
+  // 工具栏放不下时依次收起：0 全部带文字 → 1 复制摘要只留图标 → 2 导出也只留图标、文件片去掉“原始/修改后” → 3 审阅稿只留圆点 → 4 文件片也变窄。
+  // 直接改 header 的 data-level 再量，不走 React 状态（beta.4：避免为了收按钮把整个界面重新渲染好几遍）。
+  // 只在工具栏内容变了、或窗口宽度变了时量。
   const tbRef = useRef<HTMLElement | null>(null);
-  const [tbLevel, setTbLevel] = useState(0);
-  const tbW = useRef(0);
-  const tbContent = `${A?.file.name || ''}|${B?.file.name || ''}|${activeTh?.name || ''}|${thread?.a || ''}|${thread?.b || ''}|${draftState.s}|${(draftState.unwritten || []).length}`;
-  // 只在工具栏内容或档位变了时量（量一次要强制排版，别每次渲染都量；窗口大小变化交给 ResizeObserver）
-  const tbSig = `${tab}|${activeTh?.id || ''}|${draftState.s === 'none'}|${!!curRes}|${tbContent}`;
-  const tbSigPrev = useRef('');
-  useLayoutEffect(() => {
-    // 内容换了：先回到 0 档再重新量
-    if (tbSigPrev.current !== tbSig) { tbSigPrev.current = tbSig; if (tbLevel !== 0) { setTbLevel(0); return; } }
+  const fitToolbar = useCallback(() => {
     const el = tbRef.current;
-    if (el && tbLevel < 4 && el.scrollWidth > el.clientWidth + 1) setTbLevel(tbLevel + 1);
-  }, [tbLevel, tbSig]);
+    if (!el) return;
+    for (let l = 0; l <= 4; l++) {
+      el.dataset.level = String(l);
+      if (el.scrollWidth <= el.clientWidth + 1) break;
+    }
+  }, []);
+  const tbSig = `${tab}|${activeTh?.id || ''}|${draftState.s}|${(draftState.unwritten || []).length}|${!!curRes}|${A?.file.name || ''}|${B?.file.name || ''}|${activeTh?.name || ''}|${thread?.a || ''}|${thread?.b || ''}|${String(changes.length).length}`;
+  // 内容变了：等这一帧画完、排版干净时再量（在提交阶段量会强制把整份文档提前排版一遍，打开大文档时多花约 0.1 秒）
+  useEffect(() => { const id = requestAnimationFrame(fitToolbar); return () => cancelAnimationFrame(id); }, [tbSig, fitToolbar]);
   useEffect(() => {
     const el = tbRef.current;
     if (!el || typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver(() => {
-      const w = el.clientWidth;
-      if (w > tbW.current + 4) setTbLevel(0);
-      else if (el.scrollWidth > w + 1) setTbLevel((l) => Math.min(4, l + 1));
-      tbW.current = w;
-    });
+    let w0 = el.clientWidth;
+    const ro = new ResizeObserver(() => { const w = el.clientWidth; if (w !== w0) { w0 = w; fitToolbar(); } });
     ro.observe(el);
     return () => ro.disconnect();
-  }, [!!(compared && A && B)]);
+  }, [!!(compared && A && B), fitToolbar]);
   if (!compared || !A || !B) {
     const openRecent = async (r: any) => {
+      // 这一对已经在某份往来稿里：按往来稿打开（有版本片、上轮提示），不当成普通比较
+      if (r.a.sha && r.b.sha) {
+        for (const th of live(libRef.current.threads)) {
+          const i = th.versions.findIndex((v, k) => k > 0 && v.file.sha === r.b.sha && th.versions[k - 1].file.sha === r.a.sha);
+          if (i > 0) { await openThread(th, th.versions[i - 1], th.versions[i]); return; }
+        }
+      }
       const ok = await Promise.all([api.exists(r.a.path), api.exists(r.b.path)]);
       if (!ok[0] || !ok[1]) { flash(t('找不到「{f}」，它可能被移动或删除了', { f: !ok[0] ? r.a.name : r.b.name })); return; }
       await Promise.all([loadFile(0, await api.readPath(r.a.path)), loadFile(1, await api.readPath(r.b.path))]);
@@ -1097,7 +1120,14 @@ export default function App() {
               <div className="vs"><button className="vs-chip" title={t('交换左右')} aria-label={t('交换左右')} onClick={swap}><I.IconSwap /></button></div>
               <DropZone side={1} doc={B} loading={busy[1]} error={errs[1]} onOpen={() => open(1)} onFiles={(f) => onFiles(1, f)} onClear={() => setDocs((d) => [d[0], null])} onPaste={() => setPasteSide(1)} />
             </div>
-            {homeMatch?.th && B && (
+            {homeMatch?.th && homeMatch.alt && B && (
+              <Notice tone="warn" className="lib-match" title={t('这份文件和两份往来稿都很像')}
+                action={<>{[homeMatch, homeMatch.alt].map((m: any) => <button key={m.th.id} type="button" className="btn sm" onClick={() => addThreadVersion(m.th, B.file, 'theirs', m.th.versions[m.th.versions.length - 1].id, B)}>{t('加到「{n}」', { n: m.th.name.length > 14 ? m.th.name.slice(0, 13) + '…' : m.th.name })}</button>)}</>}
+                onClose={() => setMatchOff(B?.sha256 || '')} closeLabel={t('不用')}>
+                {t('相同段落分别是 {a} 和 {b}，差得太少，不替你选。请确认是哪一份的新版本。', { a: `${Math.round(homeMatch.score * 100)}%`, b: `${Math.round(homeMatch.alt.score * 100)}%` })}
+              </Notice>
+            )}
+            {homeMatch?.th && !homeMatch.alt && B && (
               <MatchNotice title={t('这份文件很像往来稿「{n}」的新一版', { n: homeMatch.th.name })}
                 body={t('和 V{k} 相同段落 {p}。加为 V{m} 后默认和上一版 V{l} 比较，上一轮的结论会作为参考显示。', { k: homeMatch.tv.n, p: `${Math.round(homeMatch.score * 100)}%`, m: homeMatch.th.versions[homeMatch.th.versions.length - 1].n + 1, l: homeMatch.th.versions[homeMatch.th.versions.length - 1].n })}
                 action={t('加为 V{n}', { n: homeMatch.th.versions[homeMatch.th.versions.length - 1].n + 1 })}
@@ -1372,11 +1402,11 @@ export default function App() {
         </div>
       </nav>
 
-      <header ref={tbRef} className={`tbar drag tb-l${tbLevel}${draftState.s !== 'none' && isRichTab ? ' has-draft' : ''}`}>
+      <header ref={tbRef} data-level="0" className={`tbar drag${draftState.s !== 'none' && isRichTab ? ' has-draft' : ''}`}>
         {!navOpen && <button type="button" className="ibtn tb-nav" onClick={toggleNav} title={toggleTitle(false, '侧栏', navKey)} aria-label={t('展开侧栏')} aria-expanded={false}><I.IconPanelLeft /></button>}
         {activeTh && thread ? (
           <VersionChip th={activeTh} a={thread.a} b={thread.b} tpl={activeTh.tpl ? lib.templates.find((x) => x.id === activeTh.tpl!.tid) : null}
-            progress={(v) => { const r = activeTh.rounds.find((x) => x.b === v.id); return r ? (r.decided >= r.total ? t('已审完') : t('已审 {d} / {n}', { d: r.decided, n: r.total })) : t('未审'); }}
+            progress={(v) => { const i = activeTh.versions.indexOf(v); const r = i > 0 ? roundOf(activeTh, activeTh.versions[i - 1].id, v.id) : null; return r ? (r.decided >= r.total ? t('已审完') : t('已审 {d} / {n}', { d: r.decided, n: r.total })) : t('未审'); }}
             onPick={(a, b) => openThread(activeTh, a, b)} onAdd={() => setAddVer({ id: activeTh.id, f: null })}
             onDropFiles={(fs) => { if (fs[0]?.path) setAddVer({ id: activeTh.id, f: fs[0] }); else if (fs[0]) flash(t('这个文件没有路径，请用“选择”打开')); }}
             onRename={(name) => updThread(activeTh.id, (x) => ({ ...x, name, updated: Date.now() }))} />
@@ -1403,7 +1433,7 @@ export default function App() {
         {tab !== 5 && <button ref={gearRef} type="button" className="ibtn" onClick={() => setPop(pop === 'settings' ? null : 'settings')} title={t('比较设置')} aria-label={t('比较设置')} aria-expanded={pop === 'settings'}><I.IconGear /></button>}
         {curRes && <button type="button" className="btn tb-copy" onClick={copySummary} title={t('复制为 Markdown，可粘贴到邮件 / 飞书 / 文档')} aria-label={t('复制摘要')}><I.IconCopy /><span className="lbl">{t('复制摘要')}</span></button>}
         {richRes && isRichTab && draftSync && draftState.s !== 'none' && B && (
-          <DraftChip state={draftState} sync={draftSync} bPath={B.file.path} narrow={tbLevel >= 3} decided={richRes.changes.filter((c) => decisions[c.id]?.v).length}
+          <DraftChip state={draftState} sync={draftSync} bPath={B.file.path} narrow={false} finalReq={finalReq} hideTip={tab === 2 && doneOpen} decided={richRes.changes.filter((c) => decisions[c.id]?.v).length}
             pending={richRes.changes.filter((c) => !decisions[c.id]?.v || decisions[c.id]?.v === 'h').length} finalPattern={prefs.finalName.trim() || t('{name}-定稿')}
             onJump={(cid) => { setTab(2); setFilter('all'); setSelCid(cid); }} flash={flash} />
         )}
@@ -1526,10 +1556,25 @@ export default function App() {
               <div className="done-stats">
                 {(['a', 'r', 'h'] as Verdict[]).map((v) => <div key={v} className={`done-stat ${v}`}><div className="h">{t(v === 'a' ? '接受' : v === 'r' ? '拒绝' : '待议')}</div><div className="v">{changes.filter((c) => decisions[c.id]?.v === v).length}</div></div>)}
               </div>
-              <div className="done-acts">
-                <button className="btn primary big block" onClick={() => { setDoneOpen(false); openExport(); }}><I.IconExport />{t('导出审阅结果…')}</button>
-                <button className="btn plain block" onClick={() => setDoneOpen(false)}>{t('回去再看看')}</button>
-              </div>
+              {draftReady ? (
+                <div className="done-acts">
+                  {/* 审阅稿已经自动写好：交接动作就是打开它（beta.5，和首次提示的说法一致） */}
+                  <p className="done-draft">{t('所有决定已写进「{f}」，要发给对方的就是这份。', { f: baseOfPath(draftState.path!) })}</p>
+                  {draftState.unwritten.length > 0 && <p className="done-draft warn">{t('其中 {n} 处没能写进去，审阅稿里仍是对方的写法。点工具栏的“审阅稿”查看。', { n: draftState.unwritten.length })}</p>}
+                  <button className="btn primary big block" onClick={() => { setDoneOpen(false); api.openExternalFile?.(draftState.path); }}>{t('打开审阅稿')}</button>
+                  <div className="done-row">
+                    <button className="btn block" onClick={() => { setDoneOpen(false); api.reveal?.(draftState.path); }}>{t('在文件夹中显示')}</button>
+                    <button className="btn block" onClick={() => { setDoneOpen(false); setFinalReq((n) => n + 1); }}>{t('生成定稿…')}</button>
+                  </div>
+                  <button className="btn plain block" onClick={() => { setDoneOpen(false); openExport(); }}>{t('导出报告或其他格式…')}</button>
+                  <button className="btn plain block" onClick={() => setDoneOpen(false)}>{t('回去再看看')}</button>
+                </div>
+              ) : (
+                <div className="done-acts">
+                  <button className="btn primary big block" onClick={() => { setDoneOpen(false); openExport(); }}><I.IconExport />{t('导出审阅结果…')}</button>
+                  <button className="btn plain block" onClick={() => setDoneOpen(false)}>{t('回去再看看')}</button>
+                </div>
+              )}
             </div>
           </div>
         )}

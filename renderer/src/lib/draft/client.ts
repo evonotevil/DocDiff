@@ -40,6 +40,8 @@ export interface DraftCtx {
 }
 
 let worker: Worker | null = null;
+/** 每组比较正在提交的写盘（beta.5）：同一份审阅稿的新任务要等旧任务写完、登记完再写，避免把自己的写入当成“被别人改过” */
+const inflight = new Map<string, Promise<void>>();
 let seq = 0;
 const waiting = new Map<number, (r: DraftRes) => void>();
 function call(req: Omit<DraftReq, 'id'>): Promise<DraftRes> {
@@ -86,6 +88,8 @@ async function freePath(dir: string, name: string): Promise<string> {
   return dir + s + `${base} (${Date.now()}).docx`;
 }
 
+type Built = Extract<DraftRes, { kind: 'ok' }>['out'];
+
 export class DraftSync {
   state: DraftState = { s: 'none', unwritten: [], prior: 0 };
   private meta: DraftMeta | null;
@@ -128,7 +132,7 @@ export class DraftSync {
   }
   private schedule(ms: number) { clearTimeout(this.timer); this.timer = setTimeout(() => this.run(), ms); }
 
-  private async build(mode: 'draft' | 'final', o: { pending?: 'a' | 'b'; keepComments?: boolean } = {}) {
+  private async build(mode: 'draft' | 'final', o: { pending?: 'a' | 'b'; keepComments?: boolean } = {}): Promise<Built> {
     const c = this.ctx;
     const r = await call({
       key: c.pk + ':' + c.bData.byteLength,
@@ -147,30 +151,49 @@ export class DraftSync {
     const t0 = performance.now();
     this.set({ s: 'saving' });
     try {
+      const pk = this.ctx.pk;
+      // 上一个实例（切换文档、改比较设置时会新建实例）可能还在写同一份审阅稿：等它写完，用它登记的状态
+      const prev = inflight.get(pk);
+      if (prev) await prev;
+      if (this.disposed) return;
+      // 只有真的等过别的实例写盘时才换成它登记的状态（“另存为新审阅稿”等自己设定的新路径不能被覆盖）
+      if (prev) { const latest = getDraftMeta(pk); if (latest && (!this.meta || (latest.at || 0) > (this.meta.at || 0))) this.meta = latest; }
       const out = await this.build('draft');
       const tBuilt = performance.now();
-      let path = this.meta?.path || (await freePath(this.meta?.dir || dirOf(this.ctx.bPath), draftName(this.ctx.pattern, this.ctx.bName, '', this.vars())));
-      let expect = this.meta?.stat || null;
-      for (let tries = 0; tries < 5; tries++) {
-        const res = await api.draftSave({ path, data: out.bytes, expect });
-        if (this.disposed) return;
-        if (res?.ok) {
-          this.meta = { ...(this.meta || {}), path, stat: res.stat, at: Date.now() };
-          setDraftMeta(this.ctx.pk, this.meta);
-          clearInterval(this.poll); this.poll = null;
-          this.set({ s: 'saved', path, at: this.meta.at, unwritten: out.unwritten, prior: out.priorRevisions, ms: Math.round(performance.now() - t0), parts: { worker: Math.round(tBuilt - t0), ...out.ms }, error: undefined });
+      // 提交前取消：已经不需要这份结果了，不写盘
+      if (this.disposed) return;
+      let release!: () => void;
+      const committing = new Promise<void>((r) => { release = r; });
+      inflight.set(pk, committing);
+      try {
+        let path = this.meta?.path || (await freePath(this.meta?.dir || dirOf(this.ctx.bPath), draftName(this.ctx.pattern, this.ctx.bName, '', this.vars())));
+        let expect = this.meta?.stat || null;
+        for (let tries = 0; tries < 5; tries++) {
+          const res = await api.draftSave({ path, data: out.bytes, expect });
+          if (res?.ok) {
+            // 已经提交的写入：不管这个实例是否已被替换，都要登记路径和写完后的状态（否则下次会误判为“被改过”）
+            this.meta = { ...(this.meta || {}), path, stat: res.stat, at: Date.now() };
+            setDraftMeta(pk, this.meta);
+            if (this.disposed) return;
+            clearInterval(this.poll); this.poll = null;
+            this.set({ s: 'saved', path, at: this.meta.at, unwritten: out.unwritten, prior: out.priorRevisions, ms: Math.round(performance.now() - t0), parts: { worker: Math.round(tBuilt - t0), ...out.ms }, error: undefined });
+            break;
+          }
+          if (this.disposed) return;
+          const code = res?.code || 'error';
+          if (code === 'exists' && !expect) { path = await freePath(dirOf(path), baseOf(path)); continue; }
+          if (code === 'locked') {
+            this.set({ s: 'locked', path, unwritten: out.unwritten });
+            if (!this.poll) this.poll = setInterval(() => this.check(), 3000);
+          } else if (code === 'modified') this.set({ s: 'modified', path });
+          else if (code === 'gone') this.set({ s: 'gone', path });
+          else if (code === 'nowrite') this.set({ s: 'nowrite', path });
+          else this.set({ s: 'error', path, error: res?.error || code });
           break;
         }
-        const code = res?.code || 'error';
-        if (code === 'exists' && !expect) { path = await freePath(dirOf(path), baseOf(path)); continue; }
-        if (code === 'locked') {
-          this.set({ s: 'locked', path, unwritten: out.unwritten });
-          if (!this.poll) this.poll = setInterval(() => this.check(), 3000);
-        } else if (code === 'modified') this.set({ s: 'modified', path });
-        else if (code === 'gone') this.set({ s: 'gone', path });
-        else if (code === 'nowrite') this.set({ s: 'nowrite', path });
-        else this.set({ s: 'error', path, error: res?.error || code });
-        break;
+      } finally {
+        release();
+        if (inflight.get(pk) === committing) inflight.delete(pk);
       }
     } catch (e: any) {
       this.set({ s: 'error', error: String(e?.message || e) });
@@ -194,11 +217,20 @@ export class DraftSync {
     await this.run();
   }
 
-  /** 生成定稿：另存一份干净的文件，返回路径 */
-  async makeFinal(o: { pending: 'a' | 'b'; keepComments: boolean; pattern: string }): Promise<string> {
-    const out = await this.build('final', o);
+  /**
+   * 生成定稿第一步：在后台生成内容，但先不保存（beta.5）。
+   * missed = 本该在定稿里“改回原文”却没能写进去的处（拒绝的、或选了“改回我方原文”的未决定处）。
+   * 这些处在定稿里仍是对方的写法，必须让用户知道，不能直接报“已生成”。
+   */
+  async buildFinal(o: { pending: 'a' | 'b' }): Promise<{ out: Built; missed: { cid: number; reason: Reason }[] }> {
+    const out = await this.build('final', { pending: o.pending, keepComments: false });
+    const missed = out.unwritten.filter((u) => { const v = this.decisions[u.cid]?.v; return v === 'r' || (v !== 'a' && o.pending === 'a'); });
+    return { out, missed };
+  }
+  /** 生成定稿第二步：保存，返回路径 */
+  async saveFinal(out: Built, pattern: string): Promise<string> {
     const dir = this.meta?.dir || dirOf(this.meta?.path || this.ctx.bPath);
-    let path = await freePath(dir, draftName(o.pattern, this.ctx.bName, '', this.vars()));
+    let path = await freePath(dir, draftName(pattern, this.ctx.bName, '', this.vars()));
     for (let i = 0; i < 5; i++) {
       const res = await api.draftSave({ path, data: out.bytes, expect: null });
       if (res?.ok) return path;
@@ -206,5 +238,10 @@ export class DraftSync {
       throw new Error(res?.code === 'nowrite' ? 'nowrite' : res?.error || res?.code || 'error');
     }
     throw new Error('exists');
+  }
+  /** 一步完成（测试用）：返回路径和没落实的处 */
+  async makeFinal(o: { pending: 'a' | 'b'; keepComments?: boolean; pattern: string }): Promise<{ path: string; missed: { cid: number; reason: Reason }[] }> {
+    const { out, missed } = await this.buildFinal(o);
+    return { path: await this.saveFinal(out, o.pattern), missed };
   }
 }

@@ -14,7 +14,9 @@ export interface ThreadVersion { id: string; n: number; side: Side; added: numbe
 export interface RoundItem { clause: string | null; before: string; after: string; v?: Verdict; note?: string }
 /** items 只在打开这份往来稿后才读进来（单独的文件），首页只用前面几个数字 */
 export interface Round { a: string; b: string; pk: string; total: number; decided: number; updated: number; items?: RoundItem[] }
-export interface Thread { id: string; name: string; created: number; updated: number; versions: ThreadVersion[]; rounds: Round[]; tpl?: { tid: string; vid: string }; archived?: number; deleted?: number }
+export interface Thread { id: string; name: string; created: number; updated: number; versions: ThreadVersion[]; rounds: Round[]; tpl?: { tid: string; vid: string }; archived?: number; deleted?: number;
+  /** 上次打开的比较（beta.5）：可能不是相邻两版，如 V1 → V3。首页点这份往来稿时回到它 */
+  last?: { a: string; b: string } }
 export interface Library { v: 1; templates: Template[]; threads: Thread[] }
 
 export const EMPTY_LIB: Library = { v: 1, templates: [], threads: [] };
@@ -115,3 +117,24 @@ export function versionLabel(mtime: number, taken: string[]): string {
 }
 export const stemOf = (name: string) => name.replace(/\.(docx|pdf|txt|md)$/i, '');
 export const live = <T extends { deleted?: number }>(xs: T[]) => xs.filter((x) => !x.deleted);
+
+/** 往来稿默认打开哪一对：上次用过的（两版都还在）；否则最新一版和它的上一版 */
+export function defaultPair(th: Thread): { a: ThreadVersion; b: ThreadVersion } | null {
+  const vs = th.versions;
+  const la = th.last && vs.find((v) => v.id === th.last!.a), lb = th.last && vs.find((v) => v.id === th.last!.b);
+  if (la && lb) return { a: la, b: lb };
+  const b = vs[vs.length - 1], a = vs[vs.length - 2];
+  return a && b ? { a, b } : null;
+}
+export const roundOf = (th: Thread, a: string, b: string) => th.rounds.find((r) => r.a === a && r.b === b) || null;
+
+/**
+ * 首页认往来稿（beta.5）：每份往来稿取最像的一版；最像的两份往来稿分数太接近时不替用户选，返回两份候选。
+ */
+export function matchThreads(fp: number[], threads: Thread[]): { th: Thread; tv: ThreadVersion; score: number; alt?: { th: Thread; tv: ThreadVersion; score: number } } | null {
+  const per = threads.map((th) => { const r = pick(fp, th.versions).best; return r ? { th, tv: r.item, score: r.score } : null; })
+    .filter(Boolean).sort((a, b) => b!.score - a!.score) as { th: Thread; tv: ThreadVersion; score: number }[];
+  if (!per.length) return null;
+  const [a, b] = per;
+  return b && a.score - b.score < TIE ? { ...a, alt: b } : a;
+}

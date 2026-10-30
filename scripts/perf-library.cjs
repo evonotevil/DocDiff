@@ -74,10 +74,13 @@ const res = {};
   // 3. 打开一份往来稿（第 1 份：V9 → V10，约 100 页、556 处差异），切到修订审阅，逐处切换
   if (!EMPTY) {
     await win.evaluate(() => [...document.querySelectorAll('.drop .btn')].find((b) => /移除|Remove/.test(b.textContent))?.click());
+    const cdp = process.env.PROF ? await win.context().newCDPSession(win) : null;
+    if (cdp) { await cdp.send('Profiler.enable'); await cdp.send('Profiler.setSamplingInterval', { interval: 200 }); await cdp.send('Profiler.start'); }
     t0 = Date.now();
     await win.evaluate(() => [...document.querySelectorAll('.lib-card[aria-label="往来稿"] .lib-row')][0].click());
     await win.waitForFunction(() => !!document.querySelector('.ver-chip') && !!document.querySelector('.tb-prog, .tb-pos'), null, { timeout: 120000 });
     res.openThreadMs = Date.now() - t0;
+    if (cdp) { const { profile } = await cdp.send('Profiler.stop'); fs.writeFileSync(process.env.PROF, JSON.stringify(profile)); }
     await win.evaluate(() => [...document.querySelectorAll('.reviewer-ask .btn')].find((b) => /好的/.test(b.textContent))?.click());
     await win.waitForTimeout(1500);
     await win.evaluate(() => { window.__long = []; try { new PerformanceObserver((l) => { for (const e of l.getEntries()) window.__long.push(Math.round(e.duration)); }).observe({ type: 'longtask' }); } catch {} });

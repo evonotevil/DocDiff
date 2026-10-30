@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { t } from '../lib/i18n';
 import * as I from './icons';
 import { Popover, MenuItem } from './Popover';
@@ -8,6 +8,7 @@ import { Seg, MidName, TypeTag } from './ui';
 import { useDrop } from '../lib/drop';
 import type { FileInfo } from '../lib/model';
 import type { Thread, ThreadVersion, Side, Template } from '../lib/library';
+import { defaultPair, roundOf } from '../lib/library';
 import type { Hint } from '../lib/hints';
 import type { RoundItem, Round } from '../lib/library';
 import type { Verdict } from '../lib/review';
@@ -43,11 +44,13 @@ function ThreadRow({ th, onOpen, onRename, onArchive, onDelete }: { th: Thread; 
   const [menu, setMenu] = useState(false);
   const [edit, setEdit] = useState<string | null>(null);
   const last = th.versions[th.versions.length - 1];
-  const r = th.rounds.find((x) => x.b === last?.id);
+  // 显示完整的版本对（上次打开的那一对，可能不相邻），进度也按这一对算（beta.5）
+  const dp = defaultPair(th);
+  const r = dp ? roundOf(th, dp.a.id, dp.b.id) : null;
   const prog = r ? (r.decided >= r.total ? t('已审完') : t('待审 {n} 处', { n: r.total - r.decided })) : '';
-  const meta = [last ? `V${last.n}` : '', prog, last ? md(last.added) : ''].filter(Boolean).join(' · ');
+  const meta = [dp ? `V${dp.a.n} → V${dp.b.n}` : last ? `V${last.n}` : '', prog, last ? md(last.added) : ''].filter(Boolean).join(' · ');
   return (
-    <div className="lib-row" role="button" tabIndex={0} onClick={() => edit === null && onOpen(th)} onKeyDown={(e) => { if (edit === null && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(th); } }}>
+    <div className="lib-row" role="button" tabIndex={0} onClick={() => edit === null && onOpen(th)} onKeyDown={(e) => { if (e.target === e.currentTarget && edit === null && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(th); } }}>
       <I.FileGlyph type={last?.file.ext || 'docx'} size={22} />
       {edit !== null
         ? <input className="lib-edit" autoFocus value={edit} onClick={(e) => e.stopPropagation()} onChange={(e) => setEdit(e.target.value)} aria-label={t('往来稿名称')}
@@ -81,6 +84,11 @@ export function VersionChip({ th, a, b, tpl, progress, onPick, onAdd, onRename, 
   const va = th.versions.find((v) => v.id === a), vb = th.versions.find((v) => v.id === b);
   const tv = tpl && th.tpl ? tpl.versions.find((v) => v.id === th.tpl!.vid) : null;
   const nextN = Math.max(0, ...th.versions.map((v) => v.n)) + 1;
+  const [pa, setPa] = useState(a), [pb, setPb] = useState(b);
+  useEffect(() => { if (open) { setPa(a); setPb(b); } }, [open, a, b]);
+  // 比较过的版本对（不只相邻的），最近的在前
+  const pairs = [...th.rounds].sort((p, q) => q.updated - p.updated).slice(0, 6)
+    .map((r) => ({ r, x: th.versions.find((v) => v.id === r.a)!, y: th.versions.find((v) => v.id === r.b)! })).filter((p) => p.x && p.y);
   const drop = useDrop((fs) => { setOpen(false); onDropFiles(fs); });
   // 拖着文件经过版本片：弹出层自动打开，整块变成放置区
   const chipDrag = {
@@ -119,6 +127,27 @@ export function VersionChip({ th, a, b, tpl, progress, onPick, onAdd, onRename, 
                 </button>
               );
             })}
+          </div>
+          {pairs.length > 0 && (
+            <div className="ver-pairs">
+              <div className="grp">{t('比较过的')}</div>
+              {pairs.map(({ r, x, y }) => (
+                <button key={r.a + r.b} type="button" className={`ver-pair ${r.a === a && r.b === b ? 'on' : ''}`} onClick={() => { setOpen(false); onPick(x, y); }}>
+                  <span className="pr">V{x.n} → V{y.n}</span><span className="pg">{r.decided >= r.total ? t('已审完') : t('已审 {d} / {n}', { d: r.decided, n: r.total })}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="ver-pick">
+            <span className="cap">{t('换个比较')}</span>
+            <select value={pa} onChange={(e) => { setPa(e.target.value); const na = th.versions.find((v) => v.id === e.target.value)!.n; if ((th.versions.find((v) => v.id === pb)?.n || 0) <= na) setPb(th.versions.find((v) => v.n > na)?.id || pb); }} aria-label={t('原始版本')}>
+              {th.versions.slice(0, -1).map((v) => <option key={v.id} value={v.id}>V{v.n} · {sideLabel(v.side)}</option>)}
+            </select>
+            <span className="arr">→</span>
+            <select value={pb} onChange={(e) => setPb(e.target.value)} aria-label={t('修改后版本')}>
+              {th.versions.filter((v) => v.n > (th.versions.find((x) => x.id === pa)?.n || 0)).map((v) => <option key={v.id} value={v.id}>V{v.n} · {sideLabel(v.side)}</option>)}
+            </select>
+            <button type="button" className="btn sm" disabled={pa === a && pb === b} onClick={() => { const x = th.versions.find((v) => v.id === pa), y = th.versions.find((v) => v.id === pb); if (x && y) { setOpen(false); onPick(x, y); } }}>{t('比较')}</button>
           </div>
           <p className="cap">{t('点一版就和它的上一版比较 · 也可以把新版本拖到这里')}</p>
           <div className="acts"><button type="button" className="btn sm" onClick={() => { setOpen(false); onAdd(); }}><I.IconUpload />{t('加入新版本…')}</button></div>

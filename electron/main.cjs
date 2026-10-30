@@ -273,7 +273,8 @@ ipcMain.handle('recent-add', (_e, entry) => {
   return list;
 });
 ipcMain.handle('recent-clear', () => { safeWrite('recent', 'recent.json', []); try { app.clearRecentDocuments(); } catch {} return []; });
-ipcMain.handle('recent-remove', (_e, idx) => { const l = store.read('recent.json', []); l.splice(idx, 1); safeWrite('recent', 'recent.json', l); return l; });
+// 下标按 recent-get 返回的（过滤过的）列表算，避免删错
+ipcMain.handle('recent-remove', (_e, idx) => { const l = store.read('recent.json', []).filter((r) => r.a && r.b); l.splice(idx, 1); safeWrite('recent', 'recent.json', l); return l; });
 
 // 审阅记录（1.7.3）：以前存在渲染进程的 localStorage 里，超过 120 组静默删除最旧的，写失败也不吭声
 ipcMain.on('review-get', (e, pk) => { try { e.returnValue = reviews.get(pk); } catch { e.returnValue = null; } });
@@ -336,29 +337,9 @@ ipcMain.on('copy-text', (_e, t) => clipboard.writeText(t));
 ipcMain.handle('reveal', (_e, p) => shell.showItemInFolder(p));
 
 // ---------- 审阅稿（1.8）：写在对方文件旁边，先写临时文件再改名；绝不覆盖别人改过的文件 ----------
-const draftStat = (p) => { try { const s = fs.statSync(p); return { mtime: s.mtimeMs, size: s.size }; } catch { return null; } };
-// Word 打开文件时在同一目录放一个 “~$” 开头的占用文件（名字长时替换前两个字符）
-function wordLock(p) {
-  const dir = path.dirname(p), base = path.basename(p);
-  const cands = ['~$' + base, '~$' + base.slice(2), '~$' + base.slice(1)];
-  return cands.some((c) => { try { return fs.existsSync(path.join(dir, c)); } catch { return false; } });
-}
+const { saveDraft, statOf: draftStat, wordLock } = require('./draft-save.cjs');
 ipcMain.handle('draft-stat', (_e, p) => (p ? { stat: draftStat(p), locked: wordLock(p) } : null));
-ipcMain.handle('draft-save', async (_e, { path: p, data, expect }) => {
-  if (!p || !/\.docx$/i.test(p)) return { ok: false, code: 'error', error: 'bad path' };
-  const cur = draftStat(p);
-  // expect = 上次我们写完后的状态；null = 第一次创建
-  if (cur && !expect) return { ok: false, code: 'exists' };
-  if (cur && expect && (Math.abs(cur.mtime - expect.mtime) > 1 || cur.size !== expect.size)) return { ok: false, code: 'modified' };
-  if (expect && !cur) return { ok: false, code: 'gone' };
-  if (cur && wordLock(p)) return { ok: false, code: 'locked' };
-  const tmp = path.join(path.dirname(p), `.${path.basename(p)}.${process.pid}.ddtmp`);
-  try { await fs.promises.writeFile(tmp, Buffer.from(data)); }
-  catch (err) { try { fs.unlinkSync(tmp); } catch {} return { ok: false, code: ['EACCES', 'EPERM', 'EROFS', 'ENOENT'].includes(err.code) ? 'nowrite' : 'error', error: String(err.code || err.message) }; }
-  try { await fs.promises.rename(tmp, p); }
-  catch (err) { try { fs.unlinkSync(tmp); } catch {} return { ok: false, code: ['EBUSY', 'EPERM', 'EACCES'].includes(err.code) ? 'locked' : 'error', error: String(err.code || err.message) }; }
-  return { ok: true, stat: draftStat(p) };
-});
+ipcMain.handle('draft-save', (_e, req) => saveDraft(req));
 // ---------- 模板与往来稿（1.8） ----------
 ipcMain.handle('lib-get', () => library.get());
 ipcMain.handle('lib-save', (_e, ix, purge) => { try { library.save(ix, !!purge); return { ok: true }; } catch (err) { return { ok: false, error: String(err.message || err) }; } });

@@ -43,7 +43,7 @@ function TemplateRow({ tpl, n, onUse, onAddVersion, onRename, onDelete, onDelete
   const latest = tpl.versions[tpl.versions.length - 1];
   const meta = [t('{n} 个版本', { n: tpl.versions.length }), latest ? t('最新 {v}', { v: latest.label }) : '', n ? t('{n} 份往来稿', { n }) : ''].filter(Boolean).join(' · ');
   return (
-    <div className="lib-row" role="button" tabIndex={0} onClick={() => edit === null && onUse(tpl)} onKeyDown={(e) => { if (edit === null && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onUse(tpl); } }}>
+    <div className="lib-row" role="button" tabIndex={0} onClick={() => edit === null && onUse(tpl)} onKeyDown={(e) => { if (e.target === e.currentTarget && edit === null && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onUse(tpl); } }}>
       <I.FileGlyph type={latest?.file.ext || 'docx'} size={22} />
       {edit !== null
         ? <input className="lib-edit" autoFocus value={edit} onClick={(e) => e.stopPropagation()} onChange={(e) => setEdit(e.target.value)}
@@ -144,7 +144,7 @@ export function RecentRow({ a, b, time, prog, onOpen, onSave, onRemove }: {
   const has = !!(prog && prog.total);
   const done = has && prog!.decided >= prog!.total;
   return (
-    <div className="lib-row recent-row" role="button" tabIndex={0} title={`${a.name}\n→ ${b.name}`} onClick={onOpen} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); } }}>
+    <div className="lib-row recent-row" role="button" tabIndex={0} title={`${a.name}\n→ ${b.name}`} onClick={onOpen} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(); } }}>
       <div className="rr-main">
         <div className="rr-files">
           <span className="rr-side"><TypeTag type={a.ext} /><MidName name={a.name} title={false} /></span>

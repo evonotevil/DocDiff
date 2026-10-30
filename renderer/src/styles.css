@@ -1132,14 +1132,14 @@ select.sel { height: 36px; border-radius: var(--r-m); border: 2px solid var(--bo
 /* 工具栏放不下时依次收起（beta.3）：版本片最多占约 1/3、中间省略；复制摘要 → 导出 → 审阅稿（只留圆点）依次收成图标；计数永不换行 */
 .tbar .ver-chip { flex: none; max-width: 33%; }
 /* 4：按钮都收完了还放不下（窗口极窄）——这时才让文件片、版本片和进度条继续变窄 */
-.tbar.tb-l4 .ver-chip, .tbar.tb-l4 .filechip { flex: 0 1 auto; min-width: 96px; }
-.tbar.tb-l4 .tb-prog { flex: 0 1 96px; min-width: 32px; }
+.tbar[data-level="4"] .ver-chip, .tbar[data-level="4"] .filechip { flex: 0 1 auto; min-width: 96px; }
+.tbar[data-level="4"] .tb-prog { flex: 0 1 96px; min-width: 32px; }
 .tbar .ver-chip .mid-name { font-weight: 900; color: var(--title); }
-.tbar.tb-l1 .tb-copy, .tbar.tb-l2 .tb-copy, .tbar.tb-l3 .tb-copy, .tbar.tb-l4 .tb-copy,
-.tbar.tb-l2 .tb-export, .tbar.tb-l3 .tb-export, .tbar.tb-l4 .tb-export { width: var(--control-m); padding: 0; }
-.tbar.tb-l1 .tb-copy .lbl, .tbar.tb-l2 .tb-copy .lbl, .tbar.tb-l3 .tb-copy .lbl, .tbar.tb-l4 .tb-copy .lbl,
-.tbar.tb-l2 .tb-export .lbl, .tbar.tb-l3 .tb-export .lbl, .tbar.tb-l4 .tb-export .lbl,
-.tbar.tb-l2 .filechip .who, .tbar.tb-l3 .filechip .who, .tbar.tb-l4 .filechip .who { display: none; }
+.tbar[data-level="1"] .tb-copy, .tbar[data-level="2"] .tb-copy, .tbar[data-level="3"] .tb-copy, .tbar[data-level="4"] .tb-copy,
+.tbar[data-level="2"] .tb-export, .tbar[data-level="3"] .tb-export, .tbar[data-level="4"] .tb-export { width: var(--control-m); padding: 0; }
+.tbar[data-level="1"] .tb-copy .lbl, .tbar[data-level="2"] .tb-copy .lbl, .tbar[data-level="3"] .tb-copy .lbl, .tbar[data-level="4"] .tb-copy .lbl,
+.tbar[data-level="2"] .tb-export .lbl, .tbar[data-level="3"] .tb-export .lbl, .tbar[data-level="4"] .tb-export .lbl,
+.tbar[data-level="2"] .filechip .who, .tbar[data-level="3"] .filechip .who, .tbar[data-level="4"] .filechip .who { display: none; }
 
 /* 弹窗按规范（beta.3）：标题 22/900，内边距 32，段间距 24，控件 48，按钮右对齐、不加分隔线 */
 .modal-head h3 { font-size: 22px; }
@@ -1249,3 +1249,24 @@ select.sel { height: 36px; border-radius: var(--r-m); border: 2px solid var(--bo
 .pop-t { flex: 1; min-width: 0; }
 .set-review .field input { background: var(--surface); border: 2px solid var(--swan); }
 .set-review .field input:focus { border-color: var(--macaw); }
+
+.tbar[data-level="3"] .draft-chip .lbl, .tbar[data-level="4"] .draft-chip .lbl { display: none; }
+.tbar[data-level="3"] .draft-chip, .tbar[data-level="4"] .draft-chip { padding: 0 8px; gap: 4px; }
+/* 往来稿：比较过的版本对 + 换个比较（beta.5） */
+.ver-pairs { display: flex; flex-direction: column; gap: 2px; }
+.ver-pairs .grp { font-size: 12px; font-weight: 800; color: var(--text-2); padding: 4px 0; }
+.ver-pair { display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 10px; border: 2px solid transparent; border-radius: var(--radius-m); background: none; font: inherit; cursor: pointer; color: var(--eel); text-align: left; }
+.ver-pair:hover { background: var(--hover); }
+.ver-pair.on { border-color: var(--swan); background: var(--surface); }
+.ver-pair .pr { flex: 1; font-weight: 800; font-variant-numeric: tabular-nums; }
+.ver-pair .pg { font-size: 12px; font-weight: 800; color: var(--text-3); }
+.ver-pick { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.ver-pick .cap { flex: none; }
+.ver-pick select { height: 30px; border: 2px solid var(--swan); border-radius: var(--radius-s); background: var(--surface); font: inherit; font-size: 13px; font-weight: 700; color: var(--eel); padding: 0 6px; }
+.ver-pick .arr { color: var(--hare); font-weight: 900; }
+.ver-pick .btn { margin-left: auto; }
+.done-draft { margin: 0 0 4px; font-size: 13px; font-weight: 700; color: var(--text-2); text-align: center; line-height: 1.5; }
+.done-draft.warn { color: var(--bee-ink); }
+.done-row { display: flex; gap: 8px; }
+.done-row .btn { flex: 1; }
+.ver-pairs .grp { background: none; position: static; }
