@@ -1,11 +1,11 @@
 {
-  "version": "1.7.5",
-  "pubDate": "2026-10-28",
-  "notes": "· 修复 PDF 比较时的严重卡顿，后台执行比较并支持取消。\n· 优化富文本、修订审阅和差异清单，提高视图切换、滚动、跳转与筛选的流畅度。\n· 图像逐像素比较移至后台，降低内存占用，保持界面响应。",
+  "version": "1.8.0",
+  "pubDate": "2026-10-30",
+  "notes": "· 新增 Word 审阅稿与定稿，将审阅决定写入修订和批注，并支持后续自动同步。\n· 新增模板管理和往来稿版本链，支持识别改稿来源、参考与沿用上轮结论。\n· 优化首页、最近比较、审阅完成页和设置分类。\n· 纯文本视图按需显示，提升大文档切换性能，完善快捷键隔离与备份保护。",
   "downloads": {
-    "mac-arm64": "https://github.com/evonotevil/DocDiff/releases/download/v1.7.5/DocDiff-1.7.5-mac-arm64.dmg",
-    "mac-x64": "https://github.com/evonotevil/DocDiff/releases/download/v1.7.5/DocDiff-1.7.5-mac-x64.dmg",
-    "win-exe": "https://github.com/evonotevil/DocDiff/releases/download/v1.7.5/DocDiff-Setup-1.7.5.exe",
-    "page": "https://github.com/evonotevil/DocDiff/releases/tag/v1.7.5"
+    "mac-arm64": "https://github.com/evonotevil/DocDiff/releases/download/v1.8.0/DocDiff-1.8.0-mac-arm64.dmg",
+    "mac-x64": "https://github.com/evonotevil/DocDiff/releases/download/v1.8.0/DocDiff-1.8.0-mac-x64.dmg",
+    "win-exe": "https://github.com/evonotevil/DocDiff/releases/download/v1.8.0/DocDiff-Setup-1.8.0.exe",
+    "page": "https://github.com/evonotevil/DocDiff/releases/tag/v1.8.0"
   }
 }
