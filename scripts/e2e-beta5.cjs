@@ -92,7 +92,7 @@ const verdicts = (w) => w.evaluate(() => [...document.querySelectorAll('.dlist .
     ok('F5 Space on “更多” also stays on the menu', !(await w.$('.ver-chip')));
     await w.keyboard.press('Escape'); await w.waitForTimeout(150);
     // 重新打开：回到 V1 → V3，进度还在
-    await w.evaluate(() => document.querySelector('.lib-card .lib-row').click());
+    await w.evaluate(() => document.querySelector('.lib-card .lib-row .row-open').click());
     await w.waitForFunction(() => !!document.querySelector('.ver-chip') && !!document.querySelector('.tb-prog, .tb-pos'), null, { timeout: 30000 });
     await w.waitForTimeout(600);
     const chip = await txt(w, '.ver-chip'), pos = await txt(w, '.tb-pos');

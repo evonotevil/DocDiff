@@ -82,7 +82,7 @@ const clickText = (win, sel, re) => win.evaluate(([s, r]) => { const b = [...doc
   ({ app, win, errs, pickNext } = await launch());
   ok('persists across restart', /云服务采购合同/.test(await text(win, '.lib-card[aria-label="模板"] .lib-row')) && /2 个版本/.test(await text(win, '.lib-card[aria-label="模板"] .lib-row')));
   await pickNext(path.join(dir, 'tpl-vendor.docx'));
-  await win.evaluate(() => document.querySelector('.lib-card[aria-label="模板"] .lib-row').click());
+  await win.evaluate(() => document.querySelector('.lib-card[aria-label="模板"] .lib-row .row-open').click());
   await win.waitForSelector('.tpl-dlg');
   await clickText(win, '.tpl-dlg .pair-row.pick', '选择');
   await win.waitForFunction(() => /自动选了/.test(document.querySelector('.tpl-dlg')?.innerText || ''), null, { timeout: 15000 }).catch(() => {});

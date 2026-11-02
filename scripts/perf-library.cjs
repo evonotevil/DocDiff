@@ -77,7 +77,7 @@ const res = {};
     const cdp = process.env.PROF ? await win.context().newCDPSession(win) : null;
     if (cdp) { await cdp.send('Profiler.enable'); await cdp.send('Profiler.setSamplingInterval', { interval: 200 }); await cdp.send('Profiler.start'); }
     t0 = Date.now();
-    await win.evaluate(() => [...document.querySelectorAll('.lib-card[aria-label="往来稿"] .lib-row')][0].click());
+    await win.evaluate(() => document.querySelector('.lib-card[aria-label="往来稿"] .lib-row .row-open').click());
     await win.waitForFunction(() => !!document.querySelector('.ver-chip') && !!document.querySelector('.tb-prog, .tb-pos'), null, { timeout: 120000 });
     res.openThreadMs = Date.now() - t0;
     if (cdp) { const { profile } = await cdp.send('Profiler.stop'); fs.writeFileSync(process.env.PROF, JSON.stringify(profile)); }

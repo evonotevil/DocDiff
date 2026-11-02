@@ -45,9 +45,9 @@ const launch = async (args) => {
   await w.evaluate(() => [...document.querySelectorAll('.draft-tip .btn')].find((b) => /知道了/.test(b.textContent))?.click());
   // P1-2：定稿弹窗开着时，菜单命令（⌘1 / ⌘N）不作用到后台
   await w.evaluate(() => document.querySelector('.insp .sh .ibtn, .sh .ibtn.act')?.click()); await w.waitForTimeout(200);
-  ok('review “…” menu offers 生成定稿…', await w.evaluate(() => [...document.querySelectorAll('.pop.menu .menu-item')].some((b) => /生成定稿/.test(b.textContent))));
+  ok('review “…” menu offers 生成定稿…', await w.evaluate(() => [...document.querySelectorAll('.pop.pop-menu .menu-item')].some((b) => /生成定稿/.test(b.textContent))));
   await shot('f1-review-menu');
-  await w.evaluate(() => [...document.querySelectorAll('.pop.menu .menu-item')].find((b) => /生成定稿/.test(b.textContent)).click()); await w.waitForTimeout(300);
+  await w.evaluate(() => [...document.querySelectorAll('.pop.pop-menu .menu-item')].find((b) => /生成定稿/.test(b.textContent)).click()); await w.waitForTimeout(300);
   await app.evaluate(({ BrowserWindow }) => { const win = BrowserWindow.getAllWindows()[0]; win.webContents.send('menu', 'tab', 0); win.webContents.send('menu', 'clear'); });
   await w.waitForTimeout(500);
   const guard = await w.evaluate(() => ({ modal: !!document.querySelector('.final-dlg'), review: !!document.querySelector('.nav-list .nav-item.on, .nav-list .nav-item[aria-current]') && /修订审阅/.test(document.querySelector('.nav-list .nav-item.on, .nav-list .nav-item[aria-current]')?.textContent || ''), compared: !!document.querySelector('.tb-pos') }));
@@ -56,7 +56,7 @@ const launch = async (args) => {
   await w.keyboard.press('Escape'); await w.waitForTimeout(300);
   // 全部接受 → 完成页（D1 · 已写好）
   await w.evaluate(() => document.querySelector('.insp .sh .ibtn, .sh .ibtn.act')?.click()); await w.waitForTimeout(200);
-  await w.evaluate(() => [...document.querySelectorAll('.pop.menu .menu-item')].find((b) => /全部接受/.test(b.textContent))?.click()); await w.waitForTimeout(300);
+  await w.evaluate(() => [...document.querySelectorAll('.pop.pop-menu .menu-item')].find((b) => /全部接受/.test(b.textContent))?.click()); await w.waitForTimeout(300);
   await w.evaluate(() => [...document.querySelectorAll('.modal .btn')].find((b) => /接受/.test(b.textContent) && /primary/.test(b.className))?.click());
   await w.waitForSelector('.done-card', { timeout: 10000 }).catch(() => {});
   await w.waitForTimeout(1500);
@@ -86,7 +86,7 @@ const launch = async (args) => {
   await w.waitForFunction(() => !!document.querySelector('.tb-pos'), null, { timeout: 60000 });
   await w.evaluate(() => document.querySelectorAll('.nav-list .nav-item')[2].click()); await w.waitForTimeout(600);
   await w.evaluate(() => document.querySelector('.insp .sh .ibtn, .sh .ibtn.act')?.click()); await w.waitForTimeout(200);
-  await w.evaluate(() => [...document.querySelectorAll('.pop.menu .menu-item')].find((b) => /全部接受/.test(b.textContent))?.click()); await w.waitForTimeout(300);
+  await w.evaluate(() => [...document.querySelectorAll('.pop.pop-menu .menu-item')].find((b) => /全部接受/.test(b.textContent))?.click()); await w.waitForTimeout(300);
   await w.evaluate(() => [...document.querySelectorAll('.modal .btn')].find((b) => /接受/.test(b.textContent) && /primary/.test(b.className))?.click());
   await w.waitForSelector('.done-card', { timeout: 10000 }).catch(() => {});
   await w.evaluate(() => [...document.querySelectorAll('.done-card .btn')].find((b) => /回去再看看/.test(b.textContent))?.click()); await w.waitForTimeout(300);
@@ -123,10 +123,10 @@ const launch = async (args) => {
   await last.scrollIntoViewIfNeeded();
   await w.setViewportSize({ width: 1440, height: 640 }); await w.waitForTimeout(300);
   const btn = await last.$('.btn.icon'); await btn.scrollIntoViewIfNeeded(); await btn.click(); await w.waitForTimeout(300);
-  const pos = await w.evaluate(() => { const p = document.querySelector('.pop.menu'); const pr = p.getBoundingClientRect(); const b = [...document.querySelectorAll('.recent-row .btn.icon')].pop().getBoundingClientRect(); const first = p.querySelector('.menu-item').getBoundingClientRect(); return { gapBelowAnchor: Math.round(pr.top - b.bottom), gapAboveAnchor: Math.round(b.top - pr.bottom), firstPad: Math.round(first.top - pr.top) }; });
+  const pos = await w.evaluate(() => { const p = document.querySelector('.pop.pop-menu'); const pr = p.getBoundingClientRect(); const b = [...document.querySelectorAll('.recent-row .btn.icon')].pop().getBoundingClientRect(); const first = p.querySelector('.menu-item').getBoundingClientRect(); return { gapBelowAnchor: Math.round(pr.top - b.bottom), gapAboveAnchor: Math.round(b.top - pr.bottom), firstPad: Math.round(first.top - pr.top) }; });
   ok('recent-row menu sits next to its button (8px) and the first item is inset', (Math.abs(pos.gapAboveAnchor - 8) <= 2 || Math.abs(pos.gapBelowAnchor - 8) <= 2) && pos.firstPad >= 8, pos);
   await shot('f1-recent-menu');
-  await w.evaluate(() => [...document.querySelectorAll('.pop.menu .menu-item')].find((b) => /存为往来稿/.test(b.textContent))?.click()); await w.waitForTimeout(1500);
+  await w.evaluate(() => [...document.querySelectorAll('.pop.pop-menu .menu-item')].find((b) => /存为往来稿/.test(b.textContent))?.click()); await w.waitForTimeout(1500);
   ok('menu item click does not also open the row underneath twice (no error)', w.errs.length === 0, w.errs.slice(0, 3));
   await app.close();
   console.log(JSON.stringify({ out: OUT, pass: checks.filter((c) => c[1]).length, fail: checks.filter((c) => !c[1]).map((c) => c[0]) }));

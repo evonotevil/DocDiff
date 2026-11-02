@@ -70,7 +70,7 @@ const ok = (k, v, info) => { checks.push([k, !!v]); console.log(`${v ? 'ok  ' : 
   await w.keyboard.press('u'); await w.waitForTimeout(400);
   ok('U on the home page undoes the deletion', /供货框架协议/.test(await w.evaluate(() => document.querySelector('.lib-card')?.innerText || '')));
   // 最近比较里属于往来稿的一对：按往来稿打开
-  await w.evaluate(() => document.querySelector('.recent-row')?.click());
+  await w.evaluate(() => document.querySelector('.recent-row .row-open')?.click());
   await w.waitForSelector('.ver-chip', { timeout: 20000 }).catch(() => {});
   ok('a recent pair that belongs to a negotiation opens as that negotiation', !!(await w.$('.ver-chip')));
   ok('no renderer errors', errs.length === 0, errs.slice(0, 3));

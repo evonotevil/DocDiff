@@ -224,6 +224,21 @@
     "usage": "红色浅底：出错提示条。"
    },
    {
+    "name": "badge-docx",
+    "value": "#0c6fa6",
+    "usage": "类型徽章 DOCX 底色（白字 5.5:1）；浅色、深色同值。"
+   },
+   {
+    "name": "badge-pdf",
+    "value": "#c41e1e",
+    "usage": "类型徽章 PDF 底色（白字 5.9:1）；浅色、深色同值。"
+   },
+   {
+    "name": "badge-txt",
+    "value": "#6f6f6f",
+    "usage": "类型徽章 TXT 底色（白字 5.0:1）；浅色、深色同值。"
+   },
+   {
     "name": "diff-del",
     "value": "#ff4b4b",
     "usage": "删除（Cardinal）亮面：8px 圆点、22px 编号圆、地图刻度。界面里不做大面积。"

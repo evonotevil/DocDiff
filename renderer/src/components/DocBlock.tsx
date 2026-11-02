@@ -72,7 +72,7 @@ export function BlockView({ block, toks, selCid, className, extra }: { block: Bl
     for (const r of coalesce(toks)) if (!r.tok.sep) (cells[Math.min(n - 1, r.tok.c)] ||= []).push(r);
     return (
       <div className={`blk tr ${className || ''}`} style={{ gridTemplateColumns: `repeat(${n}, minmax(0, 1fr))` }}>
-        {cells.map((c, i) => <div className="td" key={i}>{c.map((r, k) => <TokSpan key={k} r={r} selCid={selCid} />)}</div>)}
+        {cells.map((c, i) => <div className="td" dir="auto" key={i}>{c.map((r, k) => <TokSpan key={k} r={r} selCid={selCid} />)}</div>)}
         {extra}
       </div>
     );
@@ -80,13 +80,14 @@ export function BlockView({ block, toks, selCid, className, extra }: { block: Bl
   const body = coalesce(toks).map((r, k) => <TokSpan key={k} r={r} selCid={selCid} />);
   if (block.kind === 'li') {
     return (
-      <div className={`blk li${al} ${className || ''}`} style={{ paddingLeft: (block.level || 0) * 22 }}>
+      <div className={`blk li${al} ${className || ''}`} dir="auto" style={{ paddingInlineStart: (block.level || 0) * 22 }}>
         <span className="mk">{block.marker || '•'}</span><span>{body}</span>{extra}
       </div>
     );
   }
   const k = block.kind === 'h' ? `h h${block.level || 1}` : 'p';
-  return <div className={`blk ${k}${al} ${className || ''}`}>{body.length ? body : ' '}{extra}</div>;
+  // 1.8.1：dir="auto" 让阿拉伯文、希伯来文段落按自己的方向排，中英文不受影响
+  return <div className={`blk ${k}${al} ${className || ''}`} dir="auto">{body.length ? body : ' '}{extra}</div>;
 }
 
 /** 一侧可能由多个段落组成（段落被拆分/合并时），按 tok.blk 分组逐段渲染 */

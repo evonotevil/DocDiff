@@ -26,7 +26,7 @@ export interface SettingsValues {
 export type Tab = 'general' | 'review' | 'files' | 'risk' | 'keys' | 'storage' | 'about';
 
 const SH = ({ id, children, info }: { id: string; children: React.ReactNode; info?: React.ReactNode }) => (
-  <h4 className="set-sh" id={id}>{children}{info && <Info label={typeof children === 'string' ? children : ''}>{info}</Info>}</h4>
+  <h3 className="set-sh" id={id}>{children}{info && <Info label={typeof children === 'string' ? children : ''}>{info}</Info>}</h3>
 );
 
 function ShortcutRows() {

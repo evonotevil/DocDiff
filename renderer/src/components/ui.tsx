@@ -1,5 +1,6 @@
 import React from 'react';
 import * as I from './icons';
+import { t } from '../lib/i18n';
 
 export function Switch({ on, onChange, disabled, label, size }: { on: boolean; onChange: (v: boolean) => void; disabled?: boolean; label?: string; size?: 'sm' }) {
   return <button type="button" className={`switch ${on ? 'on' : ''} ${size || ''}`} disabled={disabled} onClick={() => onChange(!on)} role="switch" aria-checked={on} aria-label={label} />;
@@ -57,5 +58,11 @@ export function TypeTag({ type }: { type: string }) {
 
 /** “ⓘ”悬停说明（beta.7 · 设置与首页排布）：说明文字最多一行，其余放进悬停 / 聚焦时出现的深色气泡 */
 export function Info({ children, label }: { children: React.ReactNode; label: string }) {
-  return <span className="qtip" tabIndex={0} aria-label={label}><I.IconInfo /><span className="qtip-b" role="tooltip">{children}</span></span>;
+  // 1.8.1：用真正的按钮（可聚焦、有名字），说明用 aria-describedby 关联，读屏能读到
+  const id = React.useId();
+  return (
+    <button type="button" className="qtip" aria-label={label ? `${label} · ${t('说明')}` : t('说明')} aria-describedby={id} onClick={(e) => e.preventDefault()}>
+      <I.IconInfo /><span className="qtip-b" role="tooltip" id={id}>{children}</span>
+    </button>
+  );
 }

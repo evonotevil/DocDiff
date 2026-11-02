@@ -50,7 +50,9 @@ function ThreadRow({ th, onOpen, onRename, onArchive, onDelete }: { th: Thread; 
   const prog = r ? (r.decided >= r.total ? t('已审完') : t('待审 {n} 处', { n: r.total - r.decided })) : '';
   const meta = [dp ? `V${dp.a.n} → V${dp.b.n}` : last ? `V${last.n}` : '', prog, last ? md(last.added) : ''].filter(Boolean).join(' · ');
   return (
-    <div className="lib-row" role="button" tabIndex={0} onClick={() => edit === null && onOpen(th)} onKeyDown={(e) => { if (e.target === e.currentTarget && edit === null && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(th); } }}>
+    // 1.8.1：行本身不是按钮，“打开”由铺满整行的透明按钮承担
+    <div className="lib-row">
+      {edit === null && <button type="button" className="row-open" aria-label={t('打开往来稿「{n}」', { n: th.name })} onClick={() => onOpen(th)} />}
       <I.FileGlyph type={last?.file.ext || 'docx'} size={22} />
       {edit !== null
         ? <input className="lib-edit" autoFocus value={edit} onClick={(e) => e.stopPropagation()} onChange={(e) => setEdit(e.target.value)} aria-label={t('往来稿名称')}

@@ -148,7 +148,7 @@ function DropZone({ side, doc, loading, error, onOpen, onFiles, onClear, onPaste
         {doc && !loading && <div className="sub">{docStat(doc)} · {t('{n} 段', { n: doc.blocks.filter((b) => b.kind === 'tr' || b.runs.length).length })}</div>}
       </div>
       {loading ? <div className="spinner sm" /> : doc ? (
-        <div className="acts"><button className="btn sm" onClick={onOpen}><I.IconUpload />{t('更换')}</button><button className="btn sm plain" onClick={onClear}>{t('移除')}</button></div>
+        <div className="acts"><button className="btn sm" onClick={onOpen}><I.IconUpload />{t('更换')}</button><button className="btn sm" onClick={onClear}>{t('移除')}</button></div>
       ) : (
         <div className="acts"><button className="btn sm blue" onClick={onOpen}><I.IconUpload />{t('选择文件')}</button><button className="btn sm" onClick={onPaste}><I.IconPaste />{t('粘贴')}</button></div>
       )}
@@ -1238,16 +1238,17 @@ export default function App() {
     const tplOpen = tplDlg ? lib.templates.find((y) => y.id === tplDlg && !y.deleted) : null;
     return (
       <div className="app home">
-        <div className="home-top drag">
+        {/* 1.8.1：首页用 header / main / footer 三个区域，读屏和键盘导航能跳转 */}
+        <header className="home-top drag">
           <Wordmark size={36} sub={t('离线文档比对')} />
           <div className="spacer" />
           <button className={`btn plain icon${updBadge ? ' has-dot' : ''}`} title={t(updBadge ? '设置（有新版本）' : '设置')} aria-label={t('设置')} onClick={() => setShowSettings('general')}><I.IconGear /></button>
-        </div>
-        <div className="home-scroll">
+        </header>
+        <main className="home-scroll">
           <div className="home-inner">
             {veteran ? (
               // H：老用户（已有往来稿 / 模板 / 最近比较）——去掉大标题和引导，放置区变矮，库占主要位置
-              <div className="home-sh"><h2>{t('新比较')}</h2><span className="grow" />{!A && !B && <button className="btn sm" onClick={trySample}>{t('用示例合同试一下')}</button>}</div>
+              <div className="home-sh"><h1>{t('新比较')}</h1><span className="grow" />{!A && !B && <button className="btn sm" onClick={trySample}>{t('用示例合同试一下')}</button>}</div>
             ) : (
               // H2：第一次用——保留标题、副标题、吉祥物；去掉五个模式图标和气泡
               <div className="hero">
@@ -1313,12 +1314,12 @@ export default function App() {
             </div>
             )}
           </div>
-        </div>
-        <div className="home-cta">
+        </main>
+        <footer className="home-cta">
           {canCompare
             ? <><span className="hint">{t('也可以直接按')} <Kbd>Enter</Kbd></span><button className="btn primary big" onClick={startCompare}>{t('开始比较')}</button></>
             : <><span className="hint">{busy[0] || busy[1] ? t('正在读取文档…') : t('还差 {n} 个文档', { n: missing })}</span><button className="btn primary big" disabled>{t('开始比较')}</button></>}
-        </div>
+        </footer>
         {tplOpen && <TemplateCompareDialog tpl={tplOpen} B={B} bBusy={busy[1]} onPickB={() => open(1)} onDropB={(fs) => fs[0] && loadFile(1, fs[fs.length - 1])} onStart={startFromTemplate} onClose={() => setTplDlg(null)} />}
         {modals}
       </div>
@@ -1483,7 +1484,7 @@ export default function App() {
         </div>
         {changes.length > 0 && stats && <FilterChips stats={stats} risks={isRichTab ? risks.length : 0} value={filter} onChange={setFilter} />}
         {changes.length > 0 ? (
-          <ChangeList changes={shown} all={changes} sel={selCid} onSel={setSelCid} onHover={hoverCid} decisions={tab === 2 ? decisions : undefined}
+          <ChangeList key={lang} changes={shown} all={changes} sel={selCid} onSel={setSelCid} onHover={hoverCid} decisions={tab === 2 ? decisions : undefined}
             clauses={isRichTab ? clauses : noClauses} risks={isRichTab ? riskById : new Map()} grouped={isRichTab} />
         ) : (
           <div className="insp-empty">
@@ -1594,6 +1595,7 @@ export default function App() {
       </header>
 
       <main className="center">
+        <h1 className="sr-only">{t('比较结果：{a} → {b}', { a: A?.file.name || '', b: B?.file.name || '' })}</h1>
         <div className="ch">
           <span className="t">{canvasTitle}</span>
           <span className="grow" />
@@ -1646,7 +1648,8 @@ export default function App() {
           </Notice>
         )}
         <div className="main">
-          {body}
+          {/* 1.8.1：切换语言时让画布重新挂载，区段标题、计数等应用文案跟着切（文档原文不变） */}
+          <React.Fragment key={lang}>{body}</React.Fragment>
           {showMap && <ChangeMap changes={changes} filter={filter === 'all' || filter === 'risk' ? [] : [filter]} selCid={selCid} onSel={setSelCid} dep={[curRes, tab, prefs.hideRich, prefs.hidePlain, prefs.layout, prefs.wrap, decisions, inspOpen, navOpen, askReviewer]} />}
         </div>
         {askReviewer && (
@@ -1720,7 +1723,7 @@ export default function App() {
 
       <Popover anchor={gearRef} open={pop === 'settings'} onClose={closePop} title={t('比较设置')}>{compareSettings}</Popover>
       <Popover anchor={scopeRef} open={pop === 'scope'} onClose={closePop} title={t('比较范围')} width={360} align="end">{scope && <ScopeBody scope={scope} />}</Popover>
-      <Popover anchor={moreRef} open={pop === 'more'} onClose={closePop} width={260} className="menu" label={t('更多')}>
+      <Popover anchor={moreRef} open={pop === 'more'} onClose={closePop} width={260} className="pop-menu" label={t('更多')}>
         <MenuItem icon={<I.IconCheck />} onClick={() => { closePop(); setBulkAsk('a'); }}>{t('全部接受…')}</MenuItem>
         <MenuItem icon={<I.IconX />} tone="danger" onClick={() => { closePop(); setBulkAsk('r'); }}>{t('全部拒绝…')}</MenuItem>
         {draftSync && <MenuItem icon={<I.IconPlusDoc />} onClick={() => { closePop(); setFinalReq((n) => n + 1); }}>{t('生成定稿…')}</MenuItem>}

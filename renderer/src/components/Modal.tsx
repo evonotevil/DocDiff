@@ -33,7 +33,7 @@ export function Modal({ title, onClose, children, className, labelledIcon, foote
     <div className="modal-bg" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className={`modal ${className || ''}`} role="dialog" aria-modal="true" aria-labelledby={titleId} ref={ref} tabIndex={-1}>
         <div className="modal-head">
-          <h3 id={titleId}>{labelledIcon}{title}</h3>
+          <h2 id={titleId}>{labelledIcon}{title}</h2>
           <button className="btn sm plain icon" onClick={onClose} title={t('关闭（Esc）')} aria-label={t('关闭')}><I.IconX /></button>
         </div>
         <div className="modal-body">{children}</div>

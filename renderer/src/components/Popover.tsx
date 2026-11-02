@@ -60,7 +60,7 @@ export function Popover({ anchor, open, onClose, title, right, width = 340, alig
   );
 }
 
-/** “…”菜单里的一项（组件 MenuItem）。菜单 = 无标题的 Popover，className="menu"：上下各留 8px */
+/** “…”菜单里的一项（组件 MenuItem）。菜单 = 无标题的 Popover，className="pop-menu"：上下各留 8px（不要用 “menu”，旧样式里有同名类） */
 export function MenuItem({ icon, children, onClick, tone }: { icon?: React.ReactNode; children: React.ReactNode; onClick: () => void; tone?: 'danger' }) {
   return <button type="button" className={`menu-item ${tone || ''}`} onClick={onClick}>{icon}{children}</button>;
 }

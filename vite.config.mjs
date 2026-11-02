@@ -9,6 +9,14 @@ export default defineConfig({
   root: resolve(__dirname, 'renderer'),
   base: './',
   plugins: [react(), {
+    // 字体瘦身（1.8.1）：Electron 的 Chromium 都支持 woff2，去掉 fontsource 里的 woff 回退，安装包少一半字体文件
+    name: 'woff2-only',
+    enforce: 'pre',
+    transform(code, id) {
+      if (!/@fontsource[\\/].*\.css$/.test(id)) return null;
+      return { code: code.replace(/,\s*url\([^)]*\.woff\)\s*format\(['"]woff['"]\)/g, ''), map: null };
+    },
+  }, {
     // pdf.js 的字符映射表和标准字体数据：中文 PDF 常用的不嵌入 CID 字体离不开它们（1.7.4）
     name: 'copy-pdfjs-resources',
     closeBundle() {
@@ -21,6 +29,8 @@ export default defineConfig({
     emptyOutDir: true,
     target: 'chrome120',
     chunkSizeWarningLimit: 4000,
+    // 字体不内联成 data: URI（1.8.1）：按需加载的子集保持独立文件
+    assetsInlineLimit: (file) => (/\.(woff2?|ttf|otf)$/.test(file) ? false : undefined),
     rollupOptions: {
       input: {
         index: resolve(__dirname, 'renderer/index.html'),

@@ -89,18 +89,18 @@ export function PlainView({ A, B, res, selCid, onSel, layout, wrap, hideUnchange
     if (layout === 'split') {
       return (
         <div className="crow" key={v} data-row={v}>
-          <div className={`cside ${kindA(r)}`}><span className="ln">{la}</span><span className="ct">{r.ai !== undefined ? toks(r, 'a', selCid, r.kind === 'modified', r.ai !== undefined ? lowWords?.[0].get(r.ai) : undefined) : ''}</span></div>
-          <div className={`cside ${kindB(r)}`}><span className="ln">{lb}</span><span className="ct">{r.bi !== undefined ? toks(r, 'b', selCid, r.kind === 'modified', r.bi !== undefined ? lowWords?.[1].get(r.bi) : undefined) : ''}</span></div>
+          <div className={`cside ${kindA(r)}`}><span className="ln">{la}</span><span className="ct" dir="auto">{r.ai !== undefined ? toks(r, 'a', selCid, r.kind === 'modified', r.ai !== undefined ? lowWords?.[0].get(r.ai) : undefined) : ''}</span></div>
+          <div className={`cside ${kindB(r)}`}><span className="ln">{lb}</span><span className="ct" dir="auto">{r.bi !== undefined ? toks(r, 'b', selCid, r.kind === 'modified', r.bi !== undefined ? lowWords?.[1].get(r.bi) : undefined) : ''}</span></div>
         </div>
       );
     }
     if (r.kind === 'equal' || r.kind === 'format') {
-      return <div className="crow" key={v} data-row={v}><div className="cside"><span className="ln">{la}</span><span className="ln">{lb}</span><span className="ct">{toks(r, 'b', selCid, false, r.bi !== undefined ? lowWords?.[1].get(r.bi) : undefined)}</span></div></div>;
+      return <div className="crow" key={v} data-row={v}><div className="cside"><span className="ln">{la}</span><span className="ln">{lb}</span><span className="ct" dir="auto">{toks(r, 'b', selCid, false, r.bi !== undefined ? lowWords?.[1].get(r.bi) : undefined)}</span></div></div>;
     }
     return (
       <div className="crow" key={v} data-row={v}>
-        {r.ai !== undefined && <div className={`cside del${whole(r)}${r.kind.startsWith('moved') ? ' mv' : ''}`}><span className="ln">{la}</span><span className="ln"></span><span className="ct">{toks(r, 'a', selCid, r.kind === 'modified', r.ai !== undefined ? lowWords?.[0].get(r.ai) : undefined)}</span></div>}
-        {r.bi !== undefined && <div className={`cside ins${whole(r)}${r.kind.startsWith('moved') ? ' mv' : ''}`}><span className="ln"></span><span className="ln">{lb}</span><span className="ct">{toks(r, 'b', selCid, r.kind === 'modified', r.bi !== undefined ? lowWords?.[1].get(r.bi) : undefined)}</span></div>}
+        {r.ai !== undefined && <div className={`cside del${whole(r)}${r.kind.startsWith('moved') ? ' mv' : ''}`}><span className="ln">{la}</span><span className="ln"></span><span className="ct" dir="auto">{toks(r, 'a', selCid, r.kind === 'modified', r.ai !== undefined ? lowWords?.[0].get(r.ai) : undefined)}</span></div>}
+        {r.bi !== undefined && <div className={`cside ins${whole(r)}${r.kind.startsWith('moved') ? ' mv' : ''}`}><span className="ln"></span><span className="ln">{lb}</span><span className="ct" dir="auto">{toks(r, 'b', selCid, r.kind === 'modified', r.bi !== undefined ? lowWords?.[1].get(r.bi) : undefined)}</span></div>}
       </div>
     );
   };

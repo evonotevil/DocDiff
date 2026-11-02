@@ -44,7 +44,9 @@ function TemplateRow({ tpl, n, onUse, onAddVersion, onRename, onDelete, onDelete
   const latest = tpl.versions[tpl.versions.length - 1];
   const meta = [t('{n} 个版本', { n: tpl.versions.length }), latest ? t('最新 {v}', { v: latest.label }) : '', n ? t('{n} 份往来稿', { n }) : ''].filter(Boolean).join(' · ');
   return (
-    <div className="lib-row" role="button" tabIndex={0} onClick={() => edit === null && onUse(tpl)} onKeyDown={(e) => { if (e.target === e.currentTarget && edit === null && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onUse(tpl); } }}>
+    // 1.8.1：行本身不是按钮（里面还有“…”），“打开”由铺满整行的透明按钮承担，避免嵌套交互
+    <div className="lib-row">
+      {edit === null && <button type="button" className="row-open" aria-label={t('用模板「{n}」比较', { n: tpl.name })} onClick={() => onUse(tpl)} />}
       <I.FileGlyph type={latest?.file.ext || 'docx'} size={22} />
       {edit !== null
         ? <input className="lib-edit" autoFocus value={edit} onClick={(e) => e.stopPropagation()} onChange={(e) => setEdit(e.target.value)}
@@ -150,7 +152,8 @@ export function RecentRow({ a, b, time, prog, thread, onOpen, onSave, onRemove }
   const done = has && prog!.decided >= prog!.total;
   const pn = thread ? { common: thread.name, a: thread.a, b: thread.b } : pairName(a.name, b.name);
   return (
-    <div className="lib-row recent-row" role="button" tabIndex={0} title={`${a.name}\n→ ${b.name}`} onClick={onOpen} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(); } }}>
+    <div className="lib-row recent-row">
+      <button type="button" className="row-open" title={`${a.name}\n→ ${b.name}`} aria-label={t('打开比较：{a} → {b}', { a: a.name, b: b.name })} onClick={onOpen} />
       <TypeTag type={b.ext} />
       <div className="rr-main">
         {pn ? <div className="rr-name"><MidName name={pn.common} title={false} /></div>
@@ -166,7 +169,7 @@ export function RecentRow({ a, b, time, prog, thread, onOpen, onSave, onRemove }
           : t('未开始')}
       </span>
       <button ref={more} type="button" className="btn sm plain icon" aria-label={t('更多')} title={t('更多')} onClick={(e) => { e.stopPropagation(); setMenu(!menu); }}><I.IconMore /></button>
-      <Popover anchor={more} open={menu} onClose={() => setMenu(false)} width={260} className="menu" label={t('更多')}>
+      <Popover anchor={more} open={menu} onClose={() => setMenu(false)} width={260} className="pop-menu" label={t('更多')}>
         <MenuItem icon={<I.IconPlusDoc />} onClick={() => { setMenu(false); onSave(); }}>{t('存为往来稿')}</MenuItem>
         <MenuItem icon={<I.IconX />} onClick={() => { setMenu(false); onRemove(); }}>{t('从列表移除')}</MenuItem>
       </Popover>

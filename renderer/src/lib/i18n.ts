@@ -23,6 +23,17 @@ export function initLang(): Lang {
 export function t(zh: string, vars?: Record<string, string | number>): string {
   let s = LANG === 'en' ? (EN[zh] ?? zh) : zh;
   if (vars) for (const k of Object.keys(vars)) s = s.split(`{${k}}`).join(String(vars[k]));
+  if (LANG === 'en' && vars) s = plural(s, vars);
+  return s;
+}
+
+// 英文单复数（1.8.1）：词典里统一写复数，数字是 1 时改成单数；“file(s)”这类写法按数字选
+const ONE = /(^|[^\d.,/])1 (page|paragraph|difference|change|version|record|set|document|file|decision|comparison|item|negotiation|template|comment|line|time|minute)s\b/g;
+export function plural(s: string, vars: Record<string, string | number>) {
+  const nums = Object.values(vars).filter((x) => typeof x === 'number') as number[];
+  if (!nums.length) return s;
+  s = s.replace(ONE, '$1' + '1 $2');
+  if (s.includes('(s)')) s = s.split('(s)').join(nums.length === 1 && nums[0] === 1 ? '' : 's');
   return s;
 }
 /** 文档属性表里的中文字段名 */
