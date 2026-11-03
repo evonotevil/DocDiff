@@ -1,11 +1,11 @@
 {
-  "version": "1.8.1",
-  "pubDate": "2026-11-02",
-  "notes": "· 提高文件类型徽章和辅助文字对比度，改善界面可读性。\n· 优化长文件名、英文、语言切换、从右到左文字及大屏布局。\n· 完善键盘和读屏支持，修复菜单滚动后定位偏移。\n· 精简字体格式，字体资源从约 27 MB 降至约 14 MB。",
+  "version": "1.9.0",
+  "pubDate": "2026-11-03",
+  "notes": "· 全新标志与应用图标，新增对对互动、节日装扮和图鉴。\n· 统一英文术语、日期、默认文件名和报告表达。\n· 修复删除表格行和编号项留下空行、撤销及快速连续接受或拒绝的问题。\n· 改善菜单跟随、长名称提示、导出换行和提示条交互。",
   "downloads": {
-    "mac-arm64": "https://github.com/evonotevil/DocDiff/releases/download/v1.8.1/DocDiff-1.8.1-mac-arm64.dmg",
-    "mac-x64": "https://github.com/evonotevil/DocDiff/releases/download/v1.8.1/DocDiff-1.8.1-mac-x64.dmg",
-    "win-exe": "https://github.com/evonotevil/DocDiff/releases/download/v1.8.1/DocDiff-Setup-1.8.1.exe",
-    "page": "https://github.com/evonotevil/DocDiff/releases/tag/v1.8.1"
+    "mac-arm64": "https://github.com/evonotevil/DocDiff/releases/download/v1.9.0/DocDiff-1.9.0-mac-arm64.dmg",
+    "mac-x64": "https://github.com/evonotevil/DocDiff/releases/download/v1.9.0/DocDiff-1.9.0-mac-x64.dmg",
+    "win-exe": "https://github.com/evonotevil/DocDiff/releases/download/v1.9.0/DocDiff-Setup-1.9.0.exe",
+    "page": "https://github.com/evonotevil/DocDiff/releases/tag/v1.9.0"
   }
 }
