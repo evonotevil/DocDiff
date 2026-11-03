@@ -231,4 +231,29 @@ make('neg', 'V1', neg('百分之二十', '三十', '甲方所在地人民法院'
 make('neg', 'V2', neg('百分之十五', '六十', '甲方所在地人民法院'))
 make('neg', 'V3', neg('百分之二十', '六十', '甲方所在地人民法院'))
 make('neg', 'V4', neg('百分之十五', '六十', '乙方所在地仲裁委员会', '本合同自双方签字盖章之日起生效。'))
+
+# ---- 1.9 · QA P1：对方修订删除的整行 / 段落标记 ----
+REV = 'w:author="对方律师" w:date="2026-10-01T00:00:00Z"'
+def tc(c, deleted=False, i=0):
+    inner = f'<w:del w:id="{950 + i}" {REV}><w:r><w:delText xml:space="preserve">{esc(c)}</w:delText></w:r></w:del>' if deleted else r(c)
+    return f'<w:tc><w:tcPr><w:tcW w:w="3000" w:type="dxa"/></w:tcPr><w:p>{inner}</w:p></w:tc>'
+def tbl_rows(rows):
+    grid = ''.join('<w:gridCol w:w="3000"/>' for _ in rows[0][1])
+    trs = ''.join(f'<w:tr>{"<w:trPr><w:del w:id=" + chr(34) + str(940 + k) + chr(34) + " " + REV + "/></w:trPr>" if dl else ""}{"".join(tc(c, dl, k * 10 + j) for j, c in enumerate(cells))}</w:tr>' for k, (dl, cells) in enumerate(rows))
+    return f'<w:tbl><w:tblPr><w:tblStyle w:val="TableGrid"/><w:tblW w:w="0" w:type="auto"/></w:tblPr><w:tblGrid>{grid}</w:tblGrid>{trs}</w:tbl>'
+fee = [['项目', '金额'], ['设计费', '一万元'], ['开发费', '五万元'], ['维护费', '八千元']]
+make('rowdel', 'A', p('第一条 费用如下。') + tbl(fee) + p('第二条 付款方式另行约定。'))
+make('rowdel', 'B', p('第一条 费用如下。') + tbl_rows([(False, fee[0]), (False, fee[1]), (True, fee[2]), (False, ['维护费', '九千元'])]) + p('第二条 付款方式另行约定。'))
+
+def pmark(t, num=None, keep=False, i=0):
+    ppr = (f'<w:numPr><w:ilvl w:val="0"/><w:numId w:val="{num}"/></w:numPr>' if num is not None else '') + f'<w:rPr><w:del w:id="{980 + i}" {REV}/></w:rPr>'
+    body = r(t) if keep else f'<w:del w:id="{990 + i}" {REV}><w:r><w:delText xml:space="preserve">{esc(t)}</w:delText></w:r></w:del>'
+    return f'<w:p><w:pPr>{ppr}</w:pPr>{body}</w:p>'
+duty = ['按时交付成果。', '配合验收工作。', '提供技术支持。']
+make('lidel', 'A', p('乙方义务：') + ''.join(p(x, num=1) for x in duty) + p('以上义务长期有效。'), numbering=True)
+make('lidel', 'B', p('乙方义务：') + p(duty[0], num=1) + pmark(duty[1], num=1, i=1) + p('提供技术支持六个月。', num=1) + p('以上义务长期有效。'), numbering=True)
+# 段落标记删了、文字留着：两段并成一段
+make('pmerge', 'A', p('第三条 保密。') + p('双方对合作内容保密，') + p('期限为三年。') + p('第四条 其他。'))
+make('pmerge', 'B', p('第三条 保密。') + pmark('双方对合作内容保密，', keep=True, i=2) + p('期限为五年。') + p('第四条 其他。'))
+
 print('ok', OUT)

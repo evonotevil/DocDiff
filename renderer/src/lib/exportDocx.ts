@@ -9,7 +9,7 @@ import { initialsOf } from './review';
 import type { Risk } from './insight';
 import { riskTag } from './describe';
 import { fmtText } from './describe';
-import { t } from './i18n';
+import { t, colon, paren, bracket } from './i18n';
 
 export type Decision = 'a' | 'r' | undefined;
 export interface Piece {
@@ -122,13 +122,13 @@ export async function buildDocx(rows: Row[], blocksA: Block[], blocksB: Block[],
     const c = changeById.get(cid);
     const risk = o.risks.get(cid);
     const head: TextRun[] = [];
-    if (risk) head.push(new TextRun({ text: `【${t('风险')}·${riskTag(risk)}】`, bold: true }));
-    if (d.v) head.push(new TextRun({ text: `【${t(VERDICT_LABEL[d.v])}】`, bold: true }));
-    if (where) head.push(new TextRun({ text: `（${where}）` }));
+    if (risk) head.push(new TextRun({ text: bracket(`${t('风险')} · ${riskTag(risk)}`), bold: true }));
+    if (d.v) head.push(new TextRun({ text: bracket(t(VERDICT_LABEL[d.v])), bold: true }));
+    if (where) head.push(new TextRun({ text: paren(where).trim() }));
     if (d.note) head.push(new TextRun({ text: ` ${d.note}` }));
     const paras = [new Paragraph({ children: head })];
     if (c?.kind === 'fmt' && c.desc?.k === 'fmt') paras.push(new Paragraph({ children: [new TextRun({ text: t('格式：{f}', { f: fmtText(c.desc.sig) }), italics: true })] }));
-    if (where && c) paras.push(new Paragraph({ children: [new TextRun({ text: c.kind === 'mod' ? `“${c.before}” → “${c.after}”` : c.kind === 'ins' ? `${t('新增')}：${c.after}` : c.kind === 'del' ? `${t('删除')}：${c.before}` : c.before, italics: true })] }));
+    if (where && c) paras.push(new Paragraph({ children: [new TextRun({ text: c.kind === 'mod' ? `“${c.before}” → “${c.after}”` : c.kind === 'ins' ? `${t('新增')}${colon()}${c.after}` : c.kind === 'del' ? `${t('删除')}${colon()}${c.before}` : c.before, italics: true })] }));
     const id = comments.length;
     const by = o.reviewer.name;
     comments.push({ id, author: by, initials: o.reviewer.initials, date: new Date(d.at || Date.now()), children: paras });
@@ -146,7 +146,7 @@ export async function buildDocx(rows: Row[], blocksA: Block[], blocksB: Block[],
   const runOf = (p: Piece): Child[] => {
     const st = p.st || ({} as Run);
     if (p.mark === 'del' || p.mark === 'mdel') {
-      return p.t.split('\n').map((x) => new DeletedTextRun({ text: x, ...fmtProps(st), ...rev() } as any));
+      return p.t.split('\n').map((x, i) => new DeletedTextRun({ text: x, ...fmtProps(st), break: i ? 1 : undefined, ...rev() } as any));
     }
     if (p.mark === 'ins' || p.mark === 'mins') {
       return p.t.split('\n').map((x, i) => new InsertedTextRun({ text: x, ...fmtProps(st), break: i ? 1 : undefined, ...rev() } as any));

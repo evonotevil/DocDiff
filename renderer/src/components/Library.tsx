@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { t } from '../lib/i18n';
+import { t, isEn, fmtShortDate } from '../lib/i18n';
 import * as I from './icons';
 import { Popover, MenuItem } from './Popover';
 import { Modal } from './Modal';
@@ -11,7 +11,7 @@ import { pairName } from '../lib/pairName';
 import { type Template, type TplVersion, type Library as Lib, pick, live, fingerprint } from '../lib/library';
 
 const pct = (x: number) => `${Math.round(x * 100)}%`;
-const md = (ms: number) => { const d = new Date(ms); return t('{m}月{d}日', { m: d.getMonth() + 1, d: d.getDate() }); };
+const md = (ms: number) => { const d = new Date(ms); return isEn() ? fmtShortDate(ms) : t('{m}月{d}日', { m: d.getMonth() + 1, d: d.getDate() }); };
 
 /** 首页「模板」栏（1.8） */
 export function TemplatesCard({ lib, threadCount, onUse, onNew, onAddVersion, onRename, onDelete, onDeleteVersion, busy }: {
@@ -46,7 +46,7 @@ function TemplateRow({ tpl, n, onUse, onAddVersion, onRename, onDelete, onDelete
   return (
     // 1.8.1：行本身不是按钮（里面还有“…”），“打开”由铺满整行的透明按钮承担，避免嵌套交互
     <div className="lib-row">
-      {edit === null && <button type="button" className="row-open" aria-label={t('用模板「{n}」比较', { n: tpl.name })} onClick={() => onUse(tpl)} />}
+      {edit === null && <button type="button" className="row-open" title={tpl.name} aria-label={t('用模板「{n}」比较', { n: tpl.name })} onClick={() => onUse(tpl)} />}
       <I.FileGlyph type={latest?.file.ext || 'docx'} size={22} />
       {edit !== null
         ? <input className="lib-edit" autoFocus value={edit} onClick={(e) => e.stopPropagation()} onChange={(e) => setEdit(e.target.value)}

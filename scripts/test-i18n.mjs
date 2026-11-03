@@ -15,5 +15,6 @@ const cases = [
   ['1 pages', { n: 1 }, '1 page'], ['21 paragraphs', { n: 21 }, '21 paragraphs'], ['1 paragraphs', { n: 1 }, '1 paragraph'],
   ['Add 1 more file(s)', { n: 1 }, 'Add 1 more file'], ['Add 2 more file(s)', { n: 2 }, 'Add 2 more files'],
   ['All 1 changes handled', { n: 1 }, 'All 1 change handled'], ['2.1 pages', { n: 2.1 }, '2.1 pages'],
+  ['1 open items — consider resolving them first', { n: 1 }, '1 open item — consider resolving them first'], ['3 open items', { n: 3 }, '3 open items'], ['1 unchanged paragraphs', { n: 1 }, '1 unchanged paragraph'],
 ];
 for (const [s, v, want] of cases) test(`${s} (${JSON.stringify(v)})`, () => assert.equal(plural(s, v), want));

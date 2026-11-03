@@ -5,6 +5,7 @@ import type { Plan } from './plan';
 import type { Decision, Reason } from './ooxml';
 import type { DraftReq, DraftRes } from './draft.worker';
 import { getDraftMeta, setDraftMeta, type DraftMeta } from '../review';
+import { isEn } from '../i18n';
 
 const api = (window as any).api || {};
 
@@ -178,7 +179,7 @@ export class DraftSync {
     const r = await call({
       key: c.pk + ':' + c.bData.byteLength,
       base: c.bData, plan: c.plan, decisions: this.decisions, mode, pending: o.pending, keepComments: o.keepComments,
-      reviewer: c.reviewer, reviewerInitials: c.initials, theirs: c.theirs, theirsDate: c.theirsDate, now: Date.now(),
+      reviewer: c.reviewer, reviewerInitials: c.initials, theirs: c.theirs, theirsDate: c.theirsDate, now: Date.now(), openLabel: isEn() ? 'Open for discussion' : undefined,
     });
     if (r.kind === 'err') throw new Error(r.error);
     return r.out;

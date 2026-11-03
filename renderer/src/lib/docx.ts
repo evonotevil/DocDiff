@@ -1,6 +1,7 @@
 import JSZip from 'jszip';
 import type { Block, Run, DocModel, FileInfo } from './model';
 import { blockText, isPageNumberText } from './model';
+import { markAction, rowDeleted } from './trackedStructure';
 
 const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 
@@ -224,23 +225,42 @@ export async function parseDocx(file: FileInfo): Promise<DocModel> {
     return b;
   };
 
+  // 段落标记被删（对方修订）：按“接受”并进下一段；没内容就整段去掉（1.9 · QA P1）
+  // 规则和 draft/ooxml.ts 的 acceptExisting 共用 trackedStructure.ts，两边必须一致
   const walk = async (container: Element, out: Block[] = blocks) => {
+    let carry: Run[] = [];
     for (const el of kids(container)) {
       const ln = el.localName;
-      if (ln === 'p') out.push(await paraBlock(el));
-      else if (ln === 'tbl') {
+      if (ln === 'p') {
+        const act = markAction(el);
+        if (act === 'drop' && !carry.length) continue;
+        if (act === 'drop' || act === 'merge') { carry.push(...(await paraBlock(el, true)).runs); continue; }
+        const b = await paraBlock(el);
+        if (carry.length) { b.runs = [...carry, ...b.runs]; carry = []; }
+        out.push(b);
+        continue;
+      }
+      if (carry.length) { out.push({ kind: 'p', runs: carry }); carry = []; }
+      if (ln === 'tbl') {
         for (const tr of kids(el, 'tr')) {
+          if (rowDeleted(tr)) continue; // 对方修订删除的整行：按“接受”不存在
           const cells: Run[][] = [];
           for (const tc of kids(tr, 'tc')) {
             const cr: Run[] = [];
             const ps = tc.getElementsByTagNameNS(W, 'p');
             let first = true;
+            let cc: Run[] = [];
             for (const p of Array.from(ps)) {
+              const act = markAction(p);
+              if (act === 'drop' && !cc.length) continue;
               const pb = await paraBlock(p, true);
+              if (act === 'drop' || act === 'merge') { cc.push(...pb.runs); continue; }
               if (!first) cr.push({ t: '\n' });
               first = false;
-              cr.push(...pb.runs);
+              cr.push(...cc, ...pb.runs);
+              cc = [];
             }
+            if (cc.length) { if (!first) cr.push({ t: '\n' }); cr.push(...cc); }
             cells.push(cr);
           }
           out.push({ kind: 'tr', runs: [], cells });
@@ -248,6 +268,7 @@ export async function parseDocx(file: FileInfo): Promise<DocModel> {
       } else if (ln === 'sdt') await walk(kid(el, 'sdtContent') || el, out);
       else if (ln === 'customXml' || ln === 'ins') await walk(el, out);
     }
+    if (carry.length) out.push({ kind: 'p', runs: carry });
   };
   const body = doc.getElementsByTagNameNS(W, 'body')[0];
   if (body) await walk(body);

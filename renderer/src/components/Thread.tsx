@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { t } from '../lib/i18n';
+import { t, isEn, fmtShortDate } from '../lib/i18n';
 import * as I from './icons';
 import { Popover, MenuItem } from './Popover';
 import { Modal } from './Modal';
@@ -13,7 +13,7 @@ import type { Hint } from '../lib/hints';
 import type { RoundItem, Round } from '../lib/library';
 import type { Verdict } from '../lib/review';
 
-const md = (ms: number) => { const d = new Date(ms); return t('{m}月{d}日', { m: d.getMonth() + 1, d: d.getDate() }); };
+const md = (ms: number) => { const d = new Date(ms); return isEn() ? fmtShortDate(ms) : t('{m}月{d}日', { m: d.getMonth() + 1, d: d.getDate() }); };
 const sideLabel = (s: Side) => (s === 'ours' ? t('我方') : t('对方'));
 const VERB: Record<Verdict, string> = { a: '接受', r: '拒绝', h: '待议' };
 const cut = (s: string, n = 24) => (s.length > n ? s.slice(0, n) + '…' : s);
@@ -52,7 +52,7 @@ function ThreadRow({ th, onOpen, onRename, onArchive, onDelete }: { th: Thread; 
   return (
     // 1.8.1：行本身不是按钮，“打开”由铺满整行的透明按钮承担
     <div className="lib-row">
-      {edit === null && <button type="button" className="row-open" aria-label={t('打开往来稿「{n}」', { n: th.name })} onClick={() => onOpen(th)} />}
+      {edit === null && <button type="button" className="row-open" title={th.name} aria-label={t('打开往来稿「{n}」', { n: th.name })} onClick={() => onOpen(th)} />}
       <I.FileGlyph type={last?.file.ext || 'docx'} size={22} />
       {edit !== null
         ? <input className="lib-edit" autoFocus value={edit} onClick={(e) => e.stopPropagation()} onChange={(e) => setEdit(e.target.value)} aria-label={t('往来稿名称')}

@@ -14,22 +14,39 @@ export function Popover({ anchor, open, onClose, title, right, width = 340, alig
   children: React.ReactNode; className?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ top?: number; bottom?: number; left: number; maxH: number } | null>(null);
+  const [pos, setPos] = useState<{ top?: number; bottom?: number; left: number; maxH: number; up: boolean } | null>(null);
   useLayoutEffect(() => {
     if (!open || !anchor.current) return;
     const place = () => {
-      const r = anchor.current!.getBoundingClientRect();
+      if (!anchor.current) return; // 触发按钮已经卸载（比如切了模式）
+      const r = anchor.current.getBoundingClientRect();
       const W = window.innerWidth, H = window.innerHeight;
       let left = align === 'end' ? r.right - width : r.left;
       left = Math.max(8, Math.min(W - width - 8, left));
       const below = r.bottom + 8;
       // 放不下时向上弹：用 bottom 贴住按钮上方 8px，高度按内容往上长（beta.7；以前按最大高度推，短菜单会飘到屏幕顶上）
       const up = H - below < 220 && r.top > H - below;
-      setPos(up ? { bottom: H - r.top + 8, left, maxH: Math.min(H * 0.7, r.top - 16) } : { top: below, left, maxH: H - below - 12 });
+      setPos(up ? { bottom: H - r.top + 8, left, maxH: Math.min(H * 0.7, r.top - 16), up } : { top: below, left, maxH: H - below - 12, up });
+    };
+    // 滚动时跟着按钮走；按钮被滚出它所在的滚动区（或窗口）就关掉，不让菜单孤零零地飘着（1.9 · QA P2）
+    const onScroll = (e: Event) => {
+      const a = anchor.current;
+      if (!a || (e.target instanceof Node && ref.current?.contains(e.target))) return;
+      const r = a.getBoundingClientRect();
+      let visible = r.bottom > 0 && r.top < window.innerHeight;
+      for (let p = a.parentElement; p && visible; p = p.parentElement) {
+        const oy = getComputedStyle(p).overflowY;
+        if (oy !== 'auto' && oy !== 'scroll' && oy !== 'hidden') continue;
+        const c = p.getBoundingClientRect();
+        if (r.bottom <= c.top || r.top >= c.bottom) visible = false;
+      }
+      if (!visible) { closeRef.current(); return; }
+      place();
     };
     place();
     window.addEventListener('resize', place);
-    return () => window.removeEventListener('resize', place);
+    window.addEventListener('scroll', onScroll, true);
+    return () => { window.removeEventListener('resize', place); window.removeEventListener('scroll', onScroll, true); };
   }, [open, width, align]);
   // onClose 每次渲染都可能是新函数：放进 ref，监听只在打开 / 关闭时装卸。
   // 以前依赖 onClose，弹出层里的状态一变就重新装一次、把焦点抢回根节点（beta.5：弹出层里改名打一个字就退出）
@@ -52,8 +69,8 @@ export function Popover({ anchor, open, onClose, title, right, width = 340, alig
   if (!open || !pos) return null;
   return (
     // 点弹出层里面不往外冒泡（它在 DOM 里可能嵌在一行可点击的条目里，如“最近比较”的一行）
-    <div ref={ref} tabIndex={-1} className={`pop ${className}`} onClick={(e) => e.stopPropagation()} role="dialog" aria-label={label || (typeof title === 'string' ? title : undefined)}
-      style={{ top: pos.top, bottom: pos.bottom, left: pos.left, width, maxHeight: pos.maxH }}>
+    <div ref={ref} tabIndex={-1} className={`pop${pos.up ? ' up' : ''} ${className}`} onClick={(e) => e.stopPropagation()} role="dialog" aria-label={label || (typeof title === 'string' ? title : undefined)}
+      style={{ top: pos.top, bottom: pos.bottom, left: pos.left, width, maxHeight: pos.maxH, transformOrigin: `${pos.up ? 'bottom' : 'top'} ${align === 'end' ? 'right' : 'left'}` }}>
       {title && <div className="pop-h"><span className="pop-t">{title}</span>{right && <span className="pop-r">{right}</span>}</div>}
       <div className="pop-b">{children}</div>
     </div>

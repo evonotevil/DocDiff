@@ -155,6 +155,9 @@ export interface Risk { cid: number; cat: RiskCat; detail: RiskDetail; kw?: stri
 export interface RiskOpts { money: boolean; date: boolean; keywords: string[] }
 
 export const DEFAULT_KEYWORDS = ['违约', '赔偿', '责任上限', '解除'];
+/** 英文界面第一次用时的默认关键词（1.9）：同样是违约、赔偿、责任上限、解除 */
+export const DEFAULT_KEYWORDS_EN = ['damages', 'indemnity', 'liability', 'termination'];
+export const defaultKeywords = (en: boolean) => (en ? DEFAULT_KEYWORDS_EN : DEFAULT_KEYWORDS);
 
 function unitOf(h: NumHit): string {
   const r = h.right.match(CURRENCY_RIGHT) || h.right.match(PERCENT_RIGHT) || h.right.match(DURATION_RIGHT);

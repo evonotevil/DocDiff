@@ -244,7 +244,7 @@ export const EN_DICT: Record<string, string> = {
   '审阅完成': 'Review complete',
   '导出审阅结果…': 'Export review…',
   '差异与设置': 'Differences and settings',
-  '审阅后定稿': 'Reviewed final',
+  '审阅记录存档': 'Review record',
   '准备好了，开始比较吧': 'Ready. Start comparing',
   '页眉': 'Header',
   '页脚': 'Footer',

@@ -8,6 +8,7 @@
 // 只依赖标准 DOM 接口（childNodes / getAttributeNS / createElementNS），在 Worker 里配 @xmldom/xmldom 使用。
 import JSZip from 'jszip';
 import type { Plan, Op, PlanBlock, RunStyle } from './plan';
+import { markAction, rowDeleted } from '../trackedStructure';
 
 export const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 const XML_NS = 'http://www.w3.org/XML/1998/namespace';
@@ -35,6 +36,8 @@ export interface WriteInput {
   theirsDate: number;
   now: number;
   io: XmlIO;
+  /** 待议批注的开头（对方看得到）：中文“待议”，英文 “Open for discussion”（1.9） */
+  openLabel?: string;
 }
 export type Reason = 'section' | 'mismatch' | 'field' | 'textbox' | 'image' | 'cell' | 'place' | 'range';
 export interface WriteOutput {
@@ -81,6 +84,27 @@ const UNWRAP = new Set(['ins', 'moveTo']);
 export function acceptExisting(root: Element): number {
   const drop: Element[] = [], un: Element[] = [];
   let n = 0;
+  // 结构性的修订先处理（1.9 · QA P1），规则和 docx.ts 共用 trackedStructure.ts：
+  // 整行删除 → 去掉整行（表格空了连表一起去掉）；段落标记删除 → 并进下一段，没内容就整段去掉。
+  for (const tr of descendants(root, 'tr')) {
+    if (!rowDeleted(tr)) continue;
+    const tbl = tr.parentNode as Element;
+    remove(tr); n++;
+    if (tbl && !kids(tbl, 'tr').length) remove(tbl);
+  }
+  for (const p of descendants(root, 'p')) {
+    if (!p.parentNode) continue;
+    const act = markAction(p);
+    if (!act || act === 'keep') continue;
+    if (act === 'merge') {
+      let nx = p.nextSibling; while (nx && !isEl(nx)) nx = nx.nextSibling;
+      const to = nx as Element;
+      const pPr = kid(to, 'pPr');
+      const at = pPr ? pPr.nextSibling : to.firstChild;
+      for (const c of kids(p)) if (!isW(c, 'pPr')) to.insertBefore(c, at);
+    }
+    remove(p);
+  }
   const rec = (el: Element) => {
     for (let c = el.firstChild; c; c = c.nextSibling) {
       if (!isW(c)) { if (isEl(c)) rec(c); continue; }
@@ -651,7 +675,8 @@ export async function writeReview(inp: WriteInput & { prepared?: Prepared }): Pr
     const d = decisions[cid];
     if (!d || unwritten.has(cid)) return '';
     const note = (d.note || '').trim();
-    if (d.v === 'h') return note ? `待议：${note}` : '待议';
+    const open = inp.openLabel || '待议';
+    if (d.v === 'h') return note ? `${open}${/[\u4e00-\u9fff]/.test(open) ? '：' : ': '}${note}` : open;
     return note;
   };
   const cids = [...new Set(plan.ops.map((o) => o.cid))];

@@ -1,14 +1,18 @@
 import React, { useEffect, useRef } from 'react';
 import { t } from '../lib/i18n';
 import * as I from './icons';
+import { Mascot, useMascotOn, type Mood } from './Mascot';
 
 /**
  * 统一的弹窗：role="dialog" + aria-modal，打开时把焦点放进来，Tab 只在弹窗里循环，
  * Esc 关闭，关闭后焦点回到打开它的那个按钮。
  */
-export function Modal({ title, onClose, children, className, labelledIcon, footer }: {
+export function Modal({ title, onClose, children, className, labelledIcon, footer, mood = 'happy' }: {
   title: React.ReactNode; onClose: () => void; children: React.ReactNode; className?: string; labelledIcon?: React.ReactNode; footer?: React.ReactNode;
+  /** 1.9 · M14：标题左侧 36px 的静态对对，表情按弹窗选（需要谨慎的用思考）；关掉“让对对出来走走”时不出现 */
+  mood?: Mood;
 }) {
+  const walk = useMascotOn();
   const ref = useRef<HTMLDivElement>(null);
   const titleId = useRef(`dlg-${Math.random().toString(36).slice(2)}`).current;
   useEffect(() => {
@@ -33,6 +37,7 @@ export function Modal({ title, onClose, children, className, labelledIcon, foote
     <div className="modal-bg" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className={`modal ${className || ''}`} role="dialog" aria-modal="true" aria-labelledby={titleId} ref={ref} tabIndex={-1}>
         <div className="modal-head">
+          {walk && <span className="modal-mascot"><Mascot size={36} mood={mood} /></span>}
           <h2 id={titleId}>{labelledIcon}{title}</h2>
           <button className="btn sm plain icon" onClick={onClose} title={t('关闭（Esc）')} aria-label={t('关闭')}><I.IconX /></button>
         </div>

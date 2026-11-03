@@ -115,6 +115,15 @@ for (const name of cases) {
           throw new Error(`${v} 视图不一致 @${i}: 预期「${want.slice(Math.max(0, i - 15), i + 25)}」 实际「${got.slice(Math.max(0, i - 15), i + 25)}」`);
         }
       }
+      // 结构：不能凭空多出空表格行、空列表项（1.9 · QA P1：对方修订删除的整行 / 段落标记）
+      {
+        const empties = (bs) => bs.filter((b) => (b.kind === 'tr' && b.cells.every((c) => !c.map((r) => r.t).join('').trim())) || (b.kind === 'li' && !b.runs.map((r) => r.t).join('').trim())).length;
+        const outB = (await load(file)).blocks;
+        // 夹具里两份原稿都没有空行空项；读对方文件时就不该多出来，写回后也不该
+        const lim = empties(bA);
+        if (empties(bB) > lim) throw new Error(`读取：对方文件读出 ${empties(bB) - lim} 个空表格行 / 空列表项`);
+        if (empties(outB) > lim) throw new Error(`结构：多出 ${empties(outB) - lim} 个空表格行 / 空列表项`);
+      }
       if (VALIDATE) {
         try { execFileSync('python3', [VALIDATE, file, '--original', path.join(FIX, `${name}-B.docx`)], { stdio: 'pipe' }); row.xsd = 'ok'; }
         catch (e) { row.xsd = 'FAIL'; throw new Error('XSD: ' + (e.stdout?.toString() || '') + (e.stderr?.toString() || '')); }

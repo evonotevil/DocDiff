@@ -8,8 +8,8 @@ import { buildDocx } from './lib/exportDocx';
 import { forEachPage, getPageCount, PageRange, BIG_PAGES, fullRange, rangeKey, clearPageCaches } from './lib/pages';
 import { PageRangeGate, RangeLine, RangeProgress } from './components/PageRangeGate';
 import { kbd, modPressed, isMac } from './lib/platform';
-import { t, setLang, initLang, Lang } from './lib/i18n';
-import { clauseMap, detectRisks, DEFAULT_KEYWORDS, Risk } from './lib/insight';
+import { t, setLang, initLang, Lang, isEn, fmtAgo, fmtShortDate } from './lib/i18n';
+import { clauseMap, detectRisks, DEFAULT_KEYWORDS, defaultKeywords, Risk } from './lib/insight';
 import { DecMap, Dec, Verdict, pairKey, loadDecisions, saveDecisions, reviewProgress, initialsOf } from './lib/review';
 import { scopeInfo, pageList } from './lib/scope';
 import { getSetting, setSetting as saveSetting, usePersistStatus } from './lib/persist';
@@ -22,7 +22,9 @@ import { Popover, MenuItem } from './components/Popover';
 import { ExportDialog, ExportKind } from './components/ExportDialog';
 import { SettingsModal, SettingsValues, UpdInfo, APP_VERSION, type Tab as SettingsTab } from './components/SettingsModal';
 import { Modal } from './components/Modal';
-import { Mascot, Confetti } from './components/Mascot';
+import { Mascot, Confetti, MascotOn, Bubble, useFade } from './components/Mascot';
+import { HomePeek, ReviewPeek, useReviewPeek, WaitMascot, useCare } from './components/MascotScenes';
+import { markSeen, countCompare, gate as mascotGate } from './lib/mascot/store';
 import { Wordmark } from './components/Logo';
 import { Switch, Opt, Seg, Kbd, useMedia, splitName, MidName, TypeTag } from './components/ui';
 import * as I from './components/icons';
@@ -67,6 +69,8 @@ interface Prefs {
   authorName: string; commentAccepted: boolean;
   riskMoney: boolean; riskDate: boolean; keywords: string[];
   paperFollowTheme: boolean; celebrate: boolean;
+  /** 1.9：让对对出来走走（默认开） */
+  mascotWalk: boolean;
   // 1.8：审阅稿、定稿的文件名，{name} = 对方文件名
   draftName: string; finalName: string;
   /** 以前的审阅稿被删了或挪走了：自动重新生成 / 先问我（beta.6） */
@@ -82,11 +86,13 @@ const DEFAULT_PREFS: Prefs = {
   reviewerName: sysUser, reviewerInitials: initialsOf(sysUser), reviewerAsked: false,
   authorName: '', commentAccepted: true,
   riskMoney: true, riskDate: true, keywords: DEFAULT_KEYWORDS,
-  paperFollowTheme: false, celebrate: false,
+  paperFollowTheme: false, celebrate: false, mascotWalk: true,
   draftName: '', finalName: '', draftMissing: 'auto',
 };
 function loadPrefs(): Prefs {
-  try { const v = getSetting('prefs-v2'); return { ...DEFAULT_PREFS, ...(typeof v === 'string' ? JSON.parse(v) : v || {}) }; } catch { return DEFAULT_PREFS; }
+  // 1.9：没设过关键词时按界面语言给默认值（loadPrefs 在 initLang 之后）
+  const base = { ...DEFAULT_PREFS, keywords: defaultKeywords(isEn()) };
+  try { const v = getSetting('prefs-v2'); return { ...base, ...(typeof v === 'string' ? JSON.parse(v) : v || {}) }; } catch { return base; }
 }
 
 // ---------- 音效（很轻的提示音，可在设置里关闭） ----------
@@ -124,6 +130,7 @@ const docStat = (d: DocModel) => `${d.type.toUpperCase()} · ${fmtBytes(d.file.s
 function timeAgo(ts: number) {
   const s = (Date.now() - ts) / 1000;
   if (s < 60) return t('刚刚');
+  if (isEn()) return s < 86400 * 7 ? fmtAgo(s) : fmtShortDate(ts); // 1.9：英文交给 Intl
   if (s < 3600) return t('{n} 分钟前', { n: Math.floor(s / 60) });
   if (s < 86400) return t('{n} 小时前', { n: Math.floor(s / 3600) });
   if (s < 86400 * 7) return t('{n} 天前', { n: Math.floor(s / 86400) });
@@ -201,7 +208,7 @@ function FilePill({ side, doc, onOpen, onFiles, changed }: { side: Side; doc: Do
 function PasswordModal({ name, wrong, onOk, onCancel }: { name: string; wrong: boolean; onOk: (p: string) => void; onCancel: () => void }) {
   const [v, setV] = useState('');
   return (
-    <Modal title={t('这个 PDF 有密码')} onClose={onCancel} footer={<><button className="btn plain" onClick={onCancel}>{t('取消')}</button><button className="btn primary" onClick={() => onOk(v)}>{t('打开')}</button></>}>
+    <Modal title={t('这个 PDF 有密码')} mood="think" onClose={onCancel} footer={<><button className="btn plain" onClick={onCancel}>{t('取消')}</button><button className="btn primary" onClick={() => onOk(v)}>{t('打开')}</button></>}>
       <p>{t('「{f}」受密码保护。', { f: name })}{wrong && <b className="danger-text">{t('密码不对，再试一次。')}</b>}</p>
       <input type="password" autoFocus value={v} onChange={(e) => setV(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && onOk(v)} placeholder={t('输入密码')} aria-label={t('输入密码')} />
     </Modal>
@@ -250,6 +257,18 @@ const VERDICT_FB: Record<Verdict, string> = { a: '已接受，保留新版本', 
 const VERDICT_SHORT: Record<Verdict, string> = { a: '已接受', r: '已拒绝', h: '待议' };
 
 // =========================================================
+
+/** 可暂停的计时器（1.9）：鼠标停在提示上、或焦点在里面时暂停，离开后继续剩下的时间 */
+function pausableTimer() {
+  let t: any = 0, end = 0, left = 0, fn: () => void = () => {}, paused = false;
+  return {
+    set(f: () => void, ms: number) { clearTimeout(t); paused = false; fn = f; end = Date.now() + ms; t = setTimeout(() => { t = 0; f(); }, ms); },
+    clear() { clearTimeout(t); t = 0; paused = false; },
+    pause() { if (paused || !t) return; clearTimeout(t); t = 0; left = Math.max(0, end - Date.now()); paused = true; },
+    resume(min = 0) { if (!paused) return; paused = false; const ms = Math.max(min, left); end = Date.now() + ms; t = setTimeout(() => { t = 0; fn(); }, ms); },
+  };
+}
+
 export default function App() {
   const [docs, setDocs] = useState<[DocModel | null, DocModel | null]>([null, null]);
   const [busy, setBusy] = useState<[boolean, boolean]>([false, false]);
@@ -268,6 +287,8 @@ export default function App() {
   const changeLang = (l: Lang) => { setLang(l); setLangState(l); api.setLang?.(l); };
   const [prefs, setPrefs] = useState<Prefs>(loadPrefs);
   const set = <K extends keyof Prefs>(k: K) => (v: Prefs[K]) => setPrefs((p) => ({ ...p, [k]: v }));
+  const prefsRef = useRef(prefs);
+  prefsRef.current = prefs;
   const [formatting, setFormatting] = useState(true);
   const [recent, setRecent] = useState<any[]>([]);
   const [changedSides, setChangedSides] = useState<Side[]>([]);
@@ -275,12 +296,21 @@ export default function App() {
   const [decisions, setDecisions] = useState<DecMap>({});
   const [feedback, setFeedback] = useState<Verdict | null>(null);
   const [doneOpen, setDoneOpen] = useState(false);
+  // 1.9 · M5：每次打开完成页随机一种欢呼
+  const doneFlavor = useMemo(() => Math.random() < 0.5, [doneOpen]);
   // 批量操作先确认，做完可撤销（1.7.3）
   const [bulkAsk, setBulkAsk] = useState<null | 'a' | 'r' | 'reset'>(null);
-  const [undoToast, setUndoToast] = useState<null | { msg: string; obj?: string; undo: () => void }>(null);
-  const undoTimer = useRef<any>(0);
+  // scope：'home' = 首页删除往来稿 / 模板；否则是这一对文件的 pk（批量决定、沿用上轮）。1.9 · QA P1：撤销不能串到别的动作、别的文件
+  const [undoToast, setUndoToast] = useState<null | { msg: string; obj?: string; undo: () => void; scope: string }>(null);
+  const undoRef = useRef(undoToast);
+  // 提示收起了（点 ×、被新提示替换、超时）：暂停中的真正清除继续走完，不能永远停着
+  useEffect(() => { if (!undoToast) purgeTimer.current.resume(0); }, [undoToast]);
+  undoRef.current = undoToast;
+  /** 审阅类的撤销提示（批量、沿用上轮）只对“紧接着的下一步”有效：之后又做了别的，就收起，U 回到撤销单步决定 */
+  const dropReviewUndo = () => { if (undoRef.current && undoRef.current.scope !== 'home') { undoTimer.current.clear(); undoRef.current = null; setUndoToast(null); } };
+  const undoTimer = useRef(pausableTimer());
   /** 删除模板 / 往来稿后真正清掉的计时器，和撤销提示的计时器分开：中途做别的批量操作不会把清理取消掉 */
-  const purgeTimer = useRef<any>(0);
+  const purgeTimer = useRef(pausableTimer());
   const [dismissDegraded, setDismissDegraded] = useState(false);
   const [dismissCross, setDismissCross] = useState('');
   const persist = usePersistStatus();
@@ -311,6 +341,7 @@ export default function App() {
   const redlineRef = useRef<HTMLDivElement>(null);
   const noteRef = useRef<HTMLInputElement>(null);
   const narrow = useMedia('(max-width: 1180px)');
+  const homeNarrow = useMedia('(max-width: 1099px)');
   const [navWide, setNavWide] = useState(false);
   const [drawer, setDrawer] = useState(false);
   const toggleNav = () => (narrow ? setNavWide((v) => !v) : setPrefs((p) => ({ ...p, navOpen: !p.navOpen })));
@@ -321,8 +352,15 @@ export default function App() {
   useEffect(() => { saveSetting('prefs-v2', prefs); }, [prefs]);
   useEffect(() => { api.setLang?.(lang); }, []);
   useEffect(() => { api.recentGet?.().then(setRecent); }, [compared]);
-  const toastTimer = useRef<any>(0);
-  const flash = (m: string) => { clearTimeout(toastTimer.current); setToast(m); toastTimer.current = setTimeout(() => setToast(null), 3200); };
+  const toastTimer = useRef(pausableTimer());
+  const flash = (m: string, moment?: string) => { toastTimer.current.clear(); setToast(m); toastTimer.current.set(() => setToast(null), 3200); if (moment) cheer(moment); };
+  // 完成一件事的瞬间（1.9 · M10）：对对在提示条左边一闪而过 1.2 秒；同一种 30 秒内最多一次；出错的提示不加
+  const [moment, setMoment] = useState<null | { act: string; n: number }>(null);
+  const momentT = useRef<any>(0);
+  const cheer = (act: string) => {
+    if (!prefsRef.current.mascotWalk || !mascotGate('moment:' + act)) return;
+    setMoment({ act, n: Date.now() }); clearTimeout(momentT.current); momentT.current = setTimeout(() => setMoment(null), 1200);
+  };
 
   // ---------- 检查更新 ----------
   const checkUpdate = useCallback(async (manual: boolean) => {
@@ -388,6 +426,7 @@ export default function App() {
     return true;
   };
   const openThread = async (th: Thread, a?: ThreadVersion, b?: ThreadVersion) => {
+    dropReviewUndo();
     const vs = th.versions;
     const dp = !a && !b ? defaultPair(th) : null;
     const vb = b || dp?.b || vs[vs.length - 1], va = a || dp?.a || vs[vs.indexOf(vb) - 1];
@@ -485,11 +524,11 @@ export default function App() {
   /** 删除：先做标记，10 秒内可撤销，之后真正清掉（连同库里不再用到的文件） */
   const softDelete = (apply: (l: Library) => Library, restore: (l: Library) => Library, msg: string, obj?: string) => {
     commitLib(apply(libRef.current));
-    clearTimeout(undoTimer.current);
-    clearTimeout(purgeTimer.current);
-    setUndoToast({ msg, obj, undo: () => { clearTimeout(undoTimer.current); setUndoToast(null); commitLib(restore(libRef.current)); flash(t('已撤销删除')); } });
-    undoTimer.current = setTimeout(() => setUndoToast(null), UNDO_MS);
-    purgeTimer.current = setTimeout(() => {
+    undoTimer.current.clear();
+    purgeTimer.current.clear();
+    setUndoToast({ msg, obj, scope: 'home', undo: () => { undoTimer.current.clear(); setUndoToast(null); commitLib(restore(libRef.current)); flash(t('已撤销删除')); } });
+    undoTimer.current.set(() => setUndoToast(null), UNDO_MS);
+    purgeTimer.current.set(() => {
       const l = libRef.current;
       commitLib({ ...l, templates: l.templates.filter((y) => !y.deleted), threads: l.threads.filter((y) => !y.deleted) }, true);
     }, UNDO_MS);
@@ -651,6 +690,10 @@ export default function App() {
   // ---------- 审阅决定：载入 / 保存 / 设置变化后的迁移 ----------
   const reviewer = prefs.reviewerName.trim() || t('审阅人');
   const pk = pairKey(A?.sha256, B?.sha256);
+  const pkRef = useRef(pk);
+  pkRef.current = pk;
+  // 换了文件（交换左右、换版本、换文档）：上一对文件的撤销提示作废
+  useEffect(() => { dropReviewUndo(); }, [pk]);
   const decFor = useRef<DiffResult | null>(null);
   const lastLoaded = useRef<{ pk: string; snap: string; opts: any } | null>(null);
   const optSnap = { ignoreCase: prefs.ignoreCase, ignoreWs: prefs.ignoreWs, precision: prefs.precision, detectMoves: prefs.detectMoves, normPunct: prefs.normPunct, formatting };
@@ -685,8 +728,12 @@ export default function App() {
   const [draftState, setDraftState] = useState<DraftState>({ s: 'none', unwritten: [], prior: 0 });
   // 只在真的写好后提示（beta.7 · E5）；没写完的情况由状态片和完成页说明
   useEffect(() => { if (draftState.regenerated && draftState.s === 'saved' && !draftState.unwritten.length) flash(t('原来的审阅稿不见了，已按 DocDiff 里的决定在原位置重建。在 Word 里直接改的内容没有保留。')); }, [draftState.regenerated, draftState.s]);
+  const doneRef = useRef(false);
+
   const heldN = richRes ? richRes.changes.filter((c) => decisions[c.id]?.v === 'h').length : 0;
   const allDecided = !!richRes && richRes.changes.length > 0 && richRes.changes.every((c) => decisions[c.id]?.v);
+  // 刚审完一份回到首页：对对说一句“干得漂亮”（只在首页挂载时读一次）
+  useEffect(() => { if (allDecided) doneRef.current = true; else if (compared) doneRef.current = false; }, [allDecided, compared]);
   // 原始文档是谁：往来稿里写版本号（第一版来自模板时写模板名和版本），普通比较写文件名
   const origLabel = (() => {
     if (activeTh && thread) {
@@ -699,6 +746,8 @@ export default function App() {
     return A ? A.file.name : '';
   })();
   // 只有真的写好（没被 Word 占着、没有写不进的处）才算“可以发给对方”（P1-1）
+  // 生成审阅稿后第一次写好：盖一下章（1.9 · M10）
+  useEffect(() => { if (draftState.fresh && draftState.s === 'saved') cheer('stamp'); }, [draftState.fresh, draftState.s]);
   const draftReady = draftState.s === 'saved' && !draftState.unwritten.length && !!draftState.path;
   const [finalReq, setFinalReq] = useState(0);
   /** 刚生成的定稿（完成页显示）；换了文件或决定变了就清掉 */
@@ -798,6 +847,13 @@ export default function App() {
   useEffect(() => { if (tab === 2 && selCid == null && shown.length) setSelCid((nextUndecided(null, decisions) || shown[0]).id); }, [tab, shown, selCid]);
   const mkDec = (v: Verdict | undefined, prev?: Dec): Dec => ({ v, by: v ? reviewer : prev?.by || reviewer, at: Date.now(), note: prev?.note });
   const decide = (cid: number | null, v: Verdict | null) => {
+    dropReviewUndo();
+    // 连按不掉速（1.9）：上一处的 220ms 跳转还没到就又按了，先立刻完成跳转，这一下作用到下一处
+    const pj = pendingJump.current;
+    if (pj) {
+      clearTimeout(pj.t); pendingJump.current = null;
+      if (v) { setSelCid(pj.to); if (cid === pj.from) cid = pj.to; }
+    }
     // 撤销：当前这处还没决定时，撤销最近一次决定并跳回那一处（刚按完 A/R 会自动跳到下一处）
     if (!v) {
       const target = cid != null && decisions[cid]?.v ? cid : decideOrder.current[decideOrder.current.length - 1];
@@ -820,15 +876,29 @@ export default function App() {
     const all = changes.every((c) => next[c.id]?.v);
     // 过半时鼓励一句（1.6.2）：只在这一次决定让进度越过一半时出现
     const before = changes.filter((c) => decisions[c.id]?.v).length, after = changes.filter((c) => next[c.id]?.v).length;
-    if (!all && changes.length >= 6 && before * 2 < changes.length && after * 2 >= changes.length) flash(t('过半了！还剩 {n} 处', { n: changes.length - after }));
+    if (!all && changes.length >= 6 && before * 2 < changes.length && after * 2 >= changes.length) {
+      flash(t('过半了！还剩 {n} 处', { n: changes.length - after }));
+      // 1.9：过半时对对也在检查器角落探头挥手（文字提示保留）
+      rpeek.fire({ act: 'wave', line: t('过半啦，继续！') }, 'half');
+    } else if (!all && changes.length >= 4 && after === changes.length - 1 && before < after) rpeek.fire({ act: 'jump', line: t('最后一处！') }, 'last');
+    else rpeek.nudge();
+    // 彩蛋：连续接受 / 拒绝 20 处不停（每两次间隔不超过 4 秒）→ 击掌
+    const nowMs = Date.now();
+    streak.current = (v === 'a' || v === 'r') && nowMs - streak.current.at < 4000 ? { n: streak.current.n + 1, at: nowMs } : { n: v === 'a' || v === 'r' ? 1 : 0, at: nowMs };
+    if (streak.current.n === 20 && prefs.mascotWalk) { markSeen('egg:streak'); rpeek.fire({ act: 'clap', line: t('手感不错！') }, 'streak'); }
     if (all && changes.length) {
       setTimeout(() => { setDoneOpen(true); if (prefs.sound) chime('done'); }, 450);
     } else {
       const n = nextUndecided(cid, next);
-      if (n) setTimeout(() => setSelCid(n.id), 220);
+      if (n) pendingJump.current = { t: setTimeout(() => { pendingJump.current = null; setSelCid(n.id); }, 220), from: cid, to: n.id };
     }
   };
+  const pendingJump = useRef<{ t: any; from: number; to: number } | null>(null);
+  const rpeek = useReviewPeek();
+  const careCard = useCare(!compared || doneOpen, prefs.mascotWalk);
+  const streak = useRef({ n: 0, at: 0 });
   const setNote = (cid: number, note: string) => {
+    dropReviewUndo();
     setDecisions((ds) => {
       const prev = ds[cid];
       const d: Dec = { v: prev?.v, by: prev?.by || reviewer, at: prev?.at || Date.now(), note: note || undefined };
@@ -858,27 +928,29 @@ export default function App() {
   const [reuseAsk, setReuseAsk] = useState(false);
   const reusable = useMemo(() => (tab === 2 ? changes.filter((c) => !decisions[c.id]?.v && hints.get(c.id)?.reuse).map((c) => ({ c, h: hints.get(c.id)! })) : []), [tab, changes, decisions, hints]);
   const applyReuse = () => {
-    const snap = { decisions, order: decideOrder.current.slice(), sel: selCid };
+    const snap = { decisions, order: decideOrder.current.slice(), sel: selCid, pk };
     const next = { ...decisions };
     for (const { c, h } of reusable) next[c.id] = { ...mkDec(h.reuse, decisions[c.id]), note: decisions[c.id]?.note };
     setDecisions(next);
     setReuseAsk(false);
-    clearTimeout(undoTimer.current);
-    setUndoToast({ msg: t('已沿用上轮结论（{n} 处）', { n: reusable.length }), undo: () => { clearTimeout(undoTimer.current); decideOrder.current = snap.order; setDecisions(snap.decisions); setSelCid(snap.sel); setUndoToast(null); flash(t('已撤销，结论恢复到操作前')); } });
-    undoTimer.current = setTimeout(() => setUndoToast(null), 10000);
+    undoTimer.current.clear();
+    setUndoToast({ msg: t('已沿用上轮结论（{n} 处）', { n: reusable.length }), scope: pk, undo: () => { undoTimer.current.clear(); if (pkRef.current !== snap.pk) { setUndoToast(null); return; } decideOrder.current = snap.order; setDecisions(snap.decisions); setSelCid(snap.sel); setUndoToast(null); flash(t('已撤销，结论恢复到操作前')); } });
+    undoTimer.current.set(() => setUndoToast(null), 10000);
   };
   const runBulk = (kind: 'a' | 'r' | 'reset') => {
-    const snap = { decisions, order: decideOrder.current.slice(), sel: selCid };
+    const snap = { decisions, order: decideOrder.current.slice(), sel: selCid, pk };
     const imp = bulkImpact(kind);
     decideAll(kind === 'reset' ? null : kind);
     setBulkAsk(null);
-    clearTimeout(undoTimer.current);
+    undoTimer.current.clear();
     const msg = kind === 'reset' ? t('已清空 {n} 个结论', { n: imp.clear })
       : t(kind === 'a' ? '已全部接受（{n} 处）' : '已全部拒绝（{n} 处）', { n: imp.total });
     setUndoToast({
       msg,
+      scope: pk,
       undo: () => {
-        clearTimeout(undoTimer.current);
+        undoTimer.current.clear();
+        if (pkRef.current !== snap.pk) { setUndoToast(null); return; }
         decideOrder.current = snap.order;
         setDecisions(snap.decisions);
         setSelCid(snap.sel);
@@ -887,7 +959,7 @@ export default function App() {
         flash(t('已撤销，结论恢复到操作前'));
       },
     });
-    undoTimer.current = setTimeout(() => setUndoToast(null), 10000);
+    undoTimer.current.set(() => setUndoToast(null), 10000);
   };
 
   // ---------- 导出 ----------
@@ -901,7 +973,7 @@ export default function App() {
       if (kind === 'report') {
         const html = reportHtml({ A, B, res: richRes, clauses, risks, decisions, scope, reviewer }, RA.blocks, RB.blocks);
         const p = await api.htmlToPdf({ html, defaultName: `${baseName}-${t('比对报告')}.pdf` });
-        if (p) { flash(t('已导出：{p}', { p })); setExportOpen(false); }
+        if (p) { flash(t('已导出：{p}', { p }), 'plane'); setExportOpen(false); }
       } else {
         const bytes = await buildDocx(richRes.rows, RA.blocks, RB.blocks, {
           mode: kind === 'final' ? 'final' : 'redline',
@@ -910,8 +982,8 @@ export default function App() {
           reviewer: { name: reviewer, initials: prefs.reviewerInitials.trim() || initialsOf(reviewer) },
           decisions, commentAccepted: prefs.commentAccepted, risks: riskById, changes: richRes.changes, title: baseName,
         });
-        const p = await api.saveFile({ defaultName: `${baseName}-${t(kind === 'final' ? '审阅后定稿' : '修订稿')}.docx`, data: bytes, filters: [{ name: t('Word 文档'), extensions: ['docx'] }] });
-        if (p) { flash(t('已导出：{p}', { p })); setExportOpen(false); }
+        const p = await api.saveFile({ defaultName: `${baseName}-${t(kind === 'final' ? '审阅记录存档' : '修订稿')}.docx`, data: bytes, filters: [{ name: t('Word 文档'), extensions: ['docx'] }] });
+        if (p) { flash(t('已导出：{p}', { p }), 'plane'); setExportOpen(false); }
       }
     } catch (e: any) {
       flash(t('导出失败：{e}', { e: String(e?.message || e) }));
@@ -923,7 +995,7 @@ export default function App() {
     if (!curRes || !A || !B || !scope) return;
     const useRich = curRes === richRes;
     api.copyText(summaryMarkdown({ A, B, res: curRes, clauses: useRich ? clauses : noClauses, risks: useRich ? risks : [], decisions: useRich ? decisions : {}, scope, reviewer }));
-    flash(t('已复制 {n} 处差异的摘要，可以直接粘贴', { n: curRes.changes.length }));
+    flash(t('已复制 {n} 处差异的摘要，可以直接粘贴', { n: curRes.changes.length }), 'clipboard');
   };
 
   // ---------- OCR ----------
@@ -991,11 +1063,26 @@ export default function App() {
 
   // ---------- 菜单 & 键盘 ----------
   const canCompare = !!(A && B) && !busy[0] && !busy[1];
+  // 里程碑（1.9 · M12）：本机计数，每开始比较一对新文件 +1；第 10 / 100 / 1000 份时对对举奖杯
+  const counted = useRef('');
+  useEffect(() => {
+    if (!compared || !pk || counted.current === pk) return;
+    counted.current = pk;
+    const n = countCompare();
+    if (prefs.mascotWalk && (n === 10 || n === 100 || n === 1000)) { markSeen('egg:m' + n); flash(t(n === 10 ? '第 10 份了，越来越熟练啦。' : n === 100 ? '第 100 份！你比我还认真。' : '第 1000 份！向你致敬。'), 'trophy'); }
+  }, [compared, pk]);
+  // 切到深色模式：对对戴上墨镜（彩蛋）
+  const themeSeen = useRef(theme);
+  useEffect(() => {
+    if (themeSeen.current !== theme && theme === 'dark' && prefs.mascotWalk) { markSeen('egg:sunglasses'); flash(t('天黑了，戴上墨镜。'), 'sunglasses'); }
+    themeSeen.current = theme;
+  }, [theme]);
   const startCompare = () => { if (canCompare) { setCompared(true); setTab(0); setChangedSides([]); } };
-  const clearAll = () => { clearPageCaches(); setThread(null); setDocs([null, null]); setCompared(false); setErrs([null, null]); ocrRun.current++; setOcr({ status: 'idle' }); setChangedSides([]); setLostBanner(null); lastLoaded.current = null; };
-  const swap = () => { setThread(null); setDocs(([a, b]) => [b, a]); ocrRun.current++; setOcr({ status: 'idle' }); };
+  const clearAll = () => { dropReviewUndo(); clearPageCaches(); setThread(null); setDocs([null, null]); setCompared(false); setErrs([null, null]); ocrRun.current++; setOcr({ status: 'idle' }); setChangedSides([]); setLostBanner(null); lastLoaded.current = null; };
+  const swap = () => { dropReviewUndo(); setThread(null); setDocs(([a, b]) => [b, a]); ocrRun.current++; setOcr({ status: 'idle' }); };
   const actions = useRef<any>({});
-  actions.current = { open, swap, clearAll, go, decide, setTab, startCompare, toggleNav, toggleAside, compared, tab, selCid, undoBulk: undoToast?.undo, modal: !!(pwd || pasteSide !== null || showSettings || exportOpen || pop || bulkAsk) };
+  actions.current = { open, swap, clearAll, go, decide, setTab, startCompare, toggleNav, toggleAside, compared, tab, selCid, // 首页的撤销只在首页按 U 生效；审阅类的只对同一对文件生效（1.9 · QA P1）
+    undoBulk: !undoToast ? undefined : undoToast.scope === 'home' ? (!compared ? undoToast.undo : undefined) : undoToast.scope === pk ? undoToast.undo : undefined, modal: !!(pwd || pasteSide !== null || showSettings || exportOpen || pop || bulkAsk) };
   useEffect(() => api.onMenu((cmd: string, arg?: any) => {
     const a = actions.current;
     // 弹窗、弹出层开着时，菜单栏和它的快捷键（⌘1 / ⌘3 / ⌘N 等）同样不作用到后台（beta.7 · P1-2，和键盘处理一致）
@@ -1021,7 +1108,7 @@ export default function App() {
       if (document.querySelector('.modal-bg')) return;
       const inPop = t.closest?.('.pop');
       if (inPop && !inPop.classList.contains('draft-tip')) return;
-      // 撤销提示在的时候，U 在哪个页面都能撤销（首页删除往来稿 / 模板后也一样）
+      // 撤销提示在的时候按 U 撤销它：首页删除只在首页，批量决定只对同一对文件（见 undoBulk）
       if (e.key.toLowerCase() === 'u' && a.undoBulk && (!a.compared || a.tab !== 2)) { e.preventDefault(); a.undoBulk(); return; }
       if (!a.compared) { if (e.key === 'Enter' && t.tagName !== 'BUTTON') a.startCompare(); return; }
       const k = e.key.toLowerCase();
@@ -1042,7 +1129,7 @@ export default function App() {
   }, []);
 
   const settingsValues: SettingsValues = {
-    lang, theme, paperFollowTheme: prefs.paperFollowTheme, sound: prefs.sound, celebrate: prefs.celebrate,
+    lang, theme, paperFollowTheme: prefs.paperFollowTheme, sound: prefs.sound, celebrate: prefs.celebrate, mascotWalk: prefs.mascotWalk,
     reviewerName: prefs.reviewerName, reviewerInitials: prefs.reviewerInitials, authorName: prefs.authorName, commentAccepted: prefs.commentAccepted,
     draftName: prefs.draftName, finalName: prefs.finalName, draftMissing: prefs.draftMissing,
     riskMoney: prefs.riskMoney, riskDate: prefs.riskDate, keywords: prefs.keywords, autoCheckUpdate: prefs.autoCheckUpdate,
@@ -1071,13 +1158,19 @@ export default function App() {
           draft={draftReady ? { name: baseOfPath(draftState.path!), open: () => api.openExternalFile?.(draftState.path) } : null} />
       )}
       {/* 有撤销提示时，新的提示叠在它上面，不再被吞掉（beta.7：如“审阅稿已重建”） */}
-      {toast && <div className={`toast${undoToast ? ' above' : ''}`} role="status" aria-live="polite">{toast}</div>}
+      {moment && !toast && <div className="moment solo" key={moment.n} aria-hidden><Mascot size={44} act={moment.act} /></div>}
+      {toast && <div className={`toast${undoToast ? ' above' : ''}`} role="status" aria-live="polite" onMouseEnter={() => toastTimer.current.pause()} onMouseLeave={() => toastTimer.current.resume(1200)}>{moment && <span className="moment" key={moment.n} aria-hidden><Mascot size={44} act={moment.act} /></span>}{toast}</div>}
       {undoToast && (
-        <div className="toast undo" role="status" aria-live="polite">
+        <div className="toast undo" role="status" aria-live="polite"
+          // 悬停或焦点在里面时暂停倒计时；首页删除的真正清除也一起暂停，否则停太久会撤销失败（1.9）
+          onMouseEnter={() => { undoTimer.current.pause(); purgeTimer.current.pause(); }}
+          onMouseLeave={(e) => { if (!e.currentTarget.contains(document.activeElement)) { undoTimer.current.resume(1500); purgeTimer.current.resume(1500); } }}
+          onFocus={() => { undoTimer.current.pause(); purgeTimer.current.pause(); }}
+          onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node) && !e.currentTarget.matches(':hover')) { undoTimer.current.resume(1500); purgeTimer.current.resume(1500); } }}>
           <span className="tm">{undoToast.msg}</span>
           {undoToast.obj && <span className="to" title={undoToast.obj}>「<MidName name={undoToast.obj} title={false} />」</span>}
           <button type="button" className="toast-btn" onClick={undoToast.undo}>{t('撤销')} <Kbd>U</Kbd></button>
-          <button type="button" className="toast-x" aria-label={t('关闭')} onClick={() => { clearTimeout(undoTimer.current); setUndoToast(null); }}><I.IconX /></button>
+          <button type="button" className="toast-x" aria-label={t('关闭')} onClick={() => { undoTimer.current.clear(); setUndoToast(null); }}><I.IconX /></button>
         </div>
       )}
       {bulkAsk && (() => {
@@ -1092,7 +1185,7 @@ export default function App() {
               t('结论署名为 {r}，时间为现在。', { r: reviewer }),
             ].filter(Boolean) as string[];
         return (
-          <Modal title={title} onClose={() => setBulkAsk(null)} className="bulk-ask"
+          <Modal title={title} mood="think" onClose={() => setBulkAsk(null)} className="bulk-ask"
             footer={<><button className="btn plain" onClick={() => setBulkAsk(null)}>{t('取消')}</button>
               <button className={`btn ${bulkAsk === 'a' ? 'primary' : bulkAsk === 'r' ? 'red' : 'danger'}`} autoFocus onClick={() => runBulk(bulkAsk)}>
                 {bulkAsk === 'a' ? t('全部接受') : bulkAsk === 'r' ? t('全部拒绝') : t('清空结论')}</button></>}>
@@ -1237,6 +1330,7 @@ export default function App() {
     const veteran = live(lib.threads).length > 0 || live(lib.templates).length > 0 || recent.length > 0;
     const tplOpen = tplDlg ? lib.templates.find((y) => y.id === tplDlg && !y.deleted) : null;
     return (
+      <MascotOn.Provider value={prefs.mascotWalk}>
       <div className="app home">
         {/* 1.8.1：首页用 header / main / footer 三个区域，读屏和键盘导航能跳转 */}
         <header className="home-top drag">
@@ -1252,7 +1346,8 @@ export default function App() {
             ) : (
               // H2：第一次用——保留标题、副标题、吉祥物；去掉五个模式图标和气泡
               <div className="hero">
-                <Mascot mood={A && B ? 'cheer' : 'happy'} size={104} className="mascot-bob" />
+                {/* 1.9：打开“让对对出来走走”时，由底栏上沿探头的对对代替这里的大图，不同时出现两个 */}
+                {!prefs.mascotWalk && <Mascot mood={A && B ? 'cheer' : 'happy'} size={104} className="mascot-bob" />}
                 <div className="hero-text">
                   <h1>{t(A && B ? '准备好了，开始比较吧' : '找出两份文档的每一处不同')}</h1>
                   <p>{t('Word、PDF、TXT 任意组合，全部在这台电脑上完成，不会上传。')}</p>
@@ -1316,13 +1411,16 @@ export default function App() {
           </div>
         </main>
         <footer className="home-cta">
+          <HomePeek ready={!!canCompare} error={!!(errs[0] || errs[1])} justDone={doneRef.current} narrow={homeNarrow} />
           {canCompare
             ? <><span className="hint">{t('也可以直接按')} <Kbd>Enter</Kbd></span><button className="btn primary big" onClick={startCompare}>{t('开始比较')}</button></>
             : <><span className="hint">{busy[0] || busy[1] ? t('正在读取文档…') : t('还差 {n} 个文档', { n: missing })}</span><button className="btn primary big" disabled>{t('开始比较')}</button></>}
         </footer>
         {tplOpen && <TemplateCompareDialog tpl={tplOpen} B={B} bBusy={busy[1]} onPickB={() => open(1)} onDropB={(fs) => fs[0] && loadFile(1, fs[fs.length - 1])} onStart={startFromTemplate} onClose={() => setTplDlg(null)} />}
+        {careCard}
         {modals}
       </div>
+      </MascotOn.Provider>
     );
   }
 
@@ -1374,8 +1472,7 @@ export default function App() {
   const sameText = <div className="same-text">{t('在已比较的范围内未发现差异。')}{scope?.notCompared.length ? <small>{t('未比较：{x}', { x: scope.notCompared.join(t('、')) })}</small> : null}</div>;
   if (needsDiff && diffJob.running) body = (
     <div className="empty-state">
-      <Mascot mood="think" size={96} />
-      <h2>{t('正在比较…')}</h2>
+      <WaitMascot kind="compare" title={t('正在比较…')} />
       <div>{t('这份文档比较大，正在后台算，界面不会卡住。')}</div>
       <div className="progress indeterminate"><div /></div>
       <button className="btn sm plain" onClick={diffJob.cancel}>{t('取消比较')}</button>
@@ -1401,13 +1498,13 @@ export default function App() {
     : <div className="empty-state"><Mascot mood="oops" size={96} /><h2>{t('没找到可以比较的文字')}</h2><div>{t((A.type === 'pdf' || B.type === 'pdf') ? '如果是扫描件，试试「OCR 文本」或「图像」模式。' : '两份文档好像都是空的。')}</div></div>;
   else if (tab === 1 && plainRes && plainBlocks) body = <PlainView A={plainBlocks[0]} B={plainBlocks[1]} res={plainRes} selCid={selCid} onSel={setSelCid} layout={prefs.layout} wrap={prefs.wrap} hideUnchanged={prefs.hidePlain} />;
   else if (tab === 2 && richRes && RA && RB) body = changes.length ? <RedlineView A={RA} B={RB} res={richRes} selCid={selCid} onSel={setSelCid} decisions={decisions} innerRef={redlineRef} />
-    : <div className="empty-state"><Mascot mood="cheer" size={96} /><h2>{t('没有需要审阅的修订')}</h2>{sameText}</div>;
+    : <div className="empty-state"><Mascot mood="cheer" size={96} act="jump" /><h2>{t(prefs.mascotWalk ? '一字不差' : '没有需要审阅的修订')}</h2>{sameText}</div>;
   else if (tab === 3 && needGate && counts) body = <PageRangeGate mode="image" pagesA={counts.a} pagesB={counts.b} initial={pageRanges[pairSha]} onConfirm={setPageRange} />;
   else if (tab === 3) body = <ImageView head={rangeHead} suspect={suspectPages} state={imgState} mode={prefs.imgMode} zoom={zoom} fade={fade} setFade={setFade} slider={slider} setSlider={setSlider} showBoxes={prefs.showBoxes} onlyDiff={onlyDiffPages} scrollRef={imgScroll} />;
   else if (tab === 4) {
     if (ocrRes && ocrBlocks) body = <PlainView A={ocrBlocks[0]} B={ocrBlocks[1]} res={ocrRes} selCid={selCid} onSel={setSelCid} layout={prefs.layout} wrap={prefs.wrap} hideUnchanged={prefs.hidePlain} lowWords={lowWords} />;
     else if (ocr.status !== 'running' && needGate && counts) body = <PageRangeGate mode="ocr" pagesA={counts.a} pagesB={counts.b} onConfirm={(r) => { setPageRange(r); runOcr(r); }} />;
-    else if (ocr.status === 'running') body = <div className="empty-state"><Mascot mood="think" size={96} /><h2>{t('正在识别文字…')}</h2>{rangeHead}<div>{ocr.msg}</div><div className="progress"><div style={{ width: `${ocr.pct || 0}%` }} /></div><button className="btn sm plain" onClick={cancelOcr}>{t('取消')}</button></div>;
+    else if (ocr.status === 'running') body = <div className="empty-state"><WaitMascot kind="ocr" title={t('正在识别文字…')} />{rangeHead}<div>{ocr.msg}</div><div className="progress"><div style={{ width: `${ocr.pct || 0}%` }} /></div><button className="btn sm plain" onClick={cancelOcr}>{t('取消')}</button></div>;
     else body = (
       <div className="empty-state">
         <Mascot mood="sleepy" size={96} />
@@ -1509,6 +1606,7 @@ export default function App() {
         {tab === 2 && activeTh && thread && cur && clauses.get(cur.id) && (
           <ClauseHistory clause={clauses.get(cur.id)!} items={clauseHistory(activeTh, clauses.get(cur.id)!, thread.b)} th={activeTh} />
         )}
+        {tab === 2 && !narrow && <div className="rp-anchor"><ReviewPeek cue={rpeek.cue} /></div>}
         {isRichTab && scope && (
           <div className="insp-foot">
             <span className="k">{t('比较范围')}</span>
@@ -1527,6 +1625,7 @@ export default function App() {
   const navKey = isMac ? '⌃⌘S' : 'Ctrl+Alt+S', inspKey = isMac ? '⌥⌘I' : 'Ctrl+Alt+I';
 
   return (
+    <MascotOn.Provider value={prefs.mascotWalk}>
     <div className={`app shell ${navOpen ? '' : 'nav-mini'} ${hasInsp && inspOpen && !narrow ? '' : 'insp-off'} ${narrow ? 'narrow' : ''}`}>
       <nav className="nav" aria-label={t('比较模式')}>
         {navOpen && (
@@ -1587,7 +1686,7 @@ export default function App() {
         {curRes && <button type="button" className="btn tb-copy" onClick={copySummary} title={t('复制为 Markdown，可粘贴到邮件 / 飞书 / 文档')} aria-label={t('复制摘要')}><I.IconCopy /><span className="lbl">{t('复制摘要')}</span></button>}
         {richRes && tab === 2 && draftSync && B && (
           <DraftChip state={draftState} sync={draftSync} bPath={B.file.path} narrow={false} finalReq={finalReq} hideTip={tab === 2 && doneOpen} origLabel={origLabel} decided={richRes.changes.filter((c) => decisions[c.id]?.v).length}
-            pending={richRes.changes.filter((c) => !decisions[c.id]?.v || decisions[c.id]?.v === 'h').length} held={heldN} onFinal={(p) => { setFinalMade(p); if (allDecided) setDoneOpen(true); return allDecided; }} finalPattern={prefs.finalName.trim() || t('{name}-定稿')}
+            pending={richRes.changes.filter((c) => !decisions[c.id]?.v || decisions[c.id]?.v === 'h').length} held={heldN} onFinal={(p) => { setFinalMade(p); cheer('gradcap'); if (allDecided) setDoneOpen(true); return allDecided; }} finalPattern={prefs.finalName.trim() || t('{name}-定稿')}
             onJump={(cid) => { setTab(2); setFilter('all'); setSelCid(cid); }} flash={flash} />
         )}
         {richRes && isRichTab && <button type="button" className={`btn tb-export ${tab === 2 ? '' : 'primary'}`} onClick={openExport} title={t('导出')} aria-label={t('导出')}><I.IconExport /><span className="lbl">{t('导出')}</span></button>}
@@ -1696,7 +1795,7 @@ export default function App() {
             <div className="rb-acts">
               <button className="chip as-btn" onClick={() => setShowSettings('review')} title={t('审阅人：{n}（点击修改）', { n: reviewer })}><span className="av">{(prefs.reviewerInitials || initialsOf(reviewer)).slice(0, 2)}</span>{reviewer}</button>
               <button className="btn red" disabled={!cur} onClick={() => decide(selCid, 'r')}>{t('拒绝')}<Kbd>R</Kbd></button>
-              <button className="btn hold" disabled={!cur} onClick={() => decide(selCid, 'h')}>{t('待议')}<Kbd>H</Kbd></button>
+              <button className="btn hold" disabled={!cur} onClick={() => decide(selCid, 'h')}>{isEn() ? 'Keep open' : t('待议')}<Kbd>H</Kbd></button>
               <button className="btn primary" disabled={!cur} onClick={() => decide(selCid, 'a')}>{t('接受')}<Kbd>A</Kbd></button>
             </div>
           </div>
@@ -1705,7 +1804,9 @@ export default function App() {
           <div className="overlay-bg">
             {prefs.celebrate && !finalMade && <Confetti />}
             <div className="done-card" role="dialog" aria-label={t('审阅完成')}>
-              <Mascot mood="cheer" size={120} className="mascot-pop" />
+              {/* 1.9 · M5：两种欢呼随机一种（戴派对帽跳一下 / 转一圈）；有待议时换“思考 + 放大镜” */}
+              {heldN > 0 ? <Mascot mood="cheer" size={120} className="mascot-pop" pose={{ mood: 'think', props: ['magnifier'], arms: 'hold' }} />
+                : <Mascot mood="cheer" size={120} className="mascot-pop" act={doneFlavor ? 'spin' : 'jump'} pose={doneFlavor ? undefined : { props: ['party'] }} />}
               <h2>{t('全部看完了！')}</h2>
               {/* 待议算看完，但不等于谈定（beta.7） */}
               <div className="muted">{heldN > 0 ? t('已看完 {n} 处修订，{h} 处待议', { n: changes.length, h: heldN }) : t('{n} 处修订全部处理完毕', { n: changes.length })}</div>
@@ -1746,7 +1847,9 @@ export default function App() {
         <AddVersionDialog th={th} file={addVer.f} busy={libBusy} onClose={() => setAddVer(null)} onDropFiles={(fs) => { if (fs[0]?.path) setAddVer({ id: th.id, f: fs[0] }); else if (fs[0]) flash(t('这个文件没有路径，请用“选择”打开')); }}
           onPick={async () => { const f: FileInfo | null = await api.openDialog(); if (f) setAddVer({ id: th.id, f }); }}
           onDone={(side, against) => { const f = addVer.f!; setAddVer(null); addThreadVersion(th, f, side, against); }} />) : null; })()}
+      {careCard}
       {modals}
     </div>
+    </MascotOn.Provider>
   );
 }

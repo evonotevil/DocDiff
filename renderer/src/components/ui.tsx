@@ -5,7 +5,7 @@ import { t } from '../lib/i18n';
 export function Switch({ on, onChange, disabled, label, size }: { on: boolean; onChange: (v: boolean) => void; disabled?: boolean; label?: string; size?: 'sm' }) {
   return <button type="button" className={`switch ${on ? 'on' : ''} ${size || ''}`} disabled={disabled} onClick={() => onChange(!on)} role="switch" aria-checked={on} aria-label={label} />;
 }
-export function Opt({ label, hint, children, disabled }: { label: string; hint?: string; children: React.ReactNode; disabled?: boolean }) {
+export function Opt({ label, hint, children, disabled }: { label: string; hint?: React.ReactNode; children: React.ReactNode; disabled?: boolean }) {
   return (
     <label className={`opt ${disabled ? 'disabled' : ''}`}>
       <span className="opt-text"><span>{label}</span>{hint && <small>{hint}</small>}</span>

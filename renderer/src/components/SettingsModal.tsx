@@ -1,10 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { t, Lang } from '../lib/i18n';
+import { t, Lang, isEn, fmtShortDate } from '../lib/i18n';
 import { isMac, kbd } from '../lib/platform';
 import { initialsOf, refreshReviewIndex } from '../lib/review';
 import { fmtBytes, fmtDate } from '../lib/model';
-import { DEFAULT_KEYWORDS } from '../lib/insight';
+import { defaultKeywords } from '../lib/insight';
 import { Modal } from './Modal';
+import { Mascot, useMascotOn } from './Mascot';
+import { Dex } from './Dex';
+import { resetMascot } from '../lib/mascot/store';
 import { Switch, Opt, Seg, Kbd, Info } from './ui';
 import { NameEditor } from './NameEditor';
 import * as I from './icons';
@@ -16,7 +19,7 @@ const api = (window as any).api;
 export interface UpdInfo { status: 'new' | 'latest' | 'error' | 'off'; current: string; latest?: string; url?: string; notes?: string; pubDate?: string; error?: string }
 
 export interface SettingsValues {
-  lang: Lang; theme: 'light' | 'dark'; paperFollowTheme: boolean; sound: boolean; celebrate: boolean;
+  lang: Lang; theme: 'light' | 'dark'; paperFollowTheme: boolean; sound: boolean; celebrate: boolean; mascotWalk: boolean;
   reviewerName: string; reviewerInitials: string; authorName: string; commentAccepted: boolean;
   draftName: string; finalName: string;
   draftMissing: 'auto' | 'ask';
@@ -57,10 +60,13 @@ function ShortcutRows() {
 function UpdateSection({ info, checking, onCheck, onSkip, auto, setAuto }: {
   info: UpdInfo | null; checking: boolean; onCheck: () => void; onSkip: (v: string) => void; auto: boolean; setAuto: (v: boolean) => void;
 }) {
+  const walk = useMascotOn();
   const open = () => { if (info?.url) api.openUrl?.(info.url); };
   return (
     <div className="upd">
       <div className="upd-row">
+        {/* 1.9 · M6：已是最新版本时，对对在这里挥一次手 */}
+        {info?.status === 'latest' && !checking && walk && <Mascot size={48} act="wave" />}
         <div className="upd-ver">
           <b>DocDiff {APP_VERSION}</b>
           <span>
@@ -109,7 +115,7 @@ function KeywordEditor({ value, onChange }: { value: string[]; onChange: (v: str
       <div className="kw-add">
         <input id="kw-input" value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } }} placeholder={t('输入关键词，回车添加')} aria-label={t('添加关键词')} />
         <button className="btn sm" onClick={add} disabled={!draft.trim()}>{t('添加')}</button>
-        <button className="btn sm plain" onClick={() => onChange(DEFAULT_KEYWORDS)}>{t('恢复默认')}</button>
+        <button className="btn sm plain" onClick={() => onChange(defaultKeywords(isEn()))}>{t('恢复默认')}</button>
       </div>
     </div>
   );
@@ -135,7 +141,7 @@ function ReviewStorage() {
     refreshReviewIndex();
     if (r?.ok) { setU(r.usage); setMsg(t('已删除 {n} 组审阅记录', { n: r.n })); } else setMsg(t('没能删除：{e}', { e: r?.error || '' }));
   };
-  const md = (ms: number) => { const d = new Date(ms); return t('{m}月{d}日', { m: d.getMonth() + 1, d: d.getDate() }); };
+  const md = (ms: number) => { const d = new Date(ms); return isEn() ? fmtShortDate(ms) : t('{m}月{d}日', { m: d.getMonth() + 1, d: d.getDate() }); };
   return (
     <section className="set-sec review-storage" aria-labelledby="rv-s3">
       <SH id="rv-s3" info={t('都存在这台电脑的应用数据目录里，不会自动删除。删除模板或往来稿时，它的拷贝会一起清掉。')}>{t('本机保存的数据')}</SH>
@@ -168,6 +174,7 @@ export function SettingsModal({ v, set, onClose, upd, initialTab = 'general', sa
   upd: Omit<React.ComponentProps<typeof UpdateSection>, 'auto' | 'setAuto'>; initialTab?: Tab;
 }) {
   const [tab, setTab] = useState<Tab>(initialTab);
+  const [resetDone, setResetDone] = useState(false);
   const tabs: [Tab, string, React.ReactNode][] = [
     ['general', t('通用'), <I.IconGear key="g" />], ['review', t('审阅'), <I.IconOk key="r" />], ['files', t('审阅稿与定稿'), <I.IconExport key="f" />], ['risk', t('风险'), <I.IconWarn key="w" />],
     ['keys', t('快捷键'), <I.IconKeyboard key="k" />], ['storage', t('存储'), <I.IconCopy key="s" />], ['about', t('关于与更新'), <I.IconDownload key="a" />],
@@ -190,6 +197,10 @@ export function SettingsModal({ v, set, onClose, upd, initialTab = 'general', sa
               </Opt>
               <Opt label={t('音效')} hint={t('审阅修订时的轻提示音')}><Switch on={v.sound} onChange={(x) => set('sound', x)} label={t('音效')} /></Opt>
               <Opt label={t('审阅完成时放彩纸')}><Switch on={v.celebrate} onChange={(x) => set('celebrate', x)} label={t('审阅完成时放彩纸')} /></Opt>
+              {/* 1.9：说明只写一行，细节放进 ⓘ */}
+              <Opt label={t('让对对出来走走')} hint={<>{t('首页、审阅过半和完成时出来打个招呼')}<Info label={t('让对对出来走走')}>{t('节日装扮和彩蛋也跟着这个开关。关掉后只在第一次用的首页、比较中、出错和完成时出现，不带新动作和道具。系统开启“减少动态效果”时只显示静态图。')}</Info></>}>
+                <Switch on={v.mascotWalk} onChange={(x) => set('mascotWalk', x)} label={t('让对对出来走走')} />
+              </Opt>
             </>
           )}
           {tab === 'review' && (
@@ -225,7 +236,11 @@ export function SettingsModal({ v, set, onClose, upd, initialTab = 'general', sa
               </section>
             </div>
           )}
-          {tab === 'storage' && <div className="set-review"><ReviewStorage /></div>}
+          {tab === 'storage' && <div className="set-review"><ReviewStorage />
+            <Opt label={t('重置对对图鉴')} hint={t('清空见过的对对和比较次数，只影响这台电脑')}>
+              <button type="button" className="btn sm" onClick={() => { resetMascot(); setResetDone(true); }} disabled={resetDone}>{resetDone ? t('已重置') : t('重置')}</button>
+            </Opt>
+          </div>}
           {tab === 'risk' && (
             <>
               <p className="set-intro">{t('比较完成后，命中下面规则的变化会放在右栏最上方的「需要留意」里。判断完全靠规则，离线完成。')}</p>
@@ -243,6 +258,8 @@ export function SettingsModal({ v, set, onClose, upd, initialTab = 'general', sa
             <>
               <UpdateSection {...upd} auto={v.autoCheckUpdate} setAuto={(x) => set('autoCheckUpdate', x)} />
               <div className="set-about">{t('文档内容始终留在这台电脑上，比对过程不联网。')}</div>
+              {/* 1.9 · M13：关掉“让对对出来走走”时图鉴仍可查看 */}
+              <Dex />
             </>
           )}
         </div>

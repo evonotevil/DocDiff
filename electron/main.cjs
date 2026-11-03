@@ -19,8 +19,9 @@ let LANG = 'zh';
 const MENU_EN = {
   文件: 'File', '打开原始文档…': 'Open original…', '打开修改后文档…': 'Open revised…', 交换左右: 'Swap sides',
   新建比较: 'New comparison', 关闭窗口: 'Close window', 退出: 'Quit', 编辑: 'Edit', 视图: 'View',
-  富文本: 'Rich text', 纯文本: 'Plain text', 修订审阅: 'Review changes', 图像: 'Image', 'OCR 文本': 'OCR text', 文件详情: 'File details',
-  '下一处差异（J）': 'Next difference (J)', '上一处差异（K）': 'Previous difference (K)', '收起 / 展开侧栏': 'Toggle sidebar', '收起 / 展开检查器': 'Toggle inspector',
+  // 1.9：和界面术语表一致（Formatted / Visual / File info / change）
+  富文本: 'Formatted', 纯文本: 'Plain text', 修订审阅: 'Review', 图像: 'Visual', 'OCR 文本': 'OCR text', 文件详情: 'File info',
+  '下一处差异（J）': 'Next change (J)', '上一处差异（K）': 'Previous change (K)', '收起 / 展开侧栏': 'Show or hide sidebar', '收起 / 展开检查器': 'Show or hide inspector',
   重新加载: 'Reload', 开发者工具: 'Developer tools', 实际大小: 'Actual size', 放大: 'Zoom in', 缩小: 'Zoom out',
   全屏: 'Full screen', 窗口: 'Window', 文档: 'Documents', 所有文件: 'All files',
 };

@@ -8,7 +8,7 @@ import type { ScopeInfo } from './scope';
 import { redlinePieces } from './exportDocx';
 import { riskTag, riskText, noteText } from './describe';
 import { fmtDate } from './model';
-import { t, isEn } from './i18n';
+import { t, isEn, colon, paren } from './i18n';
 
 const KIND: Record<string, string> = { del: '删除', ins: '新增', mod: '修改', fmt: '格式', move: '移动' };
 const SEC: Record<Sec, string> = { header: '页眉', body: '正文', footnote: '脚注', footer: '页脚' };
@@ -38,13 +38,13 @@ export function changeBody(c: Change, q = (s: string) => `“${short(s)}”`): s
   return c.kind === 'mod' ? `${q(c.before)} → ${q(c.after)}`
     : c.kind === 'del' ? q(c.before)
     : c.kind === 'ins' ? q(c.after)
-    : c.kind === 'fmt' ? `${q(c.before)}（${noteText(c)}）`
-    : `${q(c.before)}（${t('整段移动')}）`;
+    : c.kind === 'fmt' ? `${q(c.before)}${paren(noteText(c))}`
+    : `${q(c.before)}${paren(t('整段移动'))}`;
 }
 
 function verdictText(d: DecMap[number] | undefined): string {
   if (!d?.v) return d?.note ? t('备注：{n}', { n: d.note }) : '';
-  return `${d.by ? d.by + ' · ' : ''}${t(VERDICT[d.v])}${d.note ? `：${d.note}` : ''}`;
+  return `${d.by ? d.by + ' · ' : ''}${t(VERDICT[d.v])}${d.note ? `${colon()}${d.note}` : ''}`;
 }
 
 /** 复制摘要：可以直接贴进邮件 / 飞书 / 文档 */
@@ -53,8 +53,8 @@ export function summaryMarkdown(x: Ctx): string {
   const s = res.stats;
   const L: string[] = [
     t('## 文档差异摘要'), '',
-    `- ${t('原始文档')}：${A.file.name}${A.sha256 ? `（SHA-256 ${A.sha256.slice(0, 12)}…）` : ''}`,
-    `- ${t('修改后文档')}：${B.file.name}${B.sha256 ? `（SHA-256 ${B.sha256.slice(0, 12)}…）` : ''}`,
+    `- ${t('原始文档')}${colon()}${A.file.name}${A.sha256 ? paren(`SHA-256 ${A.sha256.slice(0, 12)}…`) : ''}`,
+    `- ${t('修改后文档')}${colon()}${B.file.name}${B.sha256 ? paren(`SHA-256 ${B.sha256.slice(0, 12)}…`) : ''}`,
     `- ${res.changes.length
       ? t('在已比较的范围内发现 {n} 处差异：删除 {del}、新增 {ins}、修改 {mod}', { n: res.changes.length, del: s.del, ins: s.ins, mod: s.mod }) + (s.fmt ? t('、格式 {n}', { n: s.fmt }) : '') + (s.move ? t('、移动 {n}', { n: s.move }) : '')
       : t('在已比较的范围内未发现差异')}`,
@@ -70,7 +70,7 @@ export function summaryMarkdown(x: Ctx): string {
     risks.forEach((r, i) => {
       const c = byId.get(r.cid)!;
       const where = c.sec && c.sec !== 'body' ? t(SEC[c.sec]) : clauses.get(c.id) ?? t('开头部分');
-      L.push(`${i + 1}. **${riskTag(r)}** ${where}：${changeBody(c)}（${riskText(r)}）`);
+      L.push(`${i + 1}. **${riskTag(r)}** ${where}${colon()}${changeBody(c)}${paren(riskText(r))}`);
     });
   }
   if (res.changes.length) {
@@ -80,14 +80,14 @@ export function summaryMarkdown(x: Ctx): string {
       L.push('', `#### ${g.title}`, '');
       for (const c of g.items) {
         const v = verdictText(decisions[c.id]);
-        L.push(`${++k}. **${t(KIND[c.kind])}**：${changeBody(c)}${v ? ` — ${v}` : ''}`);
+        L.push(`${++k}. **${t(KIND[c.kind])}**${colon()}${changeBody(c)}${v ? ` — ${v}` : ''}`);
       }
     }
   }
   L.push('', '---', '',
-    `${t('比较条件')}：${scope.conditions.join(sep())}`,
-    `${t('比较范围')}：${scope.compared.join(isEn() ? ', ' : '、')}${scope.notCompared.length ? `${sep()}${t('未比较')}：${scope.notCompared.join(isEn() ? ', ' : '、')}` : ''}`,
-    `${t('对齐方式')}：${scope.alignment}`,
+    `${t('比较条件')}${colon()}${scope.conditions.join(sep())}`,
+    `${t('比较范围')}${colon()}${scope.compared.join(isEn() ? ', ' : '、')}${scope.notCompared.length ? `${sep()}${t('未比较')}${colon()}${scope.notCompared.join(isEn() ? ', ' : '、')}` : ''}`,
+    `${t('对齐方式')}${colon()}${scope.alignment}`,
     t('由 DocDiff 在本机生成，文档没有上传。'));
   return L.join('\n');
 }

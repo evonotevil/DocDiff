@@ -1,62 +1,62 @@
-import React from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { mascotSvg, type Mood, type Pose } from '../lib/mascot/svg';
+import { ACTION } from '../lib/mascot/actions';
+import { markSeen } from '../lib/mascot/store';
 
-/** 原创吉祥物“对对”：一张会眨眼的小文档。mood 决定表情 */
-export type Mood = 'happy' | 'cheer' | 'think' | 'sleepy' | 'oops';
+export type { Mood, Pose };
 
-export function Mascot({ mood = 'happy', size = 120, className }: { mood?: Mood; size?: number; className?: string }) {
-  const eye = (cx: number) => {
-    if (mood === 'sleepy') return <path d={`M${cx - 7} 52 q7 6 14 0`} stroke="#4b4b4b" strokeWidth="3.5" fill="none" strokeLinecap="round" />;
-    if (mood === 'cheer') return <path d={`M${cx - 7} 54 q7 -9 14 0`} stroke="#4b4b4b" strokeWidth="3.5" fill="none" strokeLinecap="round" />;
-    const px = mood === 'think' ? cx + 3 : cx + 1, py = mood === 'think' ? 47 : 52;
-    return (
-      <g>
-        <ellipse cx={cx} cy="51" rx="9.5" ry="11" fill="#fff" stroke="#4b4b4b" strokeWidth="2.5" />
-        <circle cx={px} cy={py} r="5" fill="#4b4b4b" />
-        <circle cx={px + 2} cy={py - 2.2} r="1.8" fill="#fff" />
-      </g>
-    );
-  };
-  const mouth =
-    mood === 'cheer' ? <path d="M50 66 q10 14 20 0 z" fill="#ff4b4b" stroke="#4b4b4b" strokeWidth="2.5" strokeLinejoin="round" /> :
-    mood === 'think' ? <ellipse cx="62" cy="69" rx="3.5" ry="3" fill="#4b4b4b" /> :
-    mood === 'oops' ? <path d="M52 71 q8 -7 16 0" stroke="#4b4b4b" strokeWidth="3" fill="none" strokeLinecap="round" /> :
-    mood === 'sleepy' ? <path d="M55 68 h10" stroke="#4b4b4b" strokeWidth="3" strokeLinecap="round" /> :
-    <path d="M51 65 q9 10 18 0" stroke="#4b4b4b" strokeWidth="3" fill="none" strokeLinecap="round" />;
+/** 设置 · 通用「让对对出来走走」（1.9，默认开）。关掉时只保留 1.8 已有的出场，不带新动作和道具 */
+export const MascotOn = createContext(true);
+export const useMascotOn = () => useContext(MascotOn);
+const reduced = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/**
+ * 原创吉祥物“对对”：一张会笑的纸。
+ *  - mood：五种表情（1.8 起）；
+ *  - act：1.9 的 20 个动作之一（姿势 + 一次动效），开关关掉时退回 mood；
+ *  - pose：直接给姿势（手臂、视线、道具……）；
+ *  - alive：每 4–7 秒眨一次眼。
+ * 图形和 Figma 品牌页 mascot/* 组件一致；纯装饰，不进读屏顺序。
+ */
+export function Mascot({ mood = 'happy', size = 120, className = '', act, pose, alive, replay }: {
+  mood?: Mood; size?: number; className?: string; act?: string; pose?: Pose; alive?: boolean;
+  /** 换一个值就重放一次动效 */
+  replay?: number;
+}) {
+  const on = useMascotOn();
+  const a = on && act ? ACTION[act] : undefined;
+  const [blink, setBlink] = useState(false);
+  useEffect(() => {
+    if (!alive || reduced()) return;
+    let t: any, u: any;
+    const loop = () => { t = setTimeout(() => { setBlink(true); u = setTimeout(() => { setBlink(false); loop(); }, 120); }, 4000 + Math.random() * 3000); };
+    loop();
+    return () => { clearTimeout(t); clearTimeout(u); };
+  }, [alive]);
+  // 第一次见到某个动作就记进图鉴（只在开关打开时）
+  useEffect(() => { if (a) markSeen('act:' + a.id); }, [a?.id]);
+  const p: Pose = { mood, ...(on ? pose : undefined), ...(a ? a.pose : undefined) };
+  if (blink && !p.blink && p.mood !== 'cheer' && p.mood !== 'sleepy') p.blink = true;
+  const html = useMemo(() => mascotSvg(p), [JSON.stringify(p)]);
+  const anim = a?.anim || '';
   return (
-    <svg className={className} width={size} height={size} viewBox="0 0 120 120" aria-hidden>
-      {/* 影子 */}
-      <ellipse cx="60" cy="112" rx="30" ry="4.5" fill="#000" opacity=".08" />
-      {/* 手臂 */}
-      {mood === 'cheer' ? (
-        <>
-          <path d="M26 64 L12 40" stroke="#58cc02" strokeWidth="7" strokeLinecap="round" />
-          <path d="M94 64 L108 40" stroke="#58cc02" strokeWidth="7" strokeLinecap="round" />
-        </>
-      ) : (
-        <>
-          <path d="M26 70 L16 84" stroke="#58cc02" strokeWidth="7" strokeLinecap="round" />
-          <path d="M94 70 L104 84" stroke="#58cc02" strokeWidth="7" strokeLinecap="round" />
-        </>
-      )}
-      {/* 脚 */}
-      <rect x="40" y="100" width="14" height="10" rx="5" fill="#58a700" />
-      <rect x="66" y="100" width="14" height="10" rx="5" fill="#58a700" />
-      {/* 纸张身体 */}
-      <path d="M32 14 h44 l18 18 v64 a8 8 0 0 1 -8 8 h-54 a8 8 0 0 1 -8 -8 v-74 a8 8 0 0 1 8 -8z" fill="#fff" stroke="#e5e5e5" strokeWidth="3" />
-      <path d="M76 14 v12 a6 6 0 0 0 6 6 h12 z" fill="#58cc02" stroke="#58a700" strokeWidth="2" strokeLinejoin="round" />
-      {/* 脸 */}
-      {eye(49)}{eye(71)}
-      <circle cx="38" cy="64" r="4.5" fill="#ffb3b3" opacity=".8" />
-      <circle cx="82" cy="64" r="4.5" fill="#ffb3b3" opacity=".8" />
-      {mouth}
-      {/* 纸上的“差异”横线 */}
-      <rect x="36" y="82" width="22" height="5" rx="2.5" fill="#ffcfcf" />
-      <rect x="62" y="82" width="22" height="5" rx="2.5" fill="#c9f2a8" />
-      <rect x="36" y="91" width="34" height="4" rx="2" fill="#e5e5e5" />
-      {mood === 'sleepy' && <text x="92" y="30" fontSize="16" fontWeight="900" fill="#afafaf" fontFamily="Nunito, sans-serif">z</text>}
-      {mood === 'think' && <><circle cx="98" cy="22" r="3" fill="#afafaf" /><circle cx="106" cy="12" r="4.5" fill="#afafaf" /></>}
-    </svg>
+    <span key={replay} className={`mascot ${anim} ${className}`} style={{ width: size, height: size }} aria-hidden>
+      <svg viewBox="0 0 120 120" width={size} height={size} overflow="visible" dangerouslySetInnerHTML={{ __html: html }} />
+    </span>
   );
+}
+
+/** 对对旁边的一句话：4 秒后淡出（规范：说明只一行） */
+export function Bubble({ text, side = 'right' }: { text: string; side?: 'right' | 'left' | 'top' }) {
+  return <span className={`m-bubble ${side}`} role="status" aria-live="polite">{text}</span>;
+}
+
+/** 一段时间后自动收起的值（气泡用） */
+export function useFade<T>(v: T | null, ms = 4000): T | null {
+  const [cur, setCur] = useState<T | null>(v);
+  const t = useRef<any>(0);
+  useEffect(() => { setCur(v); clearTimeout(t.current); if (v !== null) t.current = setTimeout(() => setCur(null), ms); return () => clearTimeout(t.current); }, [v]);
+  return cur;
 }
 
 export function Confetti() {

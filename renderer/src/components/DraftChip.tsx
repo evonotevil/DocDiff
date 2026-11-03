@@ -172,7 +172,7 @@ function FinalDialog({ sync, bPath, pending, held, pattern, onClose, flash, onJu
     } finally { setBusy(false); }
   };
   return (
-    <Modal title={t('生成定稿')} onClose={onClose} className="final-dlg spec"
+    <Modal title={t('生成定稿')} mood={held > 0 || pending > held ? 'think' : 'cheer'} onClose={onClose} className="final-dlg spec"
       footer={<><button type="button" className="btn big" onClick={onClose}>{t('取消')}</button><button type="button" className={`btn big ${missed?.length ? 'red' : 'primary'}`} disabled={busy} onClick={go}>{busy ? t('正在生成…') : missed?.length ? t('仍然生成定稿') : t('生成定稿')}</button></>}>
       <p>{hasDraft ? t('定稿是双方谈完后的干净版：接受的改动直接采用，拒绝的改回原文，没有修订标记和批注。审阅稿不受影响。')
         : t('定稿是双方谈完后的干净版：接受的改动直接采用，拒绝的改回原文，没有修订标记和批注。')}</p>
