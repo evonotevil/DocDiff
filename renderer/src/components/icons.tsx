@@ -14,6 +14,7 @@ export const IconSun = () => <S d={<><circle cx="8" cy="8" r="3" /><path d="M8 1
 export const IconMoon = () => <S d={<path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z" />} />;
 export const IconMinus = () => <S d={<><circle cx="8" cy="8" r="6" /><path d="M5.5 8h5" /></>} />;
 export const IconPlus = () => <S d={<><circle cx="8" cy="8" r="6" /><path d="M5.5 8h5M8 5.5v5" /></>} />;
+export const IconSearch = () => <S d={<><circle cx="7" cy="7" r="4.5" /><path d="M10.5 10.5L14 14" /></>} />;
 export const IconUp = () => <S d={<path d="M4 10l4-4 4 4" />} />;
 export const IconDown = () => <S d={<path d="M4 6l4 4 4-4" />} />;
 export const IconCheck = () => <S d={<path d="M3 8.5l3 3 7-7" />} />;
@@ -67,6 +68,14 @@ export const FileGlyph = ({ type, size = 44 }: { type: string; size?: number }) 
     </svg>
   );
 };
+/** 空放置区的通用文档图标（1.9.1）：折角 + 三条横线，没有类型字样 */
+export const DocGeneric = ({ size = 56 }: { size?: number }) => (
+  <svg className="doc-generic" width={size * 40 / 48} height={size} viewBox="0 0 40 48" fill="none" aria-hidden>
+    <path d="M6 2h20l12 12v28a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V6a4 4 0 0 1 4-4z" fill="var(--side)" stroke="var(--hare)" strokeWidth="2.5" strokeLinejoin="round" />
+    <path d="M26 2v8a4 4 0 0 0 4 4h8" stroke="var(--hare)" strokeWidth="2.5" strokeLinejoin="round" />
+    <path d="M10 24h18M10 31h18M10 38h11" stroke="var(--swan)" strokeWidth="2.5" strokeLinecap="round" />
+  </svg>
+);
 export const IconPaste = () => <S d={<><rect x="3.5" y="2.8" width="9" height="11.4" rx="1.6" /><path d="M6 2.8h4v2H6z M6 8h4 M6 10.5h3" /></>} />;
 export const IconCopy = () => <S d={<><rect x="5" y="5" width="8.5" height="9" rx="1.6" /><path d="M3 11V3.5c0-.8.7-1.5 1.5-1.5H10" /></>} />;
 export const IconGear = () => <S d={<><path d="M6.6 1.9h2.8l.35 1.72 1.25.72 1.64-.6 1.4 2.42-1.3 1.13v1.44l1.3 1.13-1.4 2.42-1.64-.6-1.25.72-.35 1.72H6.6l-.35-1.72-1.25-.72-1.64.6-1.4-2.42 1.3-1.13V7.28l-1.3-1.13 1.4-2.42 1.64.6 1.25-.72z" /><circle cx="8" cy="8" r="2.3" /></>} />;
@@ -89,6 +98,10 @@ export const IconErr = () => <S d={<><circle cx="8" cy="8" r="6.2" /><path d="M5
 
 // ---------- 模式图标的白色线条（规范 3.0）：放在 24px 彩色圆角方块里，侧栏专用 ----------
 const G = (d: React.ReactNode) => () => <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" aria-hidden>{d}</svg>;
+// 1.9.1：首页三个模块的图标块
+export const GlyphNew = G(<path d="M8 3.5v9M3.5 8h9" />);
+export const GlyphRecent = G(<><path d="M13 8a5 5 0 1 1-1.5-3.6" /><path d="M13 2.8v2.6h-2.6" /><path d="M8 5.5V8l1.8 1.2" /></>);
+export const GlyphTemplate = G(<><rect x="5" y="5" width="8" height="8.5" rx="1.5" /><path d="M3 10.5V4a1.5 1.5 0 0 1 1.5-1.5H10" /></>);
 export const GlyphRich = G(<><path d="M4.5 2.5h5l2.5 2.5v8.5h-7.5z" /><path d="M6.5 7.5h3M6.5 10.5h3" /></>);
 export const GlyphPlain = G(<path d="M3 4.5h10M3 8h7M3 11.5h9" />);
 export const GlyphRedline = G(<><path d="M3 13.5h4" /><path d="M9.5 3.5l3 3-6 6H3.5v-3z" /></>);

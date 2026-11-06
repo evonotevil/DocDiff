@@ -3,14 +3,16 @@
 import { PROPS } from './props';
 
 export type Mood = 'happy' | 'cheer' | 'think' | 'sleepy' | 'oops';
-export type Arms = 'down' | 'up' | 'wave' | 'hold' | 'point' | 'face' | 'wipe' | 'clap' | 'throw' | 'stretch' | 'watch' | 'holdwave';
+export type Arms = 'down' | 'up' | 'wave' | 'hold' | 'point' | 'face' | 'wipe' | 'clap' | 'throw' | 'stretch' | 'watch' | 'holdwave' | 'sign';
 export type Mouth = 'yawn' | 'o';
-export interface Pose { mood?: Mood; arms?: Arms; look?: number; mouth?: Mouth; blink?: boolean; props?: string[]; front?: string[] }
+export interface Pose { mood?: Mood; arms?: Arms; look?: number; mouth?: Mouth; blink?: boolean; props?: string[]; front?: string[];
+  /** 1.9.1：集齐图鉴后的金色描边版（只在关于页） */
+  gold?: boolean }
 
 const K = '#4b4b4b';
 const L: Record<string, string> = { down: 'M26 70 L16 84', up: 'M26 64 L12 40', point: 'M26 68 L4 66', face: 'M26 68 L34 54', clap: 'M26 70 L44 76', stretch: 'M26 60 L12 26' };
 const R: Record<string, string> = { down: 'M94 70 L104 84', up: 'M94 64 L108 40', wave: 'M94 64 L110 46', hold: 'M94 70 L106 62', wipe: 'M94 62 L90 32', clap: 'M94 70 L76 76', throw: 'M94 62 L116 30', stretch: 'M94 60 L108 26' };
-const PAIR: Record<string, [string, string]> = { up: ['up', 'up'], wave: ['down', 'wave'], hold: ['down', 'hold'], point: ['point', 'down'], face: ['face', 'down'], wipe: ['down', 'wipe'], clap: ['clap', 'clap'], throw: ['down', 'throw'], stretch: ['stretch', 'stretch'], watch: ['face', 'down'], holdwave: ['up', 'hold'] };
+const PAIR: Record<string, [string, string]> = { sign: ['down', 'up'], up: ['up', 'up'], wave: ['down', 'wave'], hold: ['down', 'hold'], point: ['point', 'down'], face: ['face', 'down'], wipe: ['down', 'wipe'], clap: ['clap', 'clap'], throw: ['down', 'throw'], stretch: ['stretch', 'stretch'], watch: ['face', 'down'], holdwave: ['up', 'hold'] };
 
 export function mascotSvg(o: Pose = {}): string {
   const mood = o.mood || 'happy';
@@ -36,15 +38,15 @@ export function mascotSvg(o: Pose = {}): string {
   const armsSvg = A(L[la], 'l') + A(R[ra], 'r');
   const props = o.props || [];
   const extra = (mood === 'sleepy' ? `<text class="m-z" x="92" y="30" font-size="16" font-weight="900" fill="#afafaf" font-family="Nunito, sans-serif">z</text>` : '')
-    + (mood === 'think' && !props.includes('magnifier') ? '<circle cx="98" cy="22" r="3" fill="#afafaf"/><circle cx="106" cy="12" r="4.5" fill="#afafaf"/>' : '');
+    + (mood === 'think' && !props.includes('magnifier') && !props.includes('sign') ? '<circle cx="98" cy="22" r="3" fill="#afafaf"/><circle cx="106" cy="12" r="4.5" fill="#afafaf"/>' : '');
   const pr = props.map((p) => `<g class="m-prop m-prop-${p}">${PROPS[p] || ''}</g>`).join('');
   const front = (o.front || []).map((p) => PROPS[p] || '').join('');
   // 手臂挡在身前的动作（鼓掌、看表、捂脸）：手臂画在身体之后
   const inFront = arms === 'clap' || arms === 'watch' || arms === 'face';
   return `<ellipse class="m-shadow" cx="60" cy="112" rx="30" ry="4.5" fill="#000" opacity=".08"/>${inFront ? '' : armsSvg}`
     + `<rect x="40" y="100" width="14" height="10" rx="5" fill="#58a700"/><rect x="66" y="100" width="14" height="10" rx="5" fill="#58a700"/>`
-    + `<path d="M32 14 h44 l18 18 v64 a8 8 0 0 1 -8 8 h-54 a8 8 0 0 1 -8 -8 v-74 a8 8 0 0 1 8 -8z" fill="#fff" stroke="#e5e5e5" stroke-width="3"/>`
-    + `<path d="M76 14 v12 a6 6 0 0 0 6 6 h12 z" fill="#58cc02" stroke="#58a700" stroke-width="2" stroke-linejoin="round"/>`
+    + `<path d="M32 14 h44 l18 18 v64 a8 8 0 0 1 -8 8 h-54 a8 8 0 0 1 -8 -8 v-74 a8 8 0 0 1 8 -8z" fill="${o.gold ? '#fffbea' : '#fff'}" stroke="${o.gold ? '#e5a500' : '#e5e5e5'}" stroke-width="${o.gold ? 4 : 3}"/>`
+    + `<path d="M76 14 v12 a6 6 0 0 0 6 6 h12 z" fill="${o.gold ? '#ffc800' : '#58cc02'}" stroke="${o.gold ? '#e5a500' : '#58a700'}" stroke-width="2" stroke-linejoin="round"/>`
     + `${eye(49)}${eye(71)}<circle cx="38" cy="64" r="4.5" fill="#ffb3b3" opacity=".8"/><circle cx="82" cy="64" r="4.5" fill="#ffb3b3" opacity=".8"/>${mouth}`
     + `<rect x="36" y="82" width="22" height="5" rx="2.5" fill="#ffcfcf"/><rect x="62" y="82" width="22" height="5" rx="2.5" fill="#c9f2a8"/><rect x="36" y="91" width="34" height="4" rx="2" fill="#e5e5e5"/>`
     + `${inFront ? armsSvg : ''}${front}${extra}${pr}`;

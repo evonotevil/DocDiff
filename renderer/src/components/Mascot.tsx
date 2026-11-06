@@ -59,11 +59,11 @@ export function useFade<T>(v: T | null, ms = 4000): T | null {
   return cur;
 }
 
-export function Confetti() {
+export function Confetti({ n = 70 }: { n?: number }) {
   const colors = ['#58cc02', '#1cb0f6', '#ffc800', '#ff4b4b', '#ce82ff', '#ff9600'];
   return (
     <div className="confetti" aria-hidden>
-      {Array.from({ length: 70 }, (_, i) => (
+      {Array.from({ length: n }, (_, i) => (
         <i key={i} style={{
           left: `${(i * 37) % 100}%`, background: colors[i % colors.length],
           animationDelay: `${(i % 14) * 0.07}s`, animationDuration: `${1.6 + (i % 5) * 0.25}s`,

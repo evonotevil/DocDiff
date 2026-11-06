@@ -22,7 +22,7 @@ const scan = (win, where) => win.evaluate(() => {
   const out = new Set();
   const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
   for (let n = w.nextNode(); n; n = w.nextNode()) {
-    const s = n.nodeValue.trim(); if (!s || !/[一-鿿]/.test(s) || s === '中文' || s === 'Language / 语言') continue;
+    const s = n.nodeValue.trim(); if (!s || !/[一-鿿]/.test(s) || s === '中文' || s.startsWith('Language / 语言')) continue;
     const el = n.parentElement; if (!el || skip(el) || !el.getClientRects().length) continue;
     out.add(s.slice(0, 60) + '  <' + (el.className || el.tagName) + ' / ' + (el.parentElement?.className || '') + '>');
   }
@@ -43,7 +43,7 @@ const overflow = (win) => win.evaluate(() => {
 
 (async () => {
   const cfg = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-cfg-'));
-  const app = await _electron.launch({ executablePath: E, args: ['--no-sandbox', '--lang=en-US', APP], env: { ...process.env, XDG_CONFIG_HOME: cfg } });
+  const app = await _electron.launch({ executablePath: E, args: ['--no-sandbox', '--lang=' + (process.env.UILANG || 'en-US'), APP], env: { ...process.env, XDG_CONFIG_HOME: cfg } });
   let win = await app.firstWindow();
   const errs = []; win.on('pageerror', (e) => errs.push(e.message));
   if (PSEUDO) { await win.evaluate(() => localStorage.setItem('docdiff.pseudo', '1')); await win.reload(); }
@@ -106,6 +106,18 @@ const overflow = (win) => win.evaluate(() => {
   await win.keyboard.press('Escape');
   await win.evaluate(() => document.querySelector('.tb-copy')?.click()); await win.waitForTimeout(300);
   await step('11-toast');
+  // 1.9.1：查找栏、文件片菜单、老用户首页（两个页签）
+  await win.waitForTimeout(3500);
+  await win.keyboard.press('Control+f'); await win.waitForTimeout(200); await win.keyboard.type('the'); await win.waitForTimeout(500);
+  await step('12-find');
+  await win.keyboard.press('Escape');
+  await win.evaluate(() => document.querySelector('.filechip')?.click()); await win.waitForTimeout(250);
+  await step('13-filechip-menu');
+  await win.keyboard.press('Escape');
+  await win.evaluate(() => [...document.querySelectorAll('.nav-foot .nav-item')][0]?.click()); await win.waitForTimeout(800);
+  await step('14-home-recent');
+  await win.evaluate(() => document.querySelectorAll('.mod-tabs button')[1]?.click()); await win.waitForTimeout(200);
+  await step('15-home-negotiations');
 
   const L = [...leaks.entries()];
   ok('no Chinese left in the English UI', !L.length, L.map(([s, w]) => `${w}: ${s}`));

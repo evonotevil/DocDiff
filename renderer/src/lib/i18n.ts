@@ -1,5 +1,6 @@
 import { EN_DICT } from './dict.en';
 import { EN_19 } from './dict.en.19';
+import { EN_191 } from './dict.en.191';
 import { getSetting, setSetting } from './persist';
 // 中英文切换：以中文原文作为 key，英文在下面的词典里。t('…{n}…', { n }) 支持占位符。
 export type Lang = 'zh' | 'en';
@@ -57,7 +58,7 @@ const META_EN: Record<string, string> = {
 };
 
 // 1.9：按英文风格指南重写的条目覆盖旧译文
-const EN: Record<string, string> = { ...EN_DICT, ...EN_19 };
+const EN: Record<string, string> = { ...EN_DICT, ...EN_19, ...EN_191 };
 
 /** 日期、数字一律按界面语言用 Intl 格式化（1.9 · 英文风格指南第 7 条）：中文 10月26日，英文 Oct 26 */
 export const fmtMonthDay = (d: Date) => new Intl.DateTimeFormat(LANG === 'en' ? 'en-US' : 'zh-CN', { month: 'short', day: 'numeric' }).format(d);

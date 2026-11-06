@@ -107,24 +107,61 @@ export async function parseDocx(file: FileInfo): Promise<DocModel> {
   };
 
   // ---- numbering ----
-  const numFmt = new Map<string, string>(); // `${numId}:${ilvl}` -> fmt
-  const numText = new Map<string, string>();
+  // 1.9.1：按 Word 的规则数——读 w:start；lvlOverride / startOverride 重新起编；
+  // 共用同一个 abstractNum 的列表接着数（计数按 abstractNum，不按 numId）
+  interface LvlDef { fmt: string; text: string; start: number }
+  const numAbs = new Map<string, string>(); // numId -> abstractNumId
+  const absLvls = new Map<string, Map<number, LvlDef>>();
+  const numLvls = new Map<string, Map<number, LvlDef>>(); // numId 的 lvlOverride 里整级重新定义
+  const numStart = new Map<string, Map<number, number>>(); // numId -> ilvl -> startOverride
+  const readLvl = (l: Element): LvlDef => ({
+    fmt: wattr(kid(l, 'numFmt'), 'val') || 'bullet',
+    text: wattr(kid(l, 'lvlText'), 'val') ?? '',
+    start: parseInt(wattr(kid(l, 'start'), 'val') || '1', 10) || (wattr(kid(l, 'start'), 'val') === '0' ? 0 : 1),
+  });
   const numDoc = await xml('word/numbering.xml');
   if (numDoc) {
-    const abs = new Map<string, Element>();
-    for (const a of Array.from(numDoc.getElementsByTagNameNS(W, 'abstractNum'))) abs.set(wattr(a, 'abstractNumId') || '', a);
+    for (const a of Array.from(numDoc.getElementsByTagNameNS(W, 'abstractNum'))) {
+      const m = new Map<number, LvlDef>();
+      for (const l of kids(a, 'lvl')) m.set(parseInt(wattr(l, 'ilvl') || '0', 10), readLvl(l));
+      absLvls.set(wattr(a, 'abstractNumId') || '', m);
+    }
     for (const n of Array.from(numDoc.getElementsByTagNameNS(W, 'num'))) {
       const nid = wattr(n, 'numId') || '';
-      const a = abs.get(wattr(kid(n, 'abstractNumId'), 'val') || '');
-      if (!a) continue;
-      for (const l of kids(a, 'lvl')) {
-        const il = wattr(l, 'ilvl') || '0';
-        numFmt.set(`${nid}:${il}`, wattr(kid(l, 'numFmt'), 'val') || 'bullet');
-        numText.set(`${nid}:${il}`, wattr(kid(l, 'lvlText'), 'val') || '');
+      numAbs.set(nid, wattr(kid(n, 'abstractNumId'), 'val') || '');
+      for (const o of kids(n, 'lvlOverride')) {
+        const il = parseInt(wattr(o, 'ilvl') || '0', 10);
+        const so = kid(o, 'startOverride');
+        if (so) { if (!numStart.has(nid)) numStart.set(nid, new Map()); numStart.get(nid)!.set(il, parseInt(wattr(so, 'val') || '1', 10)); }
+        const l = kid(o, 'lvl');
+        if (l) { if (!numLvls.has(nid)) numLvls.set(nid, new Map()); numLvls.get(nid)!.set(il, readLvl(l)); }
       }
     }
   }
-  const counters = new Map<string, number[]>();
+  const lvlDef = (numId: string, il: number): LvlDef | undefined => numLvls.get(numId)?.get(il) ?? absLvls.get(numAbs.get(numId) || '')?.get(il);
+  const counters = new Map<string, number[]>(); // abstractNumId -> 各级当前值
+  const overrideUsed = new Set<string>(); // `${numId}:${ilvl}`：startOverride 只在这个 num 第一次用到该级时生效
+  /** 给一个带编号的段落计数，返回显示的编号文字；项目符号返回 null */
+  const nextNumber = (numId: string, lvl: number): { marker: string; ol: boolean } | null => {
+    const def = lvlDef(numId, lvl);
+    if (!def) return null;
+    if (def.fmt === 'bullet') return { marker: lvl % 2 ? '◦' : '•', ol: false };
+    const key = numAbs.get(numId) || 'n' + numId;
+    const arr = counters.get(key) || [];
+    const so = numStart.get(numId)?.get(lvl);
+    if (so !== undefined && !overrideUsed.has(`${numId}:${lvl}`)) { overrideUsed.add(`${numId}:${lvl}`); arr[lvl] = so; }
+    else arr[lvl] = arr[lvl] === undefined ? def.start : arr[lvl] + 1;
+    arr.length = lvl + 1; // 下级重新起编
+    counters.set(key, arr);
+    if (def.fmt === 'none') return { marker: '', ol: true };
+    const tpl = def.text.replace(/%(\d)/g, (_m, d) => {
+      const k = parseInt(d, 10) - 1;
+      const kd = lvlDef(numId, k);
+      const v = arr[k] ?? kd?.start ?? 1;
+      return fmtNum(v, kd?.fmt || 'decimal');
+    });
+    return { marker: tpl, ol: true };
+  };
 
   // ---- rels & images ----
   const relsDoc = await xml('word/_rels/document.xml.rels');
@@ -192,35 +229,24 @@ export async function parseDocx(file: FileInfo): Promise<DocModel> {
     const b: Block = { kind: 'p', runs, align };
     if (inCell) return b;
     const hl = headingLevel(ps);
-    // 列表
+    // 列表 / 带编号的标题
     const numPr = kid(pPr, 'numPr');
     let numId = wattr(kid(numPr, 'numId'), 'val') || undefined;
     let ilvl = kid(numPr, 'ilvl') ? parseInt(wattr(kid(numPr, 'ilvl'), 'val') || '0', 10) : undefined;
     if (!numId) {
       for (const s of styleChain(ps).reverse()) if (s.numId) { numId = s.numId; ilvl = ilvl ?? s.ilvl; break; }
     }
-    if (hl) { b.kind = 'h'; b.level = hl; }
-    else if (numId && numId !== '0') {
+    const num = numId && numId !== '0' ? nextNumber(numId, ilvl || 0) : null;
+    if (hl) {
+      b.kind = 'h'; b.level = hl;
+      // 1.9.1：标题带自动编号时显示编号（如“10.”），并参与计数
+      if (num && num.ol && num.marker) b.marker = num.marker;
+    } else if (num) {
       const lvl = ilvl || 0;
-      const fmt = numFmt.get(`${numId}:${lvl}`) || 'bullet';
       b.kind = 'li';
       b.level = lvl;
-      if (fmt === 'bullet' || fmt === 'none') { b.list = 'ul'; b.marker = lvl % 2 ? '◦' : '•'; }
-      else {
-        b.list = 'ol';
-        const arr = counters.get(numId) || [];
-        arr[lvl] = (arr[lvl] || 0) + 1;
-        arr.length = lvl + 1;
-        counters.set(numId, arr);
-        const n = arr[lvl];
-        let tpl = numText.get(`${numId}:${lvl}`) || `%${lvl + 1}.`;
-        tpl = tpl.replace(/%(\d)/g, (_m, d) => {
-          const v = arr[parseInt(d, 10) - 1] || 1;
-          const f = parseInt(d, 10) - 1 === lvl ? fmt : numFmt.get(`${numId}:${parseInt(d, 10) - 1}`) || 'decimal';
-          return fmtNum(v, f);
-        });
-        b.marker = tpl || `${n}.`;
-      }
+      b.list = num.ol ? 'ol' : 'ul';
+      b.marker = num.marker;
     }
     return b;
   };

@@ -11,6 +11,7 @@ export interface DiffOptions {
   detectMoves: boolean;
   keepEmpty?: boolean;
   normPunct?: boolean; // 全角/半角标点视为相同
+  normQuotes?: boolean; // 1.9.1：直引号 / 弯引号视为相同（包括词中间的撇号 Company’s）
   mergeParas?: boolean; // 识别段落拆分/合并（一段 ↔ 多段）
 }
 
@@ -44,6 +45,7 @@ const PUNCT: Record<string, string> = {
 function normKey(t: string, o: DiffOptions): string {
   let k = t;
   if (o.normPunct) k = PUNCT[k] ?? (k.length === 1 && k >= '\uff01' && k <= '\uff5e' ? String.fromCharCode(k.charCodeAt(0) - 0xfee0) : k);
+  if (o.normQuotes) k = k.replace(/[‘’‚‛′]/g, "'").replace(/[“”„‟″]/g, '"');
   if (o.ignoreCase) k = k.toLowerCase();
   if (/^\s+$/.test(k)) k = o.ignoreWhitespace ? ' ' : k.replace(/ /g, ' ');
   return k;

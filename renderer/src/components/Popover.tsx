@@ -59,7 +59,14 @@ export function Popover({ anchor, open, onClose, title, right, width = 340, alig
       if (ref.current?.contains(tg) || anchor.current?.contains(tg)) return;
       closeRef.current();
     };
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); closeRef.current(); anchor.current?.focus(); } };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      // 1.9.1：里面还开着一层弹出层（如版本链里一行的“…”菜单），或输入框自己处理 Esc（起名时 Esc 取消），先交给它们
+      if (ref.current?.querySelector('.pop')) return;
+      const tg = e.target as HTMLElement | null;
+      if (tg && ref.current?.contains(tg) && tg.closest?.('[data-own-esc]')) return;
+      e.stopPropagation(); closeRef.current(); anchor.current?.focus();
+    };
     document.addEventListener('pointerdown', onDown, true);
     document.addEventListener('keydown', onKey, true);
     // 打开时把焦点放进来一次；焦点已经在里面（比如自动聚焦的输入框）就不动
@@ -78,6 +85,6 @@ export function Popover({ anchor, open, onClose, title, right, width = 340, alig
 }
 
 /** “…”菜单里的一项（组件 MenuItem）。菜单 = 无标题的 Popover，className="pop-menu"：上下各留 8px（不要用 “menu”，旧样式里有同名类） */
-export function MenuItem({ icon, children, onClick, tone }: { icon?: React.ReactNode; children: React.ReactNode; onClick: () => void; tone?: 'danger' }) {
-  return <button type="button" className={`menu-item ${tone || ''}`} onClick={onClick}>{icon}{children}</button>;
+export function MenuItem({ icon, children, onClick, tone, disabled, title }: { icon?: React.ReactNode; children: React.ReactNode; onClick: () => void; tone?: 'danger'; disabled?: boolean; title?: string }) {
+  return <button type="button" className={`menu-item ${tone || ''}`} onClick={onClick} disabled={disabled} title={title}>{icon}{children}</button>;
 }

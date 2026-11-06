@@ -56,8 +56,10 @@ const decideOn = async (win, re, key) => { await win.evaluate((r) => [...documen
   ok('V3 added and compared with V2', /V2\s*→\s*V3/.test(await text(win, '.ver-chip')));
   // 3. 回首页，只放对方的 V4：认出往来稿，加为 V4
   await win.evaluate(() => [...document.querySelectorAll('.nav-foot .nav-item')][0].click());
-  await win.waitForSelector('.lib-row', { timeout: 15000 });
-  ok('home lists the negotiation', /采购合同-V2/.test(await text(win, '.lib-card')), { card: (await text(win, '.lib-card')).replace(/\s+/g, ' ').slice(0, 100) });
+  await win.waitForSelector('.mod-tabs', { timeout: 15000 });
+  await win.evaluate(() => document.querySelectorAll('.mod-tabs button')[1].click()); // 1.9.1：往来稿在左卡片的第二个页签
+  await win.waitForSelector('.mod-lib .lib-row', { timeout: 15000 });
+  ok('home lists the negotiation', /采购合同-V2/.test(await text(win, '.mod-lib')), { card: (await text(win, '.mod-lib')).replace(/\s+/g, ' ').slice(0, 100) });
   await pickNext(F('V4'));
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.send('menu', 'open-right'));
   await win.waitForSelector('.lib-match', { timeout: 15000 }).catch(() => {});
@@ -99,22 +101,23 @@ const decideOn = async (win, re, key) => { await win.evaluate((r) => [...documen
   await app.close();
   // 6. 重启：往来稿还在；归档、删除、撤销
   ({ app, win, errs, pickNext } = await launch());
-  await win.waitForSelector('.lib-row', { timeout: 30000 });
-  const card = await text(win, '.lib-card');
+  await win.waitForSelector('.mod-lib .lib-row', { timeout: 30000 });
+  ok('home remembers the negotiations tab', await win.evaluate(() => document.querySelectorAll('.mod-tabs button')[1].getAttribute('aria-selected') === 'true'));
+  const card = await text(win, '.mod-lib');
   ok('persists across restart with progress', /V4/.test(card), { card: card.replace(/\s+/g, ' ').slice(0, 100) });
-  await win.evaluate(() => document.querySelector('.lib-card .lib-row .btn.icon').click());
+  await win.evaluate(() => document.querySelector('.mod-lib .lib-row .btn.icon').click());
   await win.waitForTimeout(200);
   await clickText(win, '.pop .menu-item', '归档');
   await win.waitForTimeout(300);
-  ok('archive hides it and shows “已归档 1”', /已归档 1/.test(await text(win, '.lib-card')));
-  await clickText(win, '.lib-card .btn', '已归档');
-  await win.evaluate(() => document.querySelector('.lib-card .lib-row .btn.icon').click());
+  ok('archive hides it and shows “已归档 1”', /已归档 1/.test(await text(win, '.mod-lib')));
+  await clickText(win, '.mod-lib .btn', '已归档');
+  await win.evaluate(() => document.querySelector('.mod-lib .lib-row .btn.icon').click());
   await win.waitForTimeout(200);
   await clickText(win, '.pop .menu-item', '删除往来稿');
   await win.waitForTimeout(300);
   await clickText(win, '.toast .toast-btn', '撤销');
   await win.waitForTimeout(300);
-  ok('delete + undo keeps it', /采购合同/.test(await text(win, '.lib-card')));
+  ok('delete + undo keeps it', /采购合同/.test(await text(win, '.mod-lib')));
   ok('no renderer errors after restart', errs.length === 0, errs.length ? { errs: errs.slice(0, 3) } : undefined);
   await app.close();
   const failed = Object.values(checks).filter((c) => !c.ok).length;

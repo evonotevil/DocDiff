@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { FindAll } from '../components/FindBar';
 import type { Block } from '../lib/model';
 import type { DiffResult, Row } from '../lib/engine';
 import { useScrollToChange } from './RichView';
@@ -126,8 +127,9 @@ export function PlainView({ A, B, res, selCid, onSel, layout, wrap, hideUnchange
   const hKey = (c: { key: string }) => `${width}|${layout}|${wrap ? 'w' : 'n'}|${c.key}`;
   const estH = (c: { key: string; units: number }) => cache.h.get(hKey(c)) ?? Math.round(c.units * cache.unit);
   const selRow = selCid != null ? rowOfCid(selCid) : undefined;
+  const findAll = useContext(FindAll);
   const isMounted = (ci: number, c: { from: number; to: number }) => {
-    if (selSpan === 'all') return true;
+    if (selSpan === 'all' || findAll) return true;
     if (ci >= win.lo && ci <= win.hi) return true;
     if (selSpan && ci >= selSpan.lo && ci <= selSpan.hi) return true;
     if (selRow !== undefined) for (let k = c.from; k < c.to; k++) if (visible[k] === selRow) return true;

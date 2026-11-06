@@ -22,13 +22,16 @@ export function TemplatesCard({ lib, threadCount, onUse, onNew, onAddVersion, on
 }) {
   const tpls = live(lib.templates);
   return (
-    <section className="lib-card" aria-label={t('模板')}>
-      <h2>{t('模板')}{tpls.length > 0 && <span className="cnt">{tpls.length}</span>}<span className="grow" />
+    <section className="mod-card mod-tpl" aria-labelledby="mod-tpl-h">
+      <div className="mod-h"><span className="mod-ic mc-fox" aria-hidden="true"><I.GlyphTemplate /></span>
+        <h2 id="mod-tpl-h">{t('模板')}</h2>{tpls.length > 0 && <span className="cnt">{tpls.length}</span>}<span className="grow" />
         <button type="button" className="btn sm" onClick={onNew} disabled={busy}><I.IconPlusDoc />{t('新建模板')}</button>
-      </h2>
+      </div>
+      <div className="mod-b">
       {tpls.length === 0
         ? <p className="lib-empty">{t('把标准合同存成模板，对方改稿来了只放对方的文件就能比。')}</p>
         : <div className="lib-rows">{tpls.map((tp) => <TemplateRow key={tp.id} tpl={tp} n={threadCount(tp.id)} onUse={onUse} onAddVersion={onAddVersion} onRename={onRename} onDelete={onDelete} onDeleteVersion={onDeleteVersion} />)}</div>}
+      </div>
       <p className="lib-foot">{t('模板只存你自己的标准稿')}<Info label={t('模板')}>{t('存的是拷贝；原文件挪走、改名都不影响。对方改稿来了，DocDiff 会自动找出对方是在哪一版上改的。')}</Info></p>
     </section>
   );
@@ -140,7 +143,9 @@ export function MatchNotice({ title, body, action, onUse, onDismiss }: { title: 
  * 「最近比较」的一行（1.8 · R1）：共同的名字只写一次，第二行写两边不同的那一段 · 时间；状态在右侧固定一列。
  * 属于往来稿的一对写往来稿名和“V1 → V3”；两份文件名没有共同部分时退回“A → B”。完整文件名在悬停里。
  */
-export function RecentRow({ a, b, time, prog, thread, onOpen, onSave, onRemove }: {
+export function RecentRow({ a, b, time, prog, thread, onOpen, onSave, onRemove, saving }: {
+  /** 1.9.1：正在后台存为往来稿 */
+  saving?: boolean;
   a: { name: string; ext: string }; b: { name: string; ext: string }; time: string;
   prog: { total: number; decided: number } | null;
   thread?: { name: string; a: string; b: string } | null;
@@ -152,8 +157,8 @@ export function RecentRow({ a, b, time, prog, thread, onOpen, onSave, onRemove }
   const done = has && prog!.decided >= prog!.total;
   const pn = thread ? { common: thread.name, a: thread.a, b: thread.b } : pairName(a.name, b.name);
   return (
-    <div className="lib-row recent-row">
-      <button type="button" className="row-open" title={`${a.name}\n→ ${b.name}`} aria-label={t('打开比较：{a} → {b}', { a: a.name, b: b.name })} onClick={onOpen} />
+    <div className={`lib-row recent-row${saving ? ' saving' : ''}`} aria-busy={saving || undefined}>
+      <button type="button" className="row-open" disabled={saving} title={`${a.name}\n→ ${b.name}`} aria-label={t('打开比较：{a} → {b}', { a: a.name, b: b.name })} onClick={onOpen} />
       <TypeTag type={b.ext} />
       <div className="rr-main">
         {pn ? <div className="rr-name"><MidName name={pn.common} title={false} /></div>
@@ -163,12 +168,13 @@ export function RecentRow({ a, b, time, prog, thread, onOpen, onSave, onRemove }
           <span className="rr-time">{time}</span>
         </div>
       </div>
-      <span className={`rr-st${done ? ' done' : has ? ' part' : ''}`}>
-        {done ? <><I.IconOk />{t('已审完')}</>
+      <span className={`rr-st${saving ? ' busy' : done ? ' done' : has ? ' part' : ''}`} role={saving ? 'status' : undefined}>
+        {saving ? <><span className="spin-dot" aria-hidden="true" />{t('正在存为往来稿…')}</>
+          : done ? <><I.IconOk />{t('已审完')}</>
           : has ? <><span className="rr-bar" aria-hidden="true"><i style={{ width: `${Math.round((prog!.decided / prog!.total) * 100)}%` }} /></span>{t('{d} / {n}', { d: prog!.decided, n: prog!.total })}</>
           : t('未开始')}
       </span>
-      <button ref={more} type="button" className="btn sm plain icon" aria-label={t('更多')} title={t('更多')} onClick={(e) => { e.stopPropagation(); setMenu(!menu); }}><I.IconMore /></button>
+      <button ref={more} type="button" className="btn sm plain icon" aria-label={t('更多')} title={t('更多')} disabled={saving} onClick={(e) => { e.stopPropagation(); setMenu(!menu); }}><I.IconMore /></button>
       <Popover anchor={more} open={menu} onClose={() => setMenu(false)} width={260} className="pop-menu" label={t('更多')}>
         <MenuItem icon={<I.IconPlusDoc />} onClick={() => { setMenu(false); onSave(); }}>{t('存为往来稿')}</MenuItem>
         <MenuItem icon={<I.IconX />} onClick={() => { setMenu(false); onRemove(); }}>{t('从列表移除')}</MenuItem>

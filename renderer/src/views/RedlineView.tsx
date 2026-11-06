@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useContext, useEffect, useRef, useState } from 'react';
+import { FindAll } from '../components/FindBar';
 import type { Row } from '../lib/engine';
 import type { DocModel } from '../lib/model';
 import type { DiffResult } from '../lib/engine';
@@ -20,7 +21,9 @@ export function RedlineView({ A, B, res, selCid, onSel, decisions, innerRef }: {
   const secs = useSections(res);
   // 分批挂载（1.7.4）：先挂前 STEP 段，之后每帧再挂一批，直到全文。一次挂完整篇时，十几页 PDF 的渲染 + 排版是一个 0.4 秒以上的整块任务。
   // 跳到还没挂上的段落时，直接挂到那一段之后。
-  const [limit, setLimit] = useState(STEP);
+  const [limit0, setLimit] = useState(STEP);
+  const findAll = useContext(FindAll);
+  const limit = findAll ? res.rows.length : limit0;
   useEffect(() => setLimit(STEP), [res]);
   useEffect(() => {
     if (limit >= res.rows.length) return;

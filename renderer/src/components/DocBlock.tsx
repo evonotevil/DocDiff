@@ -81,13 +81,15 @@ export function BlockView({ block, toks, selCid, className, extra }: { block: Bl
   if (block.kind === 'li') {
     return (
       <div className={`blk li${al} ${className || ''}`} dir="auto" style={{ paddingInlineStart: (block.level || 0) * 22 }}>
-        <span className="mk">{block.marker || '•'}</span><span>{body}</span>{extra}
+        <span className="mk">{block.marker ?? '•'}</span><span>{body}</span>{extra}
       </div>
     );
   }
   const k = block.kind === 'h' ? `h h${block.level || 1}` : 'p';
+  // 1.9.1：带自动编号的标题显示编号（只是显示，不参与比较）
+  const hm = block.kind === 'h' && block.marker ? <span className="hmk">{block.marker}</span> : null;
   // 1.8.1：dir="auto" 让阿拉伯文、希伯来文段落按自己的方向排，中英文不受影响
-  return <div className={`blk ${k}${al} ${className || ''}`} dir="auto">{body.length ? body : ' '}{extra}</div>;
+  return <div className={`blk ${k}${al} ${className || ''}`} dir="auto">{hm}{body.length ? body : ' '}{extra}</div>;
 }
 
 /** 一侧可能由多个段落组成（段落被拆分/合并时），按 tok.blk 分组逐段渲染 */

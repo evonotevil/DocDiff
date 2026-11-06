@@ -138,7 +138,7 @@
    {
     "name": "macaw",
     "value": "#1cb0f6",
-    "usage": "Macaw 蓝：选中、焦点框、文件操作、“富文本”模式。"
+    "usage": "Macaw 蓝：选中、焦点框、文件操作、“富文本”模式。首页「新比较」模块的图标块和悬停边框（1.9.1）。"
    },
    {
     "name": "macaw-lip",
@@ -190,12 +190,22 @@
    {
     "name": "fox",
     "value": "#ff9600",
-    "usage": "Fox 橙：只用于“文件详情”模式图标。"
+    "usage": "Fox 橙：“文件详情”模式图标；首页「模板」模块的图标块和悬停边框（1.9.1，只在首页）。"
+   },
+   {
+    "name": "fox-lip",
+    "value": "#e08600",
+    "usage": "Fox 底边（1.9.1）：首页「模板」模块图标块的 2px 底边。"
    },
    {
     "name": "beetle",
     "value": "#ce82ff",
-    "usage": "Beetle 紫：只用于“OCR 文本”模式图标（与“移动”差异同色，二者不会同屏出现在同一尺寸上）。"
+    "usage": "Beetle 紫：“OCR 文本”模式图标（与“移动”差异同色）；首页「往来稿 / 最近比较」模块的图标块和悬停边框（1.9.1，只在首页，和比较页不同时出现）。"
+   },
+   {
+    "name": "beetle-lip",
+    "value": "#a560e8",
+    "usage": "Beetle 底边（1.9.1）：首页「往来稿 / 最近比较」模块图标块的 2px 底边。"
    },
    {
     "name": "cardinal",
@@ -424,6 +434,14 @@
       "usage": "页面和弹窗标题。"
      },
      {
+      "name": "heading",
+      "fontSize": "20px",
+      "lineHeight": 1.3,
+      "fontWeight": 900,
+      "sample": "全部处理完了",
+      "usage": "完成页标题、空状态标题、卡片里的大数字（1.9.1 新增）。"
+     },
+     {
       "name": "section",
       "fontSize": "13px",
       "lineHeight": 1.4,
@@ -446,6 +464,14 @@
       "fontWeight": 400,
       "sample": "PDF 的文字是从版面推断的，段落和表格可能被拆开。",
       "usage": "说明段落、提示正文。"
+     },
+     {
+      "name": "body-sm",
+      "fontSize": "14px",
+      "lineHeight": 1.45,
+      "fontWeight": 700,
+      "sample": "Start comparing",
+      "usage": "英文按钮、气泡和偏小的正文（1.9.1 新增，替换零散的 14）。"
      },
      {
       "name": "button",
@@ -555,6 +581,16 @@
  },
  "radius": {
   "tokens": [
+   {
+    "name": "radius-2xs",
+    "value": "3px",
+    "usage": "细条、刻度、彩纸、下划线页签的指示条（1.9.1 收进变量）。"
+   },
+   {
+    "name": "radius-xs",
+    "value": "6px",
+    "usage": "类型徽标、小标签、键位、编号胶囊以外的小块（1.9.1 收进变量）。"
+   },
    {
     "name": "radius-s",
     "value": "8px",
@@ -706,6 +742,36 @@
     "name": "dur-toast",
     "value": "3200ms",
     "usage": "“过半了！”等提示的停留时间。"
+   },
+   {
+    "name": "dur-mascot-quick",
+    "value": "250ms",
+    "usage": "对对的小动作：探身、看过去。（1.9.1 收进变量）"
+   },
+   {
+    "name": "dur-mascot",
+    "value": "450ms",
+    "usage": "对对的一个动作：探头、跳一下、弹出。（1.9.1 收进变量）"
+   },
+   {
+    "name": "dur-mascot-long",
+    "value": "900ms",
+    "usage": "对对的完整动作：挥手、转一圈、伸懒腰、鼓掌。（1.9.1 收进变量）"
+   },
+   {
+    "name": "dur-moment",
+    "value": "1200ms",
+    "usage": "完成的瞬间、纸上一行闪一下、探头升起。（1.9.1 收进变量）"
+   },
+   {
+    "name": "dur-spin",
+    "value": "1000ms",
+    "usage": "转圈、脉冲、不定进度条的一圈。（1.9.1 收进变量）"
+   },
+   {
+    "name": "dur-loop",
+    "value": "3000ms",
+    "usage": "对对待机的循环：呼吸、打盹、举放大镜。（1.9.1 收进变量）"
    }
   ]
  }

@@ -6,8 +6,8 @@ import { fmtBytes, fmtDate } from '../lib/model';
 import { defaultKeywords } from '../lib/insight';
 import { Modal } from './Modal';
 import { Mascot, useMascotOn } from './Mascot';
-import { Dex } from './Dex';
-import { resetMascot } from '../lib/mascot/store';
+import { Dex, dexComplete } from './Dex';
+import { resetMascot, mascotData } from '../lib/mascot/store';
 import { Switch, Opt, Seg, Kbd, Info } from './ui';
 import { NameEditor } from './NameEditor';
 import * as I from './icons';
@@ -258,6 +258,7 @@ export function SettingsModal({ v, set, onClose, upd, initialTab = 'general', sa
             <>
               <UpdateSection {...upd} auto={v.autoCheckUpdate} setAuto={(x) => set('autoCheckUpdate', x)} />
               <div className="set-about">{t('文档内容始终留在这台电脑上，比对过程不联网。')}</div>
+              <DiffyBirthday />
               {/* 1.9 · M13：关掉“让对对出来走走”时图鉴仍可查看 */}
               <Dex />
             </>
@@ -265,5 +266,18 @@ export function SettingsModal({ v, set, onClose, upd, initialTab = 'general', sa
         </div>
       </div>
     </Modal>
+  );
+}
+
+/** 1.9.1：对对的生日（本机第一次打开的日期）；52 个都见过以后，旁边是金色描边的对对 */
+function DiffyBirthday() {
+  const d = new Date(mascotData().since);
+  const date = isEn() ? new Intl.DateTimeFormat('en-US', { year: 'numeric', month: 'short', day: 'numeric' }).format(d) : t('{y} 年 {m} 月 {d} 日', { y: d.getFullYear(), m: d.getMonth() + 1, d: d.getDate() });
+  const gold = dexComplete();
+  return (
+    <div className={`about-diffy${gold ? ' gold' : ''}`}>
+      {gold && <Mascot size={64} pose={{ gold: true, mood: 'cheer', props: ['stars'] }} />}
+      <span>{t('对对从 {d} 开始陪你', { d: date })}</span>
+    </div>
   );
 }

@@ -110,7 +110,7 @@ const launch = async (args) => {
   await w.waitForSelector('.done-card', { timeout: 10000 }).catch(() => {});
   await w.waitForTimeout(800);
   const e3 = await w.evaluate(() => document.querySelector('.done-card')?.innerText || '');
-  ok('E3: no draft yet → info + 生成审阅稿, does not claim it is sendable', /结论目前只记在 DocDiff 里/.test(e3) && /生成审阅稿/.test(e3) && !/要发给对方的就是这份/.test(e3), e3.replace(/\s+/g, ' ').slice(0, 200));
+  ok('E3: no draft yet → status line (ⓘ, 1.9.1) + 生成审阅稿, does not claim it is sendable', /结论已保存在 DocDiff 里/.test(e3) && /生成审阅稿/.test(e3) && !/要发给对方的就是这份/.test(e3), e3.replace(/\s+/g, ' ').slice(0, 200));
   ok('completion subtitle: 已看完 N 处修订，M 处待议', /已看完 \d+ 处修订，\d+ 处待议/.test(e3));
   await shot('e3-done', '.done-card');
   const before = drafts().length;

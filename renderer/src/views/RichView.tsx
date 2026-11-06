@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { FindAll } from '../components/FindBar';
 import type { DocModel } from '../lib/model';
 import type { DiffResult, Row } from '../lib/engine';
 import { BlockGroup, RTok } from '../components/DocBlock';
@@ -320,8 +321,9 @@ export const RichView = React.memo(function RichView({ A, B, res, selCid, onSel,
 
   // 选中的差异、对齐的行所在的块总要挂着
   const selRowIdx = selCid != null ? rowOfCid(selCid) : undefined;
+  const findAll = useContext(FindAll);
   const isMounted = (ci: number, c: Chunk) => {
-    if (!windowed || selSpan === 'all') return true;
+    if (!windowed || selSpan === 'all' || findAll) return true;
     const b = bOf(c);
     if (ci >= win.lo && ci <= win.hi) return true;
     if (selSpan && ci >= selSpan.lo && ci <= selSpan.hi) return true;

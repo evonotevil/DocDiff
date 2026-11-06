@@ -206,7 +206,8 @@ export async function buildDocx(rows: Row[], blocksA: Block[], blocksB: Block[],
       if (!dest) flushTable(body);
       const spec: ParaSpec = { children: [] };
       if (pendingAnchors.length && !dest) { spec.children.push(...pendingAnchors.map((c) => ({ __anchor: c }))); pendingAnchors = []; }
-      if (blk.kind === 'li') spec.children.push(new TextRun({ text: `${blk.marker || '•'}\t` }));
+      if (blk.kind === 'li') spec.children.push(new TextRun({ text: `${blk.marker ?? '•'}\t` }));
+      else if (blk.kind === 'h' && blk.marker) spec.children.push(new TextRun({ text: `${blk.marker} ` }));
       if (blk.kind === 'tr') {
         // 页眉页脚里的表格：按制表符拼成一段
         const n = Math.max(1, blk.cells?.length || 1);

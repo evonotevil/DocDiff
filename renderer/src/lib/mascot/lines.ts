@@ -8,9 +8,21 @@ import { markSeen } from './store';
 
 export interface Line { text: string; pose?: Pose; act?: string }
 
-/** justDone：刚审完一份回到首页 */
-export function homeLine(now = new Date(), justDone = false): Line {
+const GN = 'docdiff.goodnight';
+/** justDone：刚审完一份回到首页；dark：深色模式 */
+export function homeLine(now = new Date(), justDone = false, dark = false): Line {
   if (justDone) return { text: t('上一份审完了，干得漂亮。'), act: 'clap' };
+  // 1.9.1 晚安对对：23 点后、深色模式，戴睡帽说晚安。每晚最多一次（凌晨算前一晚）
+  const hh = now.getHours();
+  if (dark && (hh >= 23 || hh < 5)) {
+    const night = new Date(now.getTime() - (hh < 5 ? 86400000 : 0)).toDateString();
+    let last = ''; try { last = localStorage.getItem(GN) || ''; } catch { /* 读不到就当没出现过 */ }
+    if (last !== night) {
+      try { localStorage.setItem(GN, night); } catch { /* 存不了就算了 */ }
+      markSeen('egg:goodnight');
+      return { text: t('夜深了，比完这份早点休息。'), pose: { mood: 'sleepy', props: ['nightcap'] } };
+    }
+  }
   // 节日：只换道具和一句话（第一次见到时记进图鉴）
   const hol = holidayOn(now);
   if (hol) { markSeen('hol:' + hol.id); return { text: hol.text, pose: { mood: 'cheer', props: [hol.prop] } }; }

@@ -9,7 +9,9 @@ export interface LibFile { sha: string; ext: string; size: number; name: string;
 export interface TplVersion { id: string; label: string; added: number; file: LibFile; fp: number[]; orig?: string }
 export interface Template { id: string; name: string; created: number; updated: number; versions: TplVersion[]; deleted?: number }
 export type Side = 'ours' | 'theirs';
-export interface ThreadVersion { id: string; n: number; side: Side; added: number; file: LibFile; fp: number[]; orig?: string; tpl?: { tid: string; vid: string } }
+export interface ThreadVersion { id: string; n: number; side: Side; added: number; file: LibFile; fp: number[]; orig?: string; tpl?: { tid: string; vid: string };
+  /** 1.9.1：自己起的名称，只用于显示（「V3 · 对方第二次修改」），不影响文件名 */
+  label?: string }
 /** 一轮审阅的摘要：上一版 → 这一版里每处修订的条款、前后文字和结论（用来做“上轮”提示和条款历史） */
 export interface RoundItem { clause: string | null; before: string; after: string; v?: Verdict; note?: string }
 /** items 只在打开这份往来稿后才读进来（单独的文件），首页只用前面几个数字 */
@@ -137,4 +139,16 @@ export function matchThreads(fp: number[], threads: Thread[]): { th: Thread; tv:
   if (!per.length) return null;
   const [a, b] = per;
   return b && a.score - b.score < TIE ? { ...a, alt: b } : a;
+}
+
+/**
+ * 删掉往来稿里的一版（1.9.1）：后面的版本往前重新编号；以它为一侧的审阅记录一起去掉；
+ * 上次打开的比较用到它时回到最新两版。至少保留两版。
+ */
+export function dropVersion(th: Thread, vid: string): Thread {
+  if (th.versions.length <= 2 || !th.versions.some((v) => v.id === vid)) return th;
+  const versions = th.versions.filter((v) => v.id !== vid).map((v, i) => (v.n === i + 1 ? v : { ...v, n: i + 1 }));
+  const rounds = th.rounds.filter((r) => r.a !== vid && r.b !== vid);
+  const last = th.last && th.last.a !== vid && th.last.b !== vid ? th.last : undefined;
+  return { ...th, versions, rounds, last, updated: Date.now() };
 }

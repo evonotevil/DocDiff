@@ -129,7 +129,7 @@ function redlineHtml(res: DiffResult, blocksA: Block[], blocksB: Block[]): strin
       }
       const body = pieces.filter((p) => !p.sep).map(span).join('');
       const tag = blk.kind === 'h' ? `h${Math.min(4, (blk.level || 1) + 1)}` : 'p';
-      const mk = blk.kind === 'li' ? `<span class="mk">${esc(blk.marker || '•')}</span>` : '';
+      const mk = blk.kind === 'li' ? `<span class="mk">${esc(blk.marker ?? '•')}</span>` : blk.kind === 'h' && blk.marker ? `<span class="mk">${esc(blk.marker)}</span> ` : '';
       out.push(`<${tag}${blk.align === 'center' ? ' style="text-align:center"' : ''}>${mk}${body || '&nbsp;'}</${tag}>`);
     });
   }

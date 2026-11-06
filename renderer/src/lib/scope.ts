@@ -49,6 +49,7 @@ export function scopeInfo(A: DocModel, B: DocModel, o: DiffOptions, res: DiffRes
     o.ignoreWhitespace ? t('忽略空白差异') : t('空白差异也算'),
     o.ignoreCase ? t('忽略大小写') : t('区分大小写'),
     o.normPunct ? t('全角 / 半角标点视为相同') : t('区分全角 / 半角标点'),
+    o.normQuotes ? t('直引号和弯引号视为相同') : t('区分直引号和弯引号'),
     o.detectMoves ? t('检测移动的段落') : t('不检测移动'),
     o.formatting ? t('检测格式变化') : t('不检测格式变化'),
   ];

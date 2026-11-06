@@ -23,7 +23,7 @@ const MENU_EN = {
   富文本: 'Formatted', 纯文本: 'Plain text', 修订审阅: 'Review', 图像: 'Visual', 'OCR 文本': 'OCR text', 文件详情: 'File info',
   '下一处差异（J）': 'Next change (J)', '上一处差异（K）': 'Previous change (K)', '收起 / 展开侧栏': 'Show or hide sidebar', '收起 / 展开检查器': 'Show or hide inspector',
   重新加载: 'Reload', 开发者工具: 'Developer tools', 实际大小: 'Actual size', 放大: 'Zoom in', 缩小: 'Zoom out',
-  全屏: 'Full screen', 窗口: 'Window', 文档: 'Documents', 所有文件: 'All files',
+  '查找…': 'Find…', 全屏: 'Full screen', 窗口: 'Window', 文档: 'Documents', 所有文件: 'All files',
 };
 const L = (zh) => (LANG === 'en' ? (MENU_EN[zh] || zh) : zh);
 
@@ -131,6 +131,8 @@ function buildMenu() {
         ...['富文本', '纯文本', '修订审阅', '图像', 'OCR 文本', '文件详情'].map((l, i) => ({
           label: L(l), accelerator: `CmdOrCtrl+${i + 1}`, click: () => send('menu', 'tab', i),
         })),
+        { type: 'separator' },
+        { label: L('查找…'), accelerator: 'CmdOrCtrl+F', click: () => send('menu', 'find') },
         { type: 'separator' },
         { label: L('下一处差异（J）'), accelerator: 'F7', click: () => send('menu', 'next') },
         { label: L('上一处差异（K）'), accelerator: 'Shift+F7', click: () => send('menu', 'prev') },

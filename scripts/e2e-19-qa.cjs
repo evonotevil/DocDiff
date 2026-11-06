@@ -92,11 +92,12 @@ const ok = (k, v, info) => { if (!v) fail++; console.log(`${v ? 'ok  ' : 'FAIL'}
   const titles = await win.evaluate(() => [...document.querySelectorAll('.lib-row .row-open')].map((b) => !!b.title));
   ok('every library row-open has a title for the full name', titles.length > 0 && titles.every(Boolean), { titles });
   if (savedTpl) {
+    await win.evaluate(() => document.querySelectorAll('.mod-tabs button')[1]?.click()); await win.waitForTimeout(200); // 1.9.1：往来稿在第二个页签
     await win.evaluate(() => [...document.querySelectorAll('.lib-row')].find((r) => /往来稿/.test(r.querySelector('.row-open')?.getAttribute('aria-label') || ''))?.querySelector('button[aria-label="更多"]')?.click()); await win.waitForTimeout(200);
     const scroll = await win.evaluate(async () => {
       const pop = document.querySelector('.pop'); if (!pop) return null;
       const t0 = pop.getBoundingClientRect().top;
-      const sc = document.querySelector('.home-scroll'); const spacer = document.createElement('div'); spacer.style.height = '2000px'; sc.appendChild(spacer);
+      const sc = document.querySelector('.mod-lib .mod-b'); const spacer = document.createElement('div'); spacer.style.height = '2000px'; sc.appendChild(spacer);
       sc.scrollTop = 40; await new Promise((r) => setTimeout(r, 120));
       const p2 = document.querySelector('.pop'); const t1 = p2 ? p2.getBoundingClientRect().top : null;
       sc.scrollTop = 1600; await new Promise((r) => setTimeout(r, 120));
@@ -111,6 +112,7 @@ const ok = (k, v, info) => { if (!v) fail++; console.log(`${v ? 'ok  ' : 'FAIL'}
     await win.waitForTimeout(300);
     ok('home delete shows undo toast', del && !!(await win.$('.toast.undo')));
     // 立刻进比较页（最近比较里点开），在审阅里按 U
+    await win.evaluate(() => document.querySelectorAll('.mod-tabs button')[0]?.click()); await win.waitForTimeout(200);
     await win.evaluate(() => [...document.querySelectorAll('.lib-row .row-open')].find((b) => /打开比较/.test(b.getAttribute('aria-label') || ''))?.click());
     await win.waitForFunction(() => !!document.querySelector('.tb-pos') || !!document.querySelector('.tb-prog'), null, { timeout: 30000 }).catch(() => {});
     await win.evaluate(() => document.querySelectorAll('.nav-list .nav-item')[2].click()); await win.waitForTimeout(400);

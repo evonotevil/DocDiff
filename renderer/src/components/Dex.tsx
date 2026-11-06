@@ -20,7 +20,8 @@ const EGGS: Item[] = [
   { id: 'name', group: 'egg', name: '跳舞', pose: { mood: 'cheer', arms: 'up' }, hint: () => t('试试在首页打它的名字') },
   { id: 'fake', group: 'egg', name: '装睡', pose: { mood: 'sleepy' }, hint: () => t('按住它别放') },
   { id: 'streak', group: 'egg', name: '击掌', pose: { mood: 'cheer', arms: 'clap' }, hint: () => t('审阅时一口气别停') },
-  { id: 'sunglasses', group: 'egg', name: '墨镜', pose: { front: ['sunglasses'] }, hint: () => t('天黑以后') },
+  // 1.9.1：原来的“深夜”和“深色模式”两个彩蛋合成一个
+  { id: 'goodnight', group: 'egg', name: '晚安', pose: { mood: 'sleepy', props: ['nightcap'] }, hint: () => t('夜深了，用深色模式回首页看看') },
   { id: 'm10', group: 'egg', name: '第 10 份', pose: { mood: 'cheer', arms: 'holdwave', props: ['trophy'] }, hint: MILESTONE(10) },
   { id: 'm100', group: 'egg', name: '第 100 份', pose: { mood: 'cheer', arms: 'holdwave', props: ['trophy'] }, hint: MILESTONE(100) },
   { id: 'm1000', group: 'egg', name: '第 1000 份', pose: { mood: 'cheer', arms: 'holdwave', props: ['trophy'] }, hint: MILESTONE(1000) },
@@ -47,7 +48,7 @@ export function Dex() {
   return (
     <div className="dex">
       <button type="button" className="dex-toggle" aria-expanded={open} onClick={() => setOpen(!open)}>
-        <span>{t('对对图鉴')}</span><span className="dex-n">{n()} / {total()}</span><span className="grow" /><span className="dex-chev" aria-hidden>{open ? '−' : '+'}</span>
+        <span>{t('对对图鉴')}</span><span className="dex-n">{n()} / {total()}</span>{n() >= total() && <span className="dex-badge">{t('★ 全部集齐')}</span>}<span className="grow" /><span className="dex-chev" aria-hidden>{open ? '−' : '+'}</span>
       </button>
       {open && (
         <div className="dex-body">
@@ -75,3 +76,6 @@ export function Dex() {
     </div>
   );
 }
+
+/** 52 个都见过了（1.9.1：关于页出现金色对对，图鉴标题旁加徽章） */
+export function dexComplete(): boolean { const seen = new Set(mascotData().seen); return DEX.every((x) => seen.has(x.id)); }

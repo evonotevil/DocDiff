@@ -31,6 +31,8 @@ for (const fam of Object.keys(tok)) {
   for (const x of tok[fam].tokens) plain.push(`  --${x.name}: ${x.value};`);
 }
 for (const [k, v] of Object.entries(tok.type.families)) plain.push(`  --font-${k}: ${v};`);
+// 字阶（1.9.1）：每个用到的字号一个变量 --fs-<px>，界面里的字号只用这些
+for (const px of [...new Set(tok.type.groups.flatMap((g) => g.styles.map((s) => parseInt(s.fontSize, 10))))].sort((a, b) => b - a)) plain.push(`  --fs-${px}: ${px}px;`);
 
 const block = [
   START,

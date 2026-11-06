@@ -17,7 +17,7 @@ async function launch() {
   const errs = [];
   win.on('pageerror', (e) => errs.push(e.message));
   await win.setViewportSize({ width: 1280, height: 860 });
-  await win.waitForSelector('.lib-card, .home-intro', { timeout: 60000 }); // beta.7：第一次用时只有一行说明 + 新建模板
+  await win.waitForSelector('.mod-card, .home-intro', { timeout: 60000 }); // beta.7：第一次用时只有一行说明 + 新建模板
   const pickNext = (p) => app.evaluate(({ dialog }, p) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [p] }); }, p);
   return { app, win, errs, pickNext };
 }
@@ -28,16 +28,16 @@ const clickText = (win, sel, re) => win.evaluate(([s, r]) => { const b = [...doc
   let { app, win, errs, pickNext } = await launch();
   // 1. 新建模板（2026-03 版）
   await pickNext(path.join(dir, 'tpl-v1.docx'));
-  await clickText(win, '.lib-card .btn, .home-intro .btn', '新建模板');
-  await win.waitForSelector('.lib-card[aria-label="模板"] .lib-row', { timeout: 15000 });
-  ok('template created', /tpl-v1/.test(await text(win, '.lib-card[aria-label="模板"] .lib-row')), { row: await text(win, '.lib-card[aria-label="模板"] .lib-row') });
+  await clickText(win, '.mod-tpl .btn, .home-intro .btn', '新建模板');
+  await win.waitForSelector('.mod-tpl .lib-row', { timeout: 15000 });
+  ok('template created', /tpl-v1/.test(await text(win, '.mod-tpl .lib-row')), { row: await text(win, '.mod-tpl .lib-row') });
   // 2. 上传新版本（2026-09 版）
   await pickNext(path.join(dir, 'tpl-v2.docx'));
-  await win.evaluate(() => document.querySelector('.lib-card[aria-label="模板"] .lib-row .btn.icon').click());
+  await win.evaluate(() => document.querySelector('.mod-tpl .lib-row .btn.icon').click());
   await win.waitForTimeout(300);
   await clickText(win, '.pop .menu-item', '上传新版本');
-  await win.waitForFunction(() => /2 个版本/.test(document.querySelector('.lib-card[aria-label="模板"] .lib-row')?.innerText || ''), null, { timeout: 15000 }).catch(() => {});
-  ok('second version added', /2 个版本/.test(await text(win, '.lib-card[aria-label="模板"] .lib-row')), { row: await text(win, '.lib-card[aria-label="模板"] .lib-row') });
+  await win.waitForFunction(() => /2 个版本/.test(document.querySelector('.mod-tpl .lib-row')?.innerText || ''), null, { timeout: 15000 }).catch(() => {});
+  ok('second version added', /2 个版本/.test(await text(win, '.mod-tpl .lib-row')), { row: await text(win, '.mod-tpl .lib-row') });
   // 3. 只放对方文件：首页认出模板
   await pickNext(path.join(dir, 'tpl-vendor.docx'));
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.send('menu', 'open-right'));
@@ -58,31 +58,31 @@ const clickText = (win, sel, re) => win.evaluate(([s, r]) => { const b = [...doc
   ok('template compare becomes a negotiation (V1 = template, V2 = theirs)', /V1\s*→\s*V2/.test(await text(win, '.ver-chip')), { chip: await text(win, '.ver-chip') });
   // 5. 回首页：改名、删除、撤销
   await win.evaluate(() => [...document.querySelectorAll('.nav-foot .nav-item')][0].click());
-  await win.waitForSelector('.lib-card[aria-label="模板"] .lib-row', { timeout: 15000 });
-  await win.evaluate(() => document.querySelector('.lib-card[aria-label="模板"] .lib-row .btn.icon').click());
+  await win.waitForSelector('.mod-tpl .lib-row', { timeout: 15000 });
+  await win.evaluate(() => document.querySelector('.mod-tpl .lib-row .btn.icon').click());
   await win.waitForTimeout(200);
   await clickText(win, '.pop .menu-item', '重命名');
   await win.waitForSelector('.lib-edit');
   await win.fill('.lib-edit', '云服务采购合同（标准版）');
   await win.keyboard.press('Enter');
   await win.waitForTimeout(300);
-  ok('rename', /云服务采购合同（标准版）/.test(await text(win, '.lib-card[aria-label="模板"] .lib-row')));
-  await win.evaluate(() => document.querySelector('.lib-card[aria-label="模板"] .lib-row .btn.icon').click());
+  ok('rename', /云服务采购合同（标准版）/.test(await text(win, '.mod-tpl .lib-row')));
+  await win.evaluate(() => document.querySelector('.mod-tpl .lib-row .btn.icon').click());
   await win.waitForTimeout(200);
   await clickText(win, '.pop .menu-item', '删除模板');
   await win.waitForTimeout(300);
-  ok('delete hides it', !(await win.evaluate(() => !!document.querySelector('.lib-card[aria-label="模板"] .lib-row'))));
+  ok('delete hides it', !(await win.evaluate(() => !!document.querySelector('.mod-tpl .lib-row'))));
   await clickText(win, '.toast .toast-btn', '撤销');
   await win.waitForTimeout(300);
-  ok('undo restores it', /云服务采购合同/.test(await text(win, '.lib-card[aria-label="模板"] .lib-row')));
+  ok('undo restores it', /云服务采购合同/.test(await text(win, '.mod-tpl .lib-row')));
   ok('no renderer errors', errs.length === 0, errs.length ? { errs: errs.slice(0, 3) } : undefined);
   await app.close();
   // 6. 重启后还在；原文件删掉后仍能用（存的是拷贝）
   fs.unlinkSync(path.join(dir, 'tpl-v1.docx'));
   ({ app, win, errs, pickNext } = await launch());
-  ok('persists across restart', /云服务采购合同/.test(await text(win, '.lib-card[aria-label="模板"] .lib-row')) && /2 个版本/.test(await text(win, '.lib-card[aria-label="模板"] .lib-row')));
+  ok('persists across restart', /云服务采购合同/.test(await text(win, '.mod-tpl .lib-row')) && /2 个版本/.test(await text(win, '.mod-tpl .lib-row')));
   await pickNext(path.join(dir, 'tpl-vendor.docx'));
-  await win.evaluate(() => document.querySelector('.lib-card[aria-label="模板"] .lib-row .row-open').click());
+  await win.evaluate(() => document.querySelector('.mod-tpl .lib-row .row-open').click());
   await win.waitForSelector('.tpl-dlg');
   await clickText(win, '.tpl-dlg .pair-row.pick', '选择');
   await win.waitForFunction(() => /自动选了/.test(document.querySelector('.tpl-dlg')?.innerText || ''), null, { timeout: 15000 }).catch(() => {});

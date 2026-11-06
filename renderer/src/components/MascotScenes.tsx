@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { t } from '../lib/i18n';
+import { kbd } from '../lib/platform';
 import { Mascot, Bubble, useFade, useMascotOn } from './Mascot';
 import { homeLine, POKE } from '../lib/mascot/lines';
 import { markSeen, gate, careAllowed, careShown, careOffToday } from '../lib/mascot/store';
@@ -13,14 +14,16 @@ const pick = <T,>(a: T[]) => a[Math.floor(Math.random() * a.length)];
  * 每次打开随机一个出场动作 + 一句话；拖文件时看向放置区；两份到齐时欢呼；3 分钟没动打盹。
  * 点它跳一下换句话；连点 5 下、长按 2 秒、在首页键入它的名字各有彩蛋。不挡按钮，不接收拖放。
  */
-type PeekProps = { ready: boolean; error: boolean; justDone: boolean; narrow: boolean };
+type PeekProps = { ready: boolean; error: boolean; justDone: boolean; narrow: boolean;
+  /** 1.9.1 底部层级：提示条出现时气泡先收起，探头不动 */
+  quiet?: boolean };
 export function HomePeek(p: PeekProps) { return useMascotOn() ? <HomePeekInner {...p} /> : null; }
-function HomePeekInner({ ready, error, justDone, narrow }: PeekProps) {
+function HomePeekInner({ ready, error, justDone, narrow, quiet }: PeekProps) {
   const on = true;
   const n = useRef(0);
   const shot = (s: Omit<Shot, 'n'>) => setShot({ ...s, n: ++n.current });
   const [s, setShot] = useState<Shot>(() => {
-    const l = homeLine(new Date(), justDone);
+    const l = homeLine(new Date(), justDone, document.documentElement.dataset.theme === 'dark');
     return { act: l.act || (l.pose ? 'peek' : pick(['peek', 'wave', 'blink', 'jump', 'stretch'])), pose: l.pose, line: l.text, n: 0 };
   });
   const [drag, setDrag] = useState(false);
@@ -94,7 +97,7 @@ function HomePeekInner({ ready, error, justDone, narrow }: PeekProps) {
           <Mascot size={72} act={cur.act} pose={cur.pose} mood={cur.mood} alive={!doze} replay={cur.n} />
         </div>
       </div>
-      {text && !narrow && <Bubble key={s.n + (drag ? 'd' : '')} text={text} />}
+      {text && !narrow && !quiet && <Bubble key={s.n + (drag ? 'd' : '')} text={text} />}
     </div>
   );
 }
@@ -134,17 +137,43 @@ export function ReviewPeek({ cue }: { cue: { act: string; line: string; n: numbe
 }
 
 /** 等待时陪着你（1.9 · M11）：比较 0–5 秒思考，5 秒后看手表，15 秒后擦汗；OCR 拿放大镜慢慢移动 */
+/** 1.9.1：等待超过 5 秒，对对举着小牌子讲一条技巧，每 6 秒换一条 */
+const TIPS = [
+  '按 J / K 在修订之间跳转',
+  '修订审阅里按 A 接受、R 拒绝、H 待议',
+  '做错了按 U 撤销刚才的决定',
+  '{find} 在两侧文档里查找',
+  '把对方的新稿直接拖到首页，DocDiff 会认出是哪份往来稿',
+  '在往来稿里点版本片，可以挑任意两版来比',
+  '在版本链里给每一版起个名字，翻起来更好认',
+  '比较设置里可以忽略全角 / 半角标点和引号样式',
+  '打开「只看有变化的段落」，没改的内容会折起来',
+  '按 N 给当前这处修订写备注',
+  '把标准合同存成模板，对方改稿来了只放对方的文件',
+  '{tabs} 切换比较模式',
+];
+function useTip(on: boolean) {
+  const reduce = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const [i, setI] = useState(() => Math.floor(Math.random() * TIPS.length));
+  useEffect(() => { if (!on || reduce) return; const id = setInterval(() => setI((x) => (x + 1) % TIPS.length), 6000); return () => clearInterval(id); }, [on, reduce]);
+  return { i, text: t(TIPS[i], { find: kbd('mod+F'), tabs: kbd('mod+1') + ' – ' + kbd('mod+6') }) };
+}
 export function WaitMascot({ kind, title }: { kind: 'compare' | 'ocr'; title: string }) {
   const on = useMascotOn();
   const [sec, setSec] = useState(0);
   useEffect(() => { const t0 = Date.now(); const id = setInterval(() => setSec(Math.floor((Date.now() - t0) / 1000)), 500); return () => clearInterval(id); }, []);
+  const long = sec >= 5;
+  const tip = useTip(on && long);
   if (!on) return <><Mascot mood="think" size={96} /><h2>{title}</h2></>;
-  if (kind === 'ocr') return <><Mascot size={96} className="m-scan" pose={{ mood: 'think', arms: 'hold', props: ['magnifier'] }} /><h2>{title}</h2></>;
-  const stage = sec >= 15 ? 2 : sec >= 5 ? 1 : 0;
+  const tipEl = long && <div className="wait-tip" role="status" key={tip.i}>{t('小技巧：{x}', { x: tip.text })}</div>;
+  if (kind === 'ocr') return <><Mascot size={96} className="m-scan" pose={long ? { mood: 'think', arms: 'sign', props: ['sign'] } : { mood: 'think', arms: 'hold', props: ['magnifier'] }} /><h2>{title}</h2>{tipEl}</>;
   return (
     <>
-      <Mascot size={96} mood="think" act={stage === 2 ? 'wipe' : stage === 1 ? 'watch' : undefined} replay={stage} />
-      <h2>{stage === 2 ? t('这份有点长，马上好') : stage === 1 ? t('还差一点…') : title}</h2>
+      {/* 5 秒、15 秒时先看一眼表 / 擦一把汗（图鉴里的两个动作），然后举起牌子 */}
+      {(() => { const act = sec >= 15 && sec < 17 ? 'wipe' : sec >= 5 && sec < 7 ? 'watch' : undefined;
+        return <Mascot size={96} mood="think" act={act} replay={act ? (sec >= 15 ? 2 : 1) : 0} pose={long && !act ? { mood: 'think', arms: 'sign', props: ['sign'] } : undefined} />; })()}
+      <h2>{sec >= 15 ? t('这份有点长，马上好') : long ? t('还差一点…') : title}</h2>
+      {tipEl}
     </>
   );
 }

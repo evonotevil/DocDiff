@@ -62,3 +62,22 @@ test('home recognition: two near-identical negotiations → ambiguous, offers bo
   const m2 = L.matchThreads(L.fingerprint(doc(...base, '附件二 交货计划')), [th('A', '附件二 交货计划'), th('B', '附件三 售后条款')]);
   assert.equal(m2.th.id, 'A'); assert.equal(m2.alt, undefined);
 });
+
+test('1.9.1 删除一版：重新编号、去掉相关轮次、上次比较回到最新两版、至少留两版', () => {
+  const v = (id, n) => ({ id, n, side: n % 2 ? 'ours' : 'theirs', added: n, file: { sha: id, ext: 'docx', size: 1, name: id + '.docx', mtime: 1 }, fp: [] });
+  const r = (a, b) => ({ a, b, pk: a + b, total: 3, decided: 1, updated: 1 });
+  const th = { id: 't', name: 'T', created: 1, updated: 1, versions: [v('a', 1), v('b', 2), { ...v('c', 3), label: '对方第一次修改' }, v('d', 4), v('e', 5)], rounds: [r('a', 'b'), r('b', 'c'), r('c', 'd'), r('d', 'e'), r('b', 'd')], last: { a: 'c', b: 'd' } };
+  const x = L.dropVersion(th, 'c');
+  assert.deepEqual(x.versions.map((y) => `${y.id}${y.n}`), ['a1', 'b2', 'd3', 'e4']);
+  assert.deepEqual(x.rounds.map((y) => y.a + y.b), ['ab', 'de', 'bd']);
+  assert.equal(x.last, undefined);
+  assert.deepEqual(L.defaultPair(x) && [L.defaultPair(x).a.id, L.defaultPair(x).b.id], ['d', 'e']);
+  // 名称跟着版本走，不跟着编号
+  assert.equal(L.dropVersion(th, 'a').versions.find((y) => y.id === 'c').label, '对方第一次修改');
+  assert.equal(L.dropVersion(th, 'a').versions.find((y) => y.id === 'c').n, 2);
+  // 只剩两版不能删
+  const two = { ...th, versions: th.versions.slice(0, 2) };
+  assert.equal(L.dropVersion(two, 'a'), two);
+  // 删的不是上次那对：保留
+  assert.deepEqual(L.dropVersion(th, 'a').last, { a: 'c', b: 'd' });
+});

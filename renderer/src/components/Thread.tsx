@@ -18,25 +18,13 @@ const sideLabel = (s: Side) => (s === 'ours' ? t('我方') : t('对方'));
 const VERB: Record<Verdict, string> = { a: '接受', r: '拒绝', h: '待议' };
 const cut = (s: string, n = 24) => (s.length > n ? s.slice(0, n) + '…' : s);
 
-/** 首页「往来稿」栏 */
-export function ThreadsCard({ threads, onOpen, onRename, onArchive, onDelete, children }: {
-  threads: Thread[]; onOpen: (th: Thread) => void; onRename: (th: Thread, name: string) => void;
-  onArchive: (th: Thread, on: boolean) => void; onDelete: (th: Thread) => void; children?: React.ReactNode;
+/** 首页「往来稿」页签里的列表（1.9.1：放进首页左卡片的页签，标题和归档切换在卡片标题条上） */
+export function ThreadsList({ threads, archived, onOpen, onRename, onArchive, onDelete }: {
+  threads: Thread[]; archived?: boolean; onOpen: (th: Thread) => void; onRename: (th: Thread, name: string) => void;
+  onArchive: (th: Thread, on: boolean) => void; onDelete: (th: Thread) => void;
 }) {
-  const [showArch, setShowArch] = useState(false);
-  const act = threads.filter((x) => !x.archived), arch = threads.filter((x) => x.archived);
-  const list = showArch ? arch : act;
-  return (
-    <section className="lib-card" aria-label={t('往来稿')}>
-      <h2>{t('往来稿')}{act.length > 0 && <span className="cnt">{act.length}</span>}<span className="grow" />
-        {arch.length > 0 && <button type="button" className="btn sm plain" onClick={() => setShowArch(!showArch)}>{showArch ? t('返回') : t('已归档 {n}', { n: arch.length })}</button>}
-      </h2>
-      {list.length === 0 && !showArch
-        ? <p className="lib-empty">{t('合同来回改好几轮时，比较完存成往来稿。')}<Info label={t('往来稿')}>{t('每一版都留着，下次只放对方的新稿，默认和上一版比，上一轮的结论也会提示你。')}</Info></p>
-        : <div className="lib-rows">{list.map((th) => <ThreadRow key={th.id} th={th} onOpen={onOpen} onRename={onRename} onArchive={onArchive} onDelete={onDelete} />)}</div>}
-      {children}
-    </section>
-  );
+  if (threads.length === 0 && !archived) return <p className="lib-empty">{t('合同来回改好几轮时，比较完存成往来稿。')}<Info label={t('往来稿')}>{t('每一版都留着，下次只放对方的新稿，默认和上一版比，上一轮的结论也会提示你。')}</Info></p>;
+  return <div className="lib-rows">{threads.map((th) => <ThreadRow key={th.id} th={th} onOpen={onOpen} onRename={onRename} onArchive={onArchive} onDelete={onDelete} />)}</div>;
 }
 
 function ThreadRow({ th, onOpen, onRename, onArchive, onDelete }: { th: Thread; onOpen: (th: Thread) => void; onRename: (th: Thread, n: string) => void; onArchive: (th: Thread, on: boolean) => void; onDelete: (th: Thread) => void }) {
@@ -71,10 +59,15 @@ function ThreadRow({ th, onOpen, onRename, onArchive, onDelete }: { th: Thread; 
 }
 
 /** 往来稿里的工具栏：合同名 + 正在比的两版，点开是版本链（代替两个文件片） */
-export function VersionChip({ th, a, b, tpl, progress, onPick, onAdd, onRename, onDropFiles }: {
+/** 版本的显示名：有名称时「V3 · 名称」（1.9.1） */
+export const verName = (v: ThreadVersion) => (v.label ? `V${v.n} · ${v.label}` : `V${v.n}`);
+
+export function VersionChip({ th, a, b, tpl, progress, onPick, onAdd, onRename, onDropFiles, onLabel, onDeleteVersion }: {
   th: Thread; a: string; b: string; tpl?: Template | null;
   progress: (v: ThreadVersion) => string;
   onPick: (a: ThreadVersion, b: ThreadVersion) => void; onAdd: () => void; onRename: (n: string) => void;
+  /** 1.9.1：给一版起名（空 = 去掉名称）、删除一版 */
+  onLabel: (v: ThreadVersion, label: string) => void; onDeleteVersion: (v: ThreadVersion) => void;
   /** 1.8：把新版本直接拖到版本片或弹出层上 */
   onDropFiles: (f: FileInfo[]) => void;
 }) {
@@ -90,6 +83,13 @@ export function VersionChip({ th, a, b, tpl, progress, onPick, onAdd, onRename, 
   const pairs = [...th.rounds].sort((p, q) => q.updated - p.updated).slice(0, 6)
     .map((r) => ({ r, x: th.versions.find((v) => v.id === r.a)!, y: th.versions.find((v) => v.id === r.b)! })).filter((p) => p.x && p.y);
   const drop = useDrop((fs) => { setOpen(false); onDropFiles(fs); });
+  const [menuFor, setMenuFor] = useState<string | null>(null);
+  const [labelEdit, setLabelEdit] = useState<{ id: string; v: string } | null>(null);
+  const moreRefs = useRef(new Map<string, HTMLButtonElement>());
+  const menuAnchor = useRef<HTMLElement | null>(null);
+  useEffect(() => { if (!open) { setMenuFor(null); setLabelEdit(null); } }, [open]);
+  const saveLabel = () => { if (!labelEdit) return; const v = th.versions.find((x) => x.id === labelEdit.id); if (v && (v.label || '') !== labelEdit.v.trim()) onLabel(v, labelEdit.v.trim()); setLabelEdit(null); };
+  const chipTitle = [th.name, ...[va, vb].filter((v): v is ThreadVersion => !!v && !!v.label).map(verName)].join('\n');
   // 拖着文件经过版本片：弹出层自动打开，整块变成放置区
   const chipDrag = {
     onDragEnter: (e: React.DragEvent) => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); setOpen(true); } },
@@ -97,7 +97,7 @@ export function VersionChip({ th, a, b, tpl, progress, onPick, onAdd, onRename, 
   };
   return (
     <>
-      <button ref={ref} type="button" className={`btn ver-chip ${drop.over ? 'over' : ''}`} onClick={() => setOpen(!open)} aria-expanded={open} title={th.name} {...chipDrag}>
+      <button ref={ref} type="button" className={`btn ver-chip ${drop.over ? 'over' : ''}`} onClick={() => setOpen(!open)} aria-expanded={open} title={chipTitle} {...chipDrag}>
         <MidName name={th.name} title={false} />
         <span className="vv">{va ? `V${va.n}` : '?'} → {vb ? `V${vb.n}` : '?'}</span>
         <I.IconDown />
@@ -116,17 +116,49 @@ export function VersionChip({ th, a, b, tpl, progress, onPick, onAdd, onRename, 
           <div className="ver-list">
             {th.versions.map((v, i) => {
               const cur = v.id === b;
+              if (labelEdit?.id === v.id) {
+                return (
+                  <div key={v.id} className="ver-item">
+                    <div className="ver-row edit">
+                      <span className={`vn ${v.side}`}>V{v.n}</span>
+                      <span className="sd">{sideLabel(v.side)}</span>
+                      <input className="ver-label" autoFocus data-own-esc value={labelEdit.v} maxLength={40} placeholder={v.file.name} aria-label={t('V{n} 的名称', { n: v.n })}
+                        onChange={(e) => setLabelEdit({ id: v.id, v: e.target.value })}
+                        onKeyDown={(e) => { if (e.key === 'Enter') saveLabel(); if (e.key === 'Escape') { e.stopPropagation(); setLabelEdit(null); } }}
+                        onBlur={saveLabel} />
+                    </div>
+                    <p className="cap ver-edit-hint">{t('回车保存 · Esc 取消 · 清空就只显示文件名')}</p>
+                  </div>
+                );
+              }
               return (
-                <button key={v.id} type="button" className={`ver-row ${cur ? 'on' : ''} ${v.id === a ? 'base' : ''}`} disabled={i === 0}
-                  title={i === 0 ? t('第一版') : t('和上一版（V{n}）比较', { n: th.versions[i - 1].n })}
-                  onClick={() => { if (i > 0) { setOpen(false); onPick(th.versions[i - 1], v); } }}>
-                  <span className={`vn ${v.side}`}>V{v.n}</span>
-                  <span className="sd">{sideLabel(v.side)}</span>
-                  <MidName name={v.file.name} />
-                  <span className="pg">{i > 0 ? progress(v) : md(v.added)}</span>
-                </button>
+                <div key={v.id} className={`ver-item ${menuFor === v.id ? 'menu' : ''}`}>
+                  <button type="button" className={`ver-row ${cur ? 'on' : ''} ${v.id === a ? 'base' : ''}`} disabled={i === 0}
+                    title={[v.label ? v.file.name : '', i === 0 ? t('第一版') : t('和上一版（V{n}）比较', { n: th.versions[i - 1].n })].filter(Boolean).join('\n')}
+                    onClick={() => { if (i > 0) { setOpen(false); onPick(th.versions[i - 1], v); } }}>
+                    <span className={`vn ${v.side}`}>V{v.n}</span>
+                    <span className="sd">{sideLabel(v.side)}</span>
+                    {v.label ? <span className="fn lbl">{v.label}</span> : <MidName name={v.file.name} />}
+                    <span className="pg">{i > 0 ? progress(v) : md(v.added)}</span>
+                  </button>
+                  <button type="button" className="ibtn sm ver-more" aria-label={t('V{n} 的更多操作', { n: v.n })} title={t('更多')} aria-expanded={menuFor === v.id}
+                    ref={(el) => { if (el) moreRefs.current.set(v.id, el); else moreRefs.current.delete(v.id); }}
+                    onClick={(e) => { menuAnchor.current = e.currentTarget; setMenuFor(menuFor === v.id ? null : v.id); }}><I.IconMore /></button>
+                </div>
               );
             })}
+            {menuFor && (() => {
+              const v = th.versions.find((x) => x.id === menuFor);
+              if (!v) return null;
+              const few = th.versions.length <= 2;
+              return (
+                <Popover anchor={menuAnchor as React.RefObject<HTMLElement>} open onClose={() => setMenuFor(null)} width={220} className="pop-menu" label={t('V{n} 的更多操作', { n: v.n })}>
+                  <MenuItem icon={<I.IconEdit />} onClick={() => { setMenuFor(null); setLabelEdit({ id: v.id, v: v.label || '' }); }}>{t('起名…')}</MenuItem>
+                  <MenuItem icon={<I.IconX />} tone="danger" disabled={few} title={few ? t('至少要留两版才能比较。整份不要了，可以在首页删除往来稿。') : undefined}
+                    onClick={() => { if (few) return; setMenuFor(null); onDeleteVersion(v); }}>{t('删除这一版')}</MenuItem>
+                </Popover>
+              );
+            })()}
           </div>
           {pairs.length > 0 && (
             <div className="ver-pairs">
@@ -141,11 +173,11 @@ export function VersionChip({ th, a, b, tpl, progress, onPick, onAdd, onRename, 
           <div className="ver-pick">
             <span className="cap">{t('换个比较')}</span>
             <select value={pa} onChange={(e) => { setPa(e.target.value); const na = th.versions.find((v) => v.id === e.target.value)!.n; if ((th.versions.find((v) => v.id === pb)?.n || 0) <= na) setPb(th.versions.find((v) => v.n > na)?.id || pb); }} aria-label={t('原始版本')}>
-              {th.versions.slice(0, -1).map((v) => <option key={v.id} value={v.id}>V{v.n} · {sideLabel(v.side)}</option>)}
+              {th.versions.slice(0, -1).map((v) => <option key={v.id} value={v.id}>{verName(v)} · {sideLabel(v.side)}</option>)}
             </select>
             <span className="arr">→</span>
             <select value={pb} onChange={(e) => setPb(e.target.value)} aria-label={t('修改后版本')}>
-              {th.versions.filter((v) => v.n > (th.versions.find((x) => x.id === pa)?.n || 0)).map((v) => <option key={v.id} value={v.id}>V{v.n} · {sideLabel(v.side)}</option>)}
+              {th.versions.filter((v) => v.n > (th.versions.find((x) => x.id === pa)?.n || 0)).map((v) => <option key={v.id} value={v.id}>{verName(v)} · {sideLabel(v.side)}</option>)}
             </select>
             <button type="button" className="btn sm" disabled={pa === a && pb === b} onClick={() => { const x = th.versions.find((v) => v.id === pa), y = th.versions.find((v) => v.id === pb); if (x && y) { setOpen(false); onPick(x, y); } }}>{t('比较')}</button>
           </div>
@@ -191,7 +223,7 @@ export function AddVersionDialog({ th, onPick, onDropFiles, file, busy, onDone, 
         <div className="ver-list pick" role="radiogroup" aria-label={t('和哪一版比较')}>
           {[...th.versions].reverse().map((v) => (
             <button key={v.id} type="button" role="radio" aria-checked={against === v.id} className={`ver-row ${against === v.id ? 'on' : ''}`} onClick={() => setAgainst(v.id)} title={v.file.name}>
-              <span className={`vn ${v.side}`}>V{v.n}</span><span className="sd">{sideLabel(v.side)}</span><MidName name={v.file.name} title={false} />
+              <span className={`vn ${v.side}`}>V{v.n}</span><span className="sd">{sideLabel(v.side)}</span>{v.label ? <span className="fn lbl">{v.label}</span> : <MidName name={v.file.name} title={false} />}
               <span className="pg">{[md(v.added), prog(v)].filter(Boolean).join(' · ')}</span>
             </button>
           ))}

@@ -418,3 +418,12 @@ test('页码行识别', () => {
   for (const s of ['第 3 页', '3', '3 / 12', 'Page 3 of 12', '- 3 -', '第  页', '']) assert.ok(M.isPageNumberText(s), s);
   for (const s of ['星河科技 · 软件服务协议', '第三条 保密', '2026 年度报告']) assert.ok(!M.isPageNumberText(s), s);
 });
+
+test('1.9.1 忽略引号样式：直引号和弯引号（包括词中间的撇号）', () => {
+  const a = [p("The Company's \"Services\" start today")];
+  const b = [p('The Company’s “Services” start today')];
+  assert.equal(diffDocs(a, b, { ...O(), normQuotes: true }).changes.length, 0);
+  assert.ok(diffDocs(a, b, { ...O(), normQuotes: false }).changes.length > 0);
+  // 真正的文字修改照样报出来
+  assert.ok(diffDocs([p("The Company's fee")], [p('The Supplier’s fee')], { ...O(), normQuotes: true }).changes.length > 0);
+});
