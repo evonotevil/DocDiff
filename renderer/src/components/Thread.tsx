@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { t, isEn, fmtShortDate } from '../lib/i18n';
 import * as I from './icons';
+import { EmptyCard } from './Library';
 import { Popover, MenuItem } from './Popover';
 import { Modal } from './Modal';
 import { Notice } from './Panel';
@@ -19,11 +20,11 @@ const VERB: Record<Verdict, string> = { a: '接受', r: '拒绝', h: '待议' };
 const cut = (s: string, n = 24) => (s.length > n ? s.slice(0, n) + '…' : s);
 
 /** 首页「往来稿」页签里的列表（1.9.1：放进首页左卡片的页签，标题和归档切换在卡片标题条上） */
-export function ThreadsList({ threads, archived, onOpen, onRename, onArchive, onDelete }: {
+export function ThreadsList({ threads, archived, onOpen, onRename, onArchive, onDelete, onDemo }: {
   threads: Thread[]; archived?: boolean; onOpen: (th: Thread) => void; onRename: (th: Thread, name: string) => void;
-  onArchive: (th: Thread, on: boolean) => void; onDelete: (th: Thread) => void;
+  onArchive: (th: Thread, on: boolean) => void; onDelete: (th: Thread) => void; onDemo?: () => void;
 }) {
-  if (threads.length === 0 && !archived) return <p className="lib-empty">{t('合同来回改好几轮时，比较完存成往来稿。')}<Info label={t('往来稿')}>{t('每一版都留着，下次只放对方的新稿，默认和上一版比，上一轮的结论也会提示你。')}</Info></p>;
+  if (threads.length === 0 && !archived) return <EmptyCard illo={<I.IlloLib size={72} />} title={t('还没有往来稿')} desc={t('比较完点工具栏的文件片，或最近比较里的「…」，存为往来稿；对方再发来新版本时接着比。')} demo={onDemo} />;
   return <div className="lib-rows">{threads.map((th) => <ThreadRow key={th.id} th={th} onOpen={onOpen} onRename={onRename} onArchive={onArchive} onDelete={onDelete} />)}</div>;
 }
 

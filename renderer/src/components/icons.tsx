@@ -98,10 +98,51 @@ export const IconErr = () => <S d={<><circle cx="8" cy="8" r="6.2" /><path d="M5
 
 // ---------- 模式图标的白色线条（规范 3.0）：放在 24px 彩色圆角方块里，侧栏专用 ----------
 const G = (d: React.ReactNode) => () => <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" aria-hidden>{d}</svg>;
-// 1.9.1：首页三个模块的图标块
-export const GlyphNew = G(<path d="M8 3.5v9M3.5 8h9" />);
-export const GlyphRecent = G(<><path d="M13 8a5 5 0 1 1-1.5-3.6" /><path d="M13 2.8v2.6h-2.6" /><path d="M8 5.5V8l1.8 1.2" /></>);
-export const GlyphTemplate = G(<><rect x="5" y="5" width="8" height="8.5" rx="1.5" /><path d="M3 10.5V4a1.5 1.5 0 0 1 1.5-1.5H10" /></>);
+
+
+// ---------- 1.9.3（Figma F9b）：首页三个模块的扁平插画 ----------
+// 纸张用中性色（跟着深色变量），每个只有一个带底边的小圆章 / 印章用品牌色；只作插画，不代表含义。
+// 28px 用在模块标题旁，72px 用在空卡片里（同一张图放大）。
+type IlloP = { size?: number };
+const Illo = ({ size = 28, children }: IlloP & { children: React.ReactNode }) => (
+  <svg width={size} height={size} viewBox="0 0 28 28" fill="none" aria-hidden className="illo">{children}</svg>
+);
+const paper = { fill: 'var(--surface)', stroke: 'var(--swan)', strokeWidth: 2 } as const;
+const line = { stroke: 'var(--swan)', strokeWidth: 2, strokeLinecap: 'round' as const };
+export const IlloNew = (p: IlloP) => (
+  <Illo {...p}>
+    <rect x="2" y="6" width="13" height="17" rx="3" fill="var(--swan)" />
+    <rect x="8" y="2" width="15" height="20" rx="3" {...paper} />
+    <path d="M12 8h7M12 12h7M12 16h3" {...line} />
+    <circle cx="20.5" cy="21" r="6" fill="var(--feather-lip)" />
+    <circle cx="20.5" cy="20" r="6" fill="var(--feather)" />
+    <path d="M20.5 17v6M17.5 20h6" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" />
+  </Illo>
+);
+export const IlloLib = (p: IlloP) => (
+  <Illo {...p}>
+    <rect x="2" y="3" width="12" height="16" rx="3" {...paper} />
+    <rect x="14" y="9" width="12" height="16" rx="3" {...paper} />
+    <path d="M5.5 8h5M18 21h4.5" {...line} />
+    <circle cx="14" cy="15" r="6.5" fill="var(--macaw-lip)" />
+    <circle cx="14" cy="14" r="6.5" fill="var(--macaw)" />
+    <path d="M10.8 12.4h6.2l-1.7-1.7M17.2 15.6H11l1.7 1.7" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+  </Illo>
+);
+export const IlloTpl = (p: IlloP) => (
+  <Illo {...p}>
+    <rect x="3" y="2" width="16" height="21" rx="3" {...paper} />
+    <path d="M7 8h8M7 12h8M7 16h4" {...line} />
+    <circle cx="21" cy="12.5" r="3" fill="var(--fox)" />
+    <rect x="19.5" y="14" width="3" height="5" fill="var(--fox-lip)" />
+    <rect x="15" y="19.5" width="12" height="5.5" rx="2" fill="var(--fox-lip)" />
+    <rect x="15" y="18" width="12" height="5" rx="2" fill="var(--fox)" />
+  </Illo>
+);
+/** 演示入口的小播放图标 */
+export const IconPlay = () => <S d={<><circle cx="8" cy="8" r="6.2" /><path d="M6.6 5.6v4.8L10.4 8z" fill="currentColor" stroke="none" /></>} />;
+export const IconPause = () => <S d={<><path d="M5.5 3.5v9M10.5 3.5v9" strokeWidth={2.4} /></>} />;
+export const IconReplay = () => <S d={<><path d="M3.2 8a4.8 4.8 0 1 0 1.6-3.6" /><path d="M2.8 2.6v2.9h2.9" /></>} />;
 export const GlyphRich = G(<><path d="M4.5 2.5h5l2.5 2.5v8.5h-7.5z" /><path d="M6.5 7.5h3M6.5 10.5h3" /></>);
 export const GlyphPlain = G(<path d="M3 4.5h10M3 8h7M3 11.5h9" />);
 export const GlyphRedline = G(<><path d="M3 13.5h4" /><path d="M9.5 3.5l3 3-6 6H3.5v-3z" /></>);

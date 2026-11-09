@@ -32,13 +32,13 @@ const SH = ({ id, children, info }: { id: string; children: React.ReactNode; inf
   <h3 className="set-sh" id={id}>{children}{info && <Info label={typeof children === 'string' ? children : ''}>{info}</Info>}</h3>
 );
 
-function ShortcutRows() {
+export function ShortcutRows() {
   const groups: [string, [string, string][]][] = [
     [t('通用'), [
       [t('打开原始文档'), kbd('mod+O')], [t('打开修改后文档'), kbd('mod+shift+O')],
       [t('新建比较'), kbd('mod+N')], [t('交换左右文档'), kbd('mod+shift+S')],
       [t('开始比较'), 'Enter'], [t('切换模式'), `${kbd('mod+1')} … ${kbd('mod+6')}`],
-      [t('下一处 / 上一处差异'), 'J / K'],
+      [t('下一处 / 上一处差异'), 'J / K'], [t('查找'), kbd('mod+F')], [t('快捷键速查'), '?'],
       [t('收起 / 展开侧栏'), isMac ? '⌃⌘S' : 'Ctrl+Alt+S'], [t('收起 / 展开检查器'), isMac ? '⌥⌘I' : 'Ctrl+Alt+I'],
     ]],
     [t('修订审阅'), [
@@ -253,7 +253,7 @@ export function SettingsModal({ v, set, onClose, upd, initialTab = 'general', sa
               </div>
             </>
           )}
-          {tab === 'keys' && <ShortcutRows />}
+          {tab === 'keys' && <><p className="keys-note top">{t('随时按 ? 打开这张表。')}</p><ShortcutRows /></>}
           {tab === 'about' && (
             <>
               <UpdateSection {...upd} auto={v.autoCheckUpdate} setAuto={(x) => set('autoCheckUpdate', x)} />
@@ -265,6 +265,16 @@ export function SettingsModal({ v, set, onClose, upd, initialTab = 'general', sa
           )}
         </div>
       </div>
+    </Modal>
+  );
+}
+
+/** 1.9.3（F12）：按 ? 弹出的快捷键速查，和 设置 · 快捷键 同一张表 */
+export function KeysModal({ onClose }: { onClose: () => void }) {
+  return (
+    <Modal title={t('快捷键')} onClose={onClose} className="keys-dlg" footer={<button className="btn primary" autoFocus onClick={onClose}>{t('知道了')}</button>}>
+      <ShortcutRows />
+      <p className="keys-note">{t('在 设置 · 快捷键 里也能看到这张表。')}</p>
     </Modal>
   );
 }

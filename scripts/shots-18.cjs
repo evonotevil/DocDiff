@@ -23,7 +23,8 @@ const launch = async (args) => {
   let { app, w } = await launch([]);
   const shot = async (n, sel) => { await w.waitForTimeout(350); if (sel) { const el = await w.$(sel); if (el) return el.screenshot({ path: path.join(OUT, n + '.png') }); } await w.screenshot({ path: path.join(OUT, n + '.png') }); };
   await w.waitForSelector('.drops');
-  ok('first run: full hero, no mode icons / bubble, one-line intro instead of empty cards', await w.evaluate(() => !!document.querySelector('.hero h1') && !document.querySelector('.feats') && !document.querySelector('.bubble') && !!document.querySelector('.home-intro') && !document.querySelector('.lib-cols')));
+  // 1.9.3（F11）：第一次用和用过之后同一套三块（新比较 + 两张空卡片），不再有大标题区和那行说明
+  ok('first run: same three modules as later, empty cards with illustrations (1.9.3)', await w.evaluate(() => !document.querySelector('.hero') && !document.querySelector('.home-intro') && !!document.querySelector('.lib-cols') && document.querySelectorAll('.empty-card').length === 2));
   await shot('h2-first-run');
   await app.close();
 

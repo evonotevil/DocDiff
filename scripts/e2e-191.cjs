@@ -141,7 +141,8 @@ const ONLY = process.env.ONLY || '';
   const lay = await win.evaluate(() => { const s = document.querySelector('.home-scroll'); const tp = document.querySelector('.mod-tpl'); return { fit: document.querySelector('.home').classList.contains('fit'), scroll: s.scrollHeight - s.clientHeight, card: tp.getBoundingClientRect().bottom, foot: document.querySelector('.home-cta').getBoundingClientRect().top }; });
   ok('home fits the window (no page scroll), cards end above the footer', lay.fit && lay.scroll <= 1 && lay.card < lay.foot, lay);
   await win.hover('.mod-tpl .mod-h'); await win.waitForTimeout(300);
-  ok('hovering a module turns its border to the module colour (Fox)', await win.evaluate(() => getComputedStyle(document.querySelector('.mod-tpl')).borderTopColor === 'rgb(255, 150, 0)'));
+  // 1.9.3（F9b）：卡片本身不做悬停效果（以前悬停边框变成模块色）
+  ok('hovering a module keeps the neutral border (1.9.3)', await win.evaluate(() => getComputedStyle(document.querySelector('.mod-tpl')).borderTopColor === getComputedStyle(document.querySelector('.mod-new')).borderTopColor));
   await win.setViewportSize({ width: 1360, height: 560 }); await win.waitForTimeout(300);
   ok('short window falls back to page scroll; cards keep 3 rows', await win.evaluate(() => { const s = document.querySelector('.home-scroll'); return s.scrollHeight > s.clientHeight && document.querySelector('.mod-lib').getBoundingClientRect().height >= 230; }));
   await win.setViewportSize({ width: 1360, height: 860 });

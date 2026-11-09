@@ -40,7 +40,9 @@ import { useDrop } from './lib/drop';
 import { buildPlan } from './lib/draft/plan';
 import { DraftSync, cleanStem, type DraftState, type DraftBehind, flushDrafts, onDraftBackground, pendingDrafts } from './lib/draft/client';
 import { DraftChip, REASON } from './components/DraftChip';
-import { TemplatesCard, TemplateCompareDialog, MatchNotice, RecentRow } from './components/Library';
+import { DemoDialog, type DemoKind } from './components/Demo';
+import { KeysModal } from './components/SettingsModal';
+import { TemplatesCard, TemplateCompareDialog, MatchNotice, RecentRow, EmptyCard } from './components/Library';
 import { ThreadsList, VersionChip, AddVersionDialog, HintLine, ClauseHistory } from './components/Thread';
 import { hintsFor, clauseHistory } from './lib/hints';
 import { chime, warmChimes } from './lib/chime';
@@ -147,7 +149,7 @@ function DropZone({ side, doc, loading, error, onOpen, onFiles, onClear, onPaste
       {loading ? <div className="spinner sm" /> : doc ? (
         <div className="acts"><button className="btn sm" onClick={onOpen}><I.IconUpload />{t('更换')}</button><button className="btn sm" onClick={onClear}>{t('移除')}</button></div>
       ) : (
-        <div className="acts"><button className="btn sm blue" onClick={onOpen}><I.IconUpload />{t('选择文件')}</button><button className="btn sm" onClick={onPaste}><I.IconPaste />{t('粘贴')}</button></div>
+        <div className="acts"><button className="btn sm blue" onClick={onOpen} title={`${t('选择文件')} · ${kbd(side ? 'mod+shift+O' : 'mod+O')}`}><I.IconUpload />{t('选择文件')}</button><button className="btn sm" onClick={onPaste}><I.IconPaste />{t('粘贴')}</button></div>
       )}
       {doc?.type === 'pdf' && doc.blocks.length === 0 && <Notice tone="warn" className="stack dz-note" title={t('没读到文字，可能是扫描件。')}>{t('比较后用「OCR 文本」或「图像」模式。')}</Notice>}
       {error && <Notice tone="err" className="stack dz-note" title={error} />}
@@ -171,7 +173,7 @@ function DropZone({ side, doc, loading, error, onOpen, onFiles, onClear, onPaste
           <div className="title">{t('拖入{s}', { s: sideLabel(side) })}</div>
           <div className="hint">{t('支持 Word（.docx）、PDF、TXT')}</div>
           <div className="acts">
-            <button className="btn blue" onClick={onOpen}><I.IconUpload />{t('选择文件')}</button>
+            <button className="btn blue" onClick={onOpen} title={`${t('选择文件')} · ${kbd(side ? 'mod+shift+O' : 'mod+O')}`}><I.IconUpload />{t('选择文件')}</button>
             <button className="btn" onClick={onPaste}><I.IconPaste />{t('粘贴文字')}</button>
           </div>
         </>
@@ -291,6 +293,8 @@ export default function App() {
   const prefsRef = useRef(prefs);
   prefsRef.current = prefs;
   const [formatting, setFormatting] = useState(true);
+  // 1.9.3（F13）：格式变化太密时提示“只看文字修改”。fmtOff = 点了之后（只对这一对文件，可恢复）
+  const [fmtOff, setFmtOff] = useState<{ pk: string; n: number } | null>(null);
   const [recent, setRecent] = useState<any[]>([]);
   const [changedSides, setChangedSides] = useState<Side[]>([]);
   const [selCid, setSelCid] = useState<number | null>(null);
@@ -490,6 +494,10 @@ export default function App() {
   /** 1.9.1 F5：首页「最近比较」里存为往来稿——留在首页，后台读两份文件、建往来稿，不打开比较 */
   const [savingRecent, setSavingRecent] = useState<string | null>(null);
   // 1.9.1 F7：首页左卡片的页签。第一次默认“最近比较”，之后记住上次选的
+  // 1.9.3（F14）：模板 / 往来稿演示弹窗
+  const [demo, setDemo] = useState<DemoKind | null>(null);
+  // 1.9.3（F12）：快捷键速查
+  const [keysOpen, setKeysOpen] = useState(false);
   const [homeTab, setHomeTab] = useState<'recent' | 'threads'>(() => { try { return localStorage.getItem('docdiff.homeTab') === 'threads' ? 'threads' : 'recent'; } catch { return 'recent'; } });
   const pickHomeTab = (k: 'recent' | 'threads') => { setHomeTab(k); try { localStorage.setItem('docdiff.homeTab', k); } catch {} };
   const [showArch, setShowArch] = useState(false);
@@ -754,10 +762,31 @@ export default function App() {
   // ---------- 审阅决定：载入 / 保存 / 设置变化后的迁移 ----------
   const reviewer = prefs.reviewerName.trim() || t('审阅人');
   const pk = pairKey(A?.sha256, B?.sha256);
+  // 1.9.3（F13）：格式变化 ≥ 10 处、占一半以上时提示；其中 6 成以上是同一类整段字体 / 字号变化时说清是哪一类
+  const [fmtQuiet, setFmtQuiet] = useState(0);
+  const fmtNoHint = (k: string) => { try { const all: string[] = JSON.parse(localStorage.getItem('docdiff.fmtHintOff') || '[]'); if (!all.includes(k)) localStorage.setItem('docdiff.fmtHintOff', JSON.stringify([...all, k].slice(-200))); } catch {} setFmtQuiet((x) => x + 1); };
+  const fmtHint = useMemo(() => {
+    if (!richRes || !formatting || !pk) return null;
+    try { if ((JSON.parse(localStorage.getItem('docdiff.fmtHintOff') || '[]') as string[]).includes(pk)) return null; } catch {}
+    const all = richRes.changes, f = all.filter((c) => c.kind === 'fmt');
+    if (f.length < 10 || f.length * 2 < all.length) return null;
+    let font = 0, size = 0;
+    for (const c of f) {
+      const row = richRes.rows[c.row];
+      const whole = row && row.kind === 'format' && row.cids.length === 1;
+      const sig = c.desc && c.desc.k === 'fmt' ? c.desc.sig : '';
+      if (whole && sig.includes('font:')) font++;
+      if (whole && sig.includes('sz:')) size++;
+    }
+    const big = (x: number) => x >= f.length * 0.6;
+    return { n: f.length, kind: big(font) && big(size) ? 'both' : big(font) ? 'font' : big(size) ? 'size' : 'any' } as const;
+  }, [richRes, formatting, pk, fmtQuiet]);
   const pkRef = useRef(pk);
   pkRef.current = pk;
   // 换了文件（交换左右、换版本、换文档）：上一对文件的撤销提示作废
   useEffect(() => { dropReviewUndo(); }, [pk]);
+  // 换了一对文件：上一对因为提示关掉的格式检测恢复（这一对重新判断）
+  useEffect(() => { if (fmtOff && fmtOff.pk !== pk) { setFmtOff(null); if (A && B && A.type === B.type && A.type !== 'txt') setFormatting(true); } }, [pk]);
   const decFor = useRef<DiffResult | null>(null);
   /** 当前决定属于哪一对文件（1.9.2：往来稿摘要只写给决定所属的那一轮） */
   const decPk = useRef('');
@@ -1192,7 +1221,7 @@ export default function App() {
   const findable = compared && (tab === 0 || tab === 1 || tab === 2 || (tab === 4 && !!ocrRes));
   const openFind = () => { setFindOpen(true); setFindKey((k) => k + 1); };
   useEffect(() => { if (!findable) setFindOpen(false); }, [findable]);
-  actions.current = { open, swap, clearAll, go, decide, setTab, startCompare, toggleNav, toggleAside, compared, tab, selCid, findable, openFind, // 首页的撤销只在首页按 U 生效；审阅类的只对同一对文件生效（1.9 · QA P1）
+  actions.current = { open, swap, clearAll, go, decide, setTab, startCompare, toggleNav, toggleAside, compared, tab, selCid, findable, openFind, openKeys: () => setKeysOpen(true), // 首页的撤销只在首页按 U 生效；审阅类的只对同一对文件生效（1.9 · QA P1）
     undoBulk: !undoToast ? undefined : undoToast.scope === 'lib' ? undoToast.undo : undoToast.scope === 'home' ? (!compared ? undoToast.undo : undefined) : undoToast.scope === pk ? undoToast.undo : undefined, modal: !!(pwd || pasteSide !== null || showSettings || exportOpen || pop || bulkAsk) };
   useEffect(() => api.onMenu((cmd: string, arg?: any) => {
     const a = actions.current;
@@ -1222,6 +1251,8 @@ export default function App() {
       if (document.querySelector('.modal-bg')) return;
       const inPop = t.closest?.('.pop');
       if (inPop && !inPop.classList.contains('draft-tip')) return;
+      // 1.9.3（F12）：按 ? 打开快捷键速查（首页、比较页都能用；输入框里不触发）
+      if (e.key === '?') { e.preventDefault(); a.openKeys(); return; }
       // 撤销提示在的时候按 U 撤销它：首页删除只在首页，批量决定只对同一对文件（见 undoBulk）
       if (e.key.toLowerCase() === 'u' && a.undoBulk && (!a.compared || a.tab !== 2)) { e.preventDefault(); a.undoBulk(); return; }
       if (!a.compared) { if (e.key === 'Enter' && t.tagName !== 'BUTTON') a.startCompare(); return; }
@@ -1258,6 +1289,8 @@ export default function App() {
 
   const modals = (
     <>
+      {demo && <DemoDialog kind={demo} onClose={() => setDemo(null)} />}
+      {keysOpen && <KeysModal onClose={() => setKeysOpen(false)} />}
       {pwd && <PasswordModal name={pwd.file.name} wrong={pwd.wrong} onCancel={() => setPwd(null)} onOk={(p) => { const x = pwd; setPwd(null); loadFile(x.side, x.file, p); }} />}
       {pasteSide !== null && <PasteModal side={pasteSide} onCancel={() => setPasteSide(null)} onOk={(t) => { const s = pasteSide; setPasteSide(null); loadFile(s, textFile(t, s)); }} />}
       {showSettings && <SettingsModal v={settingsValues} set={setSetting} onClose={() => setShowSettings(false)} initialTab={showSettings} sample={B?.type === 'docx' ? B.file.name : undefined}
@@ -1463,10 +1496,10 @@ export default function App() {
     const tplOpen = tplDlg ? lib.templates.find((y) => y.id === tplDlg && !y.deleted) : null;
     const actThreads = live(lib.threads).filter((x) => !x.archived), archThreads = live(lib.threads).filter((x) => x.archived);
     const dropsEl = (
-      <div className={`drops${veteran ? ' compact' : ''}`}>
-        <DropZone side={0} compact={veteran} doc={A} loading={busy[0]} error={errs[0]} onOpen={() => open(0)} onFiles={(f) => onFiles(0, f)} onClear={() => setDocs((d) => [null, d[1]])} onPaste={() => setPasteSide(0)} />
-        <div className="vs"><button className={veteran ? 'btn plain icon vs-ic' : 'vs-chip'} title={t('交换左右')} aria-label={t('交换左右')} onClick={swap}><I.IconSwap /></button></div>
-        <DropZone side={1} compact={veteran} doc={B} loading={busy[1]} error={errs[1]} onOpen={() => open(1)} onFiles={(f) => onFiles(1, f)} onClear={() => setDocs((d) => [d[0], null])} onPaste={() => setPasteSide(1)} />
+      <div className="drops compact">
+        <DropZone side={0} compact doc={A} loading={busy[0]} error={errs[0]} onOpen={() => open(0)} onFiles={(f) => onFiles(0, f)} onClear={() => setDocs((d) => [null, d[1]])} onPaste={() => setPasteSide(0)} />
+        <div className="vs"><button className="btn plain icon vs-ic" title={`${t('交换左右')} · ${kbd('mod+shift+S')}`} aria-label={t('交换左右')} onClick={swap}><I.IconSwap /></button></div>
+        <DropZone side={1} compact doc={B} loading={busy[1]} error={errs[1]} onOpen={() => open(1)} onFiles={(f) => onFiles(1, f)} onClear={() => setDocs((d) => [d[0], null])} onPaste={() => setPasteSide(1)} />
       </div>
     );
     const matchNotices = (
@@ -1493,7 +1526,7 @@ export default function App() {
     );
     return (
       <MascotOn.Provider value={prefs.mascotWalk}>
-      <div className={`app home${veteran ? ' fit' : ''}${prefs.mascotWalk ? ' peek' : ''}`}>
+      <div className={`app home fit${veteran ? '' : ' first'}${prefs.mascotWalk ? ' peek' : ''}`}>
         {/* 1.8.1：首页用 header / main / footer 三个区域，读屏和键盘导航能跳转 */}
         <header className="home-top drag">
           <Wordmark size={36} sub={t('离线文档比对')} />
@@ -1502,24 +1535,24 @@ export default function App() {
         </header>
         <main className="home-scroll">
           <div className="home-inner">
-            {veteran ? (
-              // 1.9.1 F7：老用户——三个模块。新比较固定在上面；下面两张卡片撑满到底栏，内容多了在卡片里滚动
+            {/* 1.9.3（F9b / F11）：第一次用和用过之后同一套三块：新比较在上，下面两张卡片撑满到底栏，内容多了在卡片里滚动 */}
               <>
                 <section className="mod-card mod-new" aria-labelledby="mod-new-h">
-                  <div className="mod-h"><span className="mod-ic mc-macaw" aria-hidden="true"><I.GlyphNew /></span><h1 id="mod-new-h">{t('新比较')}</h1><span className="grow" />{!A && !B && <button className="btn sm" onClick={trySample}>{t('用示例合同试一下')}</button>}</div>
+                  <div className="mod-h"><span className="mod-illo"><I.IlloNew /></span><h1 id="mod-new-h">{t('新比较')}</h1>{!veteran && <span className="mod-sub">{t('全部在这台电脑上完成，不会上传')}</span>}<span className="grow" />{!A && !B && <button className="btn sm" onClick={trySample}>{t('用示例合同试一下')}</button>}</div>
                   <div className="mod-b">{dropsEl}{matchNotices}</div>
                 </section>
                 <div className="lib-cols">
                   <section className="mod-card mod-lib" aria-label={t('最近比较和往来稿')}>
                     <div className="mod-h">
-                      <span className="mod-ic mc-beetle" aria-hidden="true"><I.GlyphRecent /></span>
+                      <span className="mod-illo"><I.IlloLib /></span>
                       <div className="mod-tabs" role="tablist" aria-label={t('最近比较和往来稿')}>
                         {([['recent', t('最近比较'), recent.length], ['threads', t('往来稿'), actThreads.length]] as const).map(([k, l, n]) => (
                           <button key={k} type="button" role="tab" id={'tab-' + k} aria-selected={homeTab === k} aria-controls="mod-lib-panel" className={homeTab === k ? 'on' : ''} onClick={() => pickHomeTab(k)}>
-                            {l}<span className="cnt">{n}</span>
+                            {l}{n > 0 && <span className="cnt">{n}</span>}
                           </button>
                         ))}
                       </div>
+                      {actThreads.length > 0 && <button type="button" className="btn sm plain icon demo-btn" onClick={() => setDemo('lib')} title={t('看看往来稿怎么用（30 秒）')} aria-label={t('看看往来稿怎么用（30 秒）')}><I.IconPlay /></button>}
                       <span className="grow" />
                       {homeTab === 'recent' && recent.length > 0 && <button type="button" className="btn sm plain" onClick={async () => { await api.recentClear?.(); setRecent([]); }}>{t('清空')}</button>}
                       {homeTab === 'threads' && archThreads.length > 0 && <button type="button" className="btn sm plain" onClick={() => setShowArch(!showArch)}>{showArch ? t('返回') : t('已归档 {n}', { n: archThreads.length })}</button>}
@@ -1527,7 +1560,7 @@ export default function App() {
                     <div className="mod-b" role="tabpanel" id="mod-lib-panel" aria-labelledby={'tab-' + homeTab}>
                       {homeTab === 'recent' ? (
                         recent.length === 0
-                          ? <p className="lib-empty">{t('比较过的文件会出现在这里。')}</p>
+                          ? <EmptyCard illo={<I.IlloNew size={72} />} title={t('比较过的文件会出现在这里')} desc={t('比较完可以存成往来稿，对方再发来新版本时接着比。')} demo={() => setDemo('lib')} demoLabel={t('看看往来稿怎么用（30 秒）')} />
                           : <div className="lib-rows">
                               {recent.map((r, i) => (
                                 <RecentRow key={i} a={r.a} b={r.b} time={timeAgo(r.time)} prog={r.a.sha && r.b.sha ? reviewProgress(pairKey(r.a.sha, r.b.sha)) : null} thread={recentThread(r)}
@@ -1537,35 +1570,14 @@ export default function App() {
                             </div>
                       ) : (
                         <ThreadsList threads={showArch ? archThreads : actThreads} archived={showArch} onOpen={(th) => openThread(th)} onRename={(th, name) => updThread(th.id, (x) => ({ ...x, name, updated: Date.now() }))}
-                          onArchive={(th, on) => updThread(th.id, (x) => ({ ...x, archived: on ? Date.now() : undefined }))} onDelete={deleteThread} />
+                          onArchive={(th, on) => updThread(th.id, (x) => ({ ...x, archived: on ? Date.now() : undefined }))} onDelete={deleteThread} onDemo={() => setDemo('lib')} />
                       )}
                     </div>
                   </section>
                   <TemplatesCard lib={lib} threadCount={(tid) => live(lib.threads).filter((x) => x.tpl?.tid === tid).length} busy={libBusy} onUse={(tp) => setTplDlg(tp.id)} onNew={newTemplate} onAddVersion={addTplVersion}
-                    onRename={renameTpl} onDelete={deleteTpl} onDeleteVersion={deleteTplVersion} />
+                    onRename={renameTpl} onDelete={deleteTpl} onDeleteVersion={deleteTplVersion} onDemo={() => setDemo('tpl')} />
                 </div>
               </>
-            ) : (
-              <>
-                {/* H2：第一次用——保留标题、副标题、吉祥物；去掉五个模式图标和气泡 */}
-                <div className="hero">
-                  {/* 1.9：打开“让对对出来走走”时，由底栏上沿探头的对对代替这里的大图，不同时出现两个 */}
-                  {!prefs.mascotWalk && <Mascot mood={A && B ? 'cheer' : 'happy'} size={104} className="mascot-bob" />}
-                  <div className="hero-text">
-                    <h1>{t(A && B ? '准备好了，开始比较吧' : '找出两份文档的每一处不同')}</h1>
-                    <p>{t('Word、PDF、TXT 任意组合，全部在这台电脑上完成，不会上传。')}</p>
-                  </div>
-                  {!A && !B && <button className="btn sample-btn" onClick={trySample}>{t('用示例合同试一下')}</button>}
-                </div>
-                {dropsEl}
-                {matchNotices}
-                {/* 往来稿和模板都还空着：不放两张空卡片，一行说明 + “新建模板” */}
-                <div className="home-intro">
-                  <span>{t('合同要来回改好几轮？比较完可以存成往来稿；常用的标准稿可以存成模板。')}</span>
-                  <button type="button" className="btn sm" onClick={newTemplate} disabled={libBusy}><I.IconPlusDoc />{t('新建模板')}</button>
-                </div>
-              </>
-            )}
           </div>
         </main>
         <footer className="home-cta">
@@ -1698,7 +1710,7 @@ export default function App() {
       <Opt label={t('忽略引号样式（直引号 / 弯引号）')} hint={t('\' 和 ’、" 和 ” 视为相同，词中间的撇号也算')}><Switch on={prefs.normQuotes} onChange={set('normQuotes')} label={t('忽略引号样式（直引号 / 弯引号）')} /></Opt>
       <Opt label={t('忽略大小写')}><Switch on={prefs.ignoreCase} onChange={set('ignoreCase')} label={t('忽略大小写')} /></Opt>
       <Opt label={t('检测移动的段落')}><Switch on={prefs.detectMoves} onChange={set('detectMoves')} label={t('检测移动的段落')} /></Opt>
-      {isRichTab && <Opt label={t('检测格式变化')} hint={t(A.type !== B.type ? 'Word 与 PDF 互比时默认关闭' : '加粗、字号、颜色、标题级别')}><Switch on={formatting} onChange={setFormatting} label={t('检测格式变化')} /></Opt>}
+      {isRichTab && <Opt label={t('检测格式变化')} hint={t(A.type !== B.type ? 'Word 与 PDF 互比时默认关闭' : '加粗、字号、颜色、标题级别')}><Switch on={formatting} onChange={(v) => { setFormatting(v); if (v) { fmtNoHint(pk); setFmtOff(null); } }} label={t('检测格式变化')} /></Opt>}
       {(tab === 1 || tab === 4) && <Opt label={t('自动换行')}><Switch on={prefs.wrap} onChange={set('wrap')} label={t('自动换行')} /></Opt>}
       <Opt label={t('比较精度')}><Seg value={prefs.precision} options={[['word', t('按词')], ['char', t('按字符')]]} onChange={set('precision')} label={t('比较精度')} /></Opt>
     </>
@@ -1739,6 +1751,17 @@ export default function App() {
           {tab === 2 && changes.length > 0 && <button ref={moreRef} type="button" className="ibtn sm act" onClick={() => setPop(pop === 'more' ? null : 'more')} title={t('全部接受 / 全部拒绝')} aria-label={t('更多操作')} aria-expanded={pop === 'more'}><I.IconMore /></button>}
         </div>
         {changes.length > 0 && stats && <FilterChips stats={stats} risks={isRichTab ? risks.length : 0} value={filter} onChange={setFilter} />}
+        {isRichTab && fmtHint && (
+          <div className="fmt-hint" role="status">
+            <Notice tone="info" title={fmtHint.kind === 'font' ? t('{n} 处是格式变化，多数是整段字体不同', { n: fmtHint.n }) : fmtHint.kind === 'size' ? t('{n} 处是格式变化，多数是整段字号不同', { n: fmtHint.n }) : fmtHint.kind === 'both' ? t('{n} 处是格式变化，多数是整段字体、字号不同', { n: fmtHint.n }) : t('{n} 处是格式变化', { n: fmtHint.n })}>
+              {t('两份文件可能一份是另存或转换出来的，文字修改容易被淹没。')}
+            </Notice>
+            <button type="button" className="btn sm blue" onClick={() => { setFmtOff({ pk, n: fmtHint.n }); setFormatting(false); }}>{t('只看文字修改')}</button>
+          </div>
+        )}
+        {isRichTab && fmtOff && fmtOff.pk === pk && !formatting && (
+          <div className="fmt-off" role="status"><span>{t('已隐藏 {n} 处格式变化', { n: fmtOff.n })}</span><button type="button" className="link-btn" onClick={() => { setFormatting(true); fmtNoHint(pk); setFmtOff(null); }}>{t('恢复')}</button></div>
+        )}
         {changes.length > 0 ? (
           <ChangeList key={lang} changes={shown} all={changes} sel={selCid} onSel={setSelCid} onHover={hoverCid} decisions={tab === 2 ? decisions : undefined}
             clauses={isRichTab ? clauses : noClauses} risks={isRichTab ? riskById : new Map()} grouped={isRichTab} />
@@ -1780,7 +1803,8 @@ export default function App() {
 
   const crossFormat = A.type !== B.type && (A.type === 'pdf' || B.type === 'pdf') && isRichTab && dismissCross !== docSig;
   const askReviewer = tab === 2 && changes.length > 0 && !prefs.reviewerAsked;
-  const toggleTitle = (open: boolean, what: string, key: string) => `${t(open ? '收起{w}' : '展开{w}', { w: t(what) })}（${key}）`;
+  // 1.9.3（F12）：有快捷键的按钮，悬停提示统一写成「名称 · 快捷键」
+  const toggleTitle = (open: boolean, what: string, key: string) => `${t(open ? '收起{w}' : '展开{w}', { w: t(what) })} · ${key}`;
   const navKey = isMac ? '⌃⌘S' : 'Ctrl+Alt+S', inspKey = isMac ? '⌥⌘I' : 'Ctrl+Alt+I';
 
   return (
@@ -1799,7 +1823,7 @@ export default function App() {
           {MODES.map((m, i) => {
             const n = navCount(i);
             return (
-              <button key={i} type="button" className={`nav-item ${tab === i ? 'on' : ''}`} onClick={() => setTab(i)} title={`${t(m.label)}（${kbd(`mod+${i + 1}`)}）${n ? ' · ' + n[1] : ''}`} aria-current={tab === i ? 'page' : undefined}>
+              <button key={i} type="button" className={`nav-item ${tab === i ? 'on' : ''}`} onClick={() => setTab(i)} title={`${t(m.label)} · ${kbd(`mod+${i + 1}`)}${n ? '\n' + n[1] : ''}`} aria-current={tab === i ? 'page' : undefined}>
                 <span className={`mi mc-${m.c}`} aria-hidden="true">{m.g}</span><span className="lbl">{t(m.label)}</span>{n !== undefined && <span className="count">{n[0]}</span>}
               </button>
             );
@@ -1807,7 +1831,7 @@ export default function App() {
         </div>
         <div className="spacer" />
         <div className="nav-foot">
-          <button type="button" className="nav-item" onClick={clearAll} title={t('新建比较')}><span className="fi" aria-hidden="true"><I.IconPlusDoc /></span><span className="lbl">{t('新建比较')}</span></button>
+          <button type="button" className="nav-item" onClick={clearAll} title={`${t('新建比较')} · ${kbd('mod+N')}`}><span className="fi" aria-hidden="true"><I.IconPlusDoc /></span><span className="lbl">{t('新建比较')}</span></button>
           <button type="button" className="nav-item" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} title={t(theme === 'dark' ? '浅色模式' : '深色模式')}><span className="fi" aria-hidden="true">{theme === 'dark' ? <I.IconSun /> : <I.IconMoon />}</span><span className="lbl">{t(theme === 'dark' ? '浅色模式' : '深色模式')}</span></button>
           <button type="button" className={`nav-item${updBadge ? ' has-dot' : ''}`} onClick={() => setShowSettings('general')} title={t(updBadge ? '设置（有新版本）' : '设置')}><span className="fi" aria-hidden="true"><I.IconGear /></span><span className="lbl">{t('设置')}</span></button>
         </div>
@@ -1824,7 +1848,7 @@ export default function App() {
             onLabel={(v, label) => labelThreadVersion(activeTh, v, label)} onDeleteVersion={(v) => deleteThreadVersion(activeTh, v)} />
         ) : (<>
         <FilePill side={0} doc={A} onOpen={() => open(0)} onFiles={(f) => onFiles(0, f)} changed={changedSides.includes(0)} onSave={A.file.path && B.file.path ? () => saveAsThread() : undefined} />
-        <button type="button" className="ibtn" title={t('交换左右（{k}）', { k: kbd('mod+shift+S') })} aria-label={t('交换左右')} onClick={swap}><I.IconSwap /></button>
+        <button type="button" className="ibtn" title={`${t('交换左右')} · ${kbd('mod+shift+S')}`} aria-label={t('交换左右')} onClick={swap}><I.IconSwap /></button>
         <FilePill side={1} doc={B} onOpen={() => open(1)} onFiles={(f) => onFiles(1, f)} changed={changedSides.includes(1)} onSave={A.file.path && B.file.path ? () => saveAsThread() : undefined} />
         </>)}
         {(busy[0] || busy[1]) && <div className="spinner sm" />}
@@ -1836,9 +1860,9 @@ export default function App() {
             </>
           ) : canNav ? (
             <>
-              <button type="button" className="ibtn" onClick={() => go(-1)} title={t('上一处（K）')} aria-label={t('上一处')}><I.IconUp /></button>
+              <button type="button" className="ibtn" onClick={() => go(-1)} title={`${t('上一处')} · K`} aria-label={t('上一处')}><I.IconUp /></button>
               <span className="tb-pos">{shownIdx < 0 ? t('共 {n} 处', { n: shown.length }) : t('第 {i} / {n} 处', { i: shownIdx + 1, n: shown.length })}</span>
-              <button type="button" className="ibtn" onClick={() => go(1)} title={t('下一处（J）')} aria-label={t('下一处')}><I.IconDown /></button>
+              <button type="button" className="ibtn" onClick={() => go(1)} title={`${t('下一处')} · J`} aria-label={t('下一处')}><I.IconDown /></button>
             </>
           ) : null}
         </div>
@@ -1956,9 +1980,9 @@ export default function App() {
             </div>
             <div className="rb-acts">
               <button className="chip as-btn" onClick={() => setShowSettings('review')} title={t('审阅人：{n}（点击修改）', { n: reviewer })}><span className="av">{(prefs.reviewerInitials || initialsOf(reviewer)).slice(0, 2)}</span>{reviewer}</button>
-              <button className="btn red" disabled={!cur} onClick={() => decide(selCid, 'r')}>{t('拒绝')}<Kbd>R</Kbd></button>
-              <button className="btn hold" disabled={!cur} onClick={() => decide(selCid, 'h')}>{isEn() ? 'Keep open' : t('待议')}<Kbd>H</Kbd></button>
-              <button className="btn primary" disabled={!cur} onClick={() => decide(selCid, 'a')}>{t('接受')}<Kbd>A</Kbd></button>
+              <button className="btn red" disabled={!cur} onClick={() => decide(selCid, 'r')} title={`${t('拒绝')} · R`}>{t('拒绝')}<Kbd>R</Kbd></button>
+              <button className="btn hold" disabled={!cur} onClick={() => decide(selCid, 'h')} title={`${isEn() ? 'Keep open' : t('待议')} · H`}>{isEn() ? 'Keep open' : t('待议')}<Kbd>H</Kbd></button>
+              <button className="btn primary" disabled={!cur} onClick={() => decide(selCid, 'a')} title={`${t('接受')} · A`}>{t('接受')}<Kbd>A</Kbd></button>
             </div>
           </div>
         )}

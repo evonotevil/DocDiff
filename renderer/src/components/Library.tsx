@@ -14,7 +14,20 @@ const pct = (x: number) => `${Math.round(x * 100)}%`;
 const md = (ms: number) => { const d = new Date(ms); return isEn() ? fmtShortDate(ms) : t('{m}月{d}日', { m: d.getMonth() + 1, d: d.getDate() }); };
 
 /** 首页「模板」栏（1.8） */
-export function TemplatesCard({ lib, threadCount, onUse, onNew, onAddVersion, onRename, onDelete, onDeleteVersion, busy }: {
+/** 1.9.3（F9b / F11）：空卡片——72px 插画 + 一句标题 + 一句说明；往来稿、模板的空卡片多一个“看看怎么用” */
+export function EmptyCard({ illo, title, desc, demo, demoLabel }: { illo: React.ReactNode; title: string; desc: string; demo?: () => void; demoLabel?: string }) {
+  return (
+    <div className="empty-card">
+      {illo}
+      <p className="ec-t">{title}</p>
+      <p className="ec-d">{desc}</p>
+      {demo && <button type="button" className="link-btn ec-demo" onClick={demo}><I.IconPlay />{demoLabel || t('看看怎么用（30 秒）')}</button>}
+    </div>
+  );
+}
+
+export function TemplatesCard({ lib, threadCount, onUse, onNew, onAddVersion, onRename, onDelete, onDeleteVersion, busy, onDemo }: {
+  onDemo?: () => void;
   lib: Lib; threadCount: (tid: string) => number;
   onUse: (tpl: Template) => void; onNew: () => void; onAddVersion: (tpl: Template) => void;
   onRename: (tpl: Template, name: string) => void; onDelete: (tpl: Template) => void; onDeleteVersion: (tpl: Template, v: TplVersion) => void;
@@ -23,13 +36,15 @@ export function TemplatesCard({ lib, threadCount, onUse, onNew, onAddVersion, on
   const tpls = live(lib.templates);
   return (
     <section className="mod-card mod-tpl" aria-labelledby="mod-tpl-h">
-      <div className="mod-h"><span className="mod-ic mc-fox" aria-hidden="true"><I.GlyphTemplate /></span>
-        <h2 id="mod-tpl-h">{t('模板')}</h2>{tpls.length > 0 && <span className="cnt">{tpls.length}</span>}<span className="grow" />
+      <div className="mod-h"><span className="mod-illo"><I.IlloTpl /></span>
+        <h2 id="mod-tpl-h">{t('模板')}</h2>{tpls.length > 0 && <span className="cnt">{tpls.length}</span>}
+        {tpls.length > 0 && onDemo && <button type="button" className="btn sm plain icon demo-btn" onClick={onDemo} title={t('看看模板怎么用（30 秒）')} aria-label={t('看看模板怎么用（30 秒）')}><I.IconPlay /></button>}
+        <span className="grow" />
         <button type="button" className="btn sm" onClick={onNew} disabled={busy}><I.IconPlusDoc />{t('新建模板')}</button>
       </div>
       <div className="mod-b">
       {tpls.length === 0
-        ? <p className="lib-empty">{t('把标准合同存成模板，对方改稿来了只放对方的文件就能比。')}</p>
+        ? <EmptyCard illo={<I.IlloTpl size={72} />} title={t('把标准合同存成模板')} desc={t('对方改稿来了，只放对方的文件就能比。')} demo={onDemo} />
         : <div className="lib-rows">{tpls.map((tp) => <TemplateRow key={tp.id} tpl={tp} n={threadCount(tp.id)} onUse={onUse} onAddVersion={onAddVersion} onRename={onRename} onDelete={onDelete} onDeleteVersion={onDeleteVersion} />)}</div>}
       </div>
       <p className="lib-foot">{t('模板只存你自己的标准稿')}<Info label={t('模板')}>{t('存的是拷贝；原文件挪走、改名都不影响。对方改稿来了，DocDiff 会自动找出对方是在哪一版上改的。')}</Info></p>

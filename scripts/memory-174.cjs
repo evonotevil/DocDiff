@@ -13,11 +13,13 @@ const PAIRS = [
   { name: 'word-1250', a: `${FX}/word-1250-a.docx`, b: `${FX}/word-1250-b.docx`, image: true },
   { name: 'pdf-30-raster', a: `${FX}/pdf-30-a.pdf`, b: `${FX}/pdf-30-b.pdf`, image: true },
 ].filter((p) => !process.env.ONLY || process.env.ONLY.split(',').includes(p.name));
+// 1.9.3：评测时可以直接指定一对合成 PDF（PDF_A / PDF_B），只跑图像比较这一组（见 docs/TEST-WIN-IMAGE-MEMORY.md）
+if (process.env.PDF_A && process.env.PDF_B) PAIRS.splice(0, PAIRS.length, { name: 'pdf-custom', a: process.env.PDF_A, b: process.env.PDF_B, image: true });
 const READY = () => (!!document.querySelector('.main .scroll') || !!document.querySelector('.main .empty-state')) && !document.querySelector('.main .spinner');
 (async () => {
   const cfg = fs.mkdtempSync(path.join(os.tmpdir(), 'mem-'));
   const first = PAIRS[0];
-  const app = await _electron.launch({ executablePath: E, args: ['--no-sandbox', '--lang=zh-CN', '--js-flags=--expose-gc', APP, first.a, first.b], env: { ...process.env, XDG_CONFIG_HOME: cfg } });
+  const app = await _electron.launch({ executablePath: E, args: ['--no-sandbox', '--lang=zh-CN', '--js-flags=--expose-gc', ...(process.env.PACKAGED ? [] : [APP]), first.a, first.b], env: { ...process.env, XDG_CONFIG_HOME: cfg } });
   const win = await app.firstWindow(); globalThis.__win = win; await win.setViewportSize({ width: 1440, height: 900 });
   const errs = []; win.on('pageerror', (e) => errs.push(e.message));
   const nav = async (i, ready = READY) => { await win.evaluate((i) => document.querySelectorAll('.nav-list .nav-item')[i].click(), i); await win.waitForFunction(ready, null, { timeout: 900000, polling: 250 }); await win.waitForTimeout(500); };
