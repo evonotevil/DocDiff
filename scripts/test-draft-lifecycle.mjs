@@ -7,7 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const out = path.join(root, '.cache', 'draft-lifecycle.test.mjs');
-await esbuild.build({ stdin: { contents: "export { DraftSync } from './renderer/src/lib/draft/client';", resolveDir: root, loader: 'ts' }, bundle: true, format: 'esm', platform: 'node', target: 'node20', outfile: out, logLevel: 'warning' });
+await esbuild.build({ stdin: { contents: "export { DraftSync, flushDrafts, pendingDrafts } from './renderer/src/lib/draft/client';", resolveDir: root, loader: 'ts' }, bundle: true, format: 'esm', platform: 'node', target: 'node20', outfile: out, logLevel: 'warning' });
 
 // 假的主进程：一个文件系统（路径 → {mtime,size}），draftSave 按真实规则校验 expect；可以让写盘挂起
 const disk = new Map(); let clock = 1; const records = {}; let hold = null;
@@ -19,19 +19,21 @@ const draftSave = async ({ path: p, data, expect }) => {
   if (expect && !cur) return { ok: false, code: 'gone' };
   const st = { mtime: clock++, size: data.length }; disk.set(p, st); return { ok: true, stat: st };
 };
-globalThis.window = { api: { reviewGet: (k) => records[k] || null, reviewIndex: () => ({}), reviewSave: (k, v) => { records[k] = v; return Promise.resolve({ ok: true }); }, exists: async (p) => disk.has(p), draftSave, draftStat: async (p) => ({ stat: disk.get(p) || null, locked: false }) } };
+const settingsStore = {};
+globalThis.window = { api: { settingsGet: () => settingsStore, settingsSet: async (k, v) => { settingsStore[k] = v; return { ok: true }; }, reviewGet: (k) => records[k] || null, reviewIndex: () => ({}), reviewSave: (k, v) => { records[k] = v; return Promise.resolve({ ok: true }); }, exists: async (p) => disk.has(p), draftSave, draftStat: async (p) => ({ stat: disk.get(p) || null, locked: false }) } };
 globalThis.localStorage = { getItem: () => null, setItem() {}, removeItem() {} };
-const { DraftSync } = await import('file://' + out);
+const { DraftSync, flushDrafts, pendingDrafts } = await import('file://' + out);
 const deferred = () => { let r; const p = new Promise((x) => (r = x)); return { p, r }; };
 const ctx = (pk) => ({ pk, bPath: '/w/合同.docx', bName: '合同.docx', bData: new Uint8Array([1]), plan: {}, reviewer: 'T', initials: 'T', theirs: 'O', theirsDate: 0, pattern: '{name}-我方意见' });
 const built = (n = 3) => ({ bytes: new Uint8Array(n), unwritten: [], priorRevisions: 0, ms: {} });
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
-test('disposed while building: nothing is written', async () => {
+// 1.9.2：离开界面（实例被替换）时已经在生成的审阅稿照样写完、登记（以前会丢掉，导致审阅稿漏写）
+test('disposed while building: the build is still written and registered (1.9.2)', async () => {
   disk.clear(); const s = new DraftSync(ctx('a')); const b = deferred(); s.build = () => b.p;
   const run = s.run(); await tick(); s.dispose(); b.r(built()); await run;
-  assert.equal(disk.size, 0);
-  assert.equal(records.a?.draft ?? null, null);
+  assert.equal(disk.size, 1);
+  assert.equal(records.a?.draft?.path, [...disk.keys()][0]);
 });
 test('disposed while the write is in flight: the committed write is still registered', async () => {
   disk.clear(); const s = new DraftSync(ctx('b')); s.build = async () => built();
@@ -104,4 +106,52 @@ test('library copy without a draft: final asks for a folder; cancel throws "canc
   assert.equal(await s.saveFinal(built(2), '{name}-定稿'), '/picked/合同-定稿.docx');
   await s.start(); assert.equal(s.state.path, '/picked/合同-我方意见.docx');
   s.dispose();
+});
+
+// ---------- 1.9.2：快速审阅后立即离开 ----------
+const textOf = (decs) => new Uint8Array(JSON.stringify(decs).length); // 用长度代表“写进去的是哪一份决定”
+test('1.9.2 left during the debounce: the last batch is written right away with the final decisions', async () => {
+  disk.clear(); const s = new DraftSync(ctx('l1')); s.build = async (_m, _o, d) => ({ ...built(), bytes: textOf(d) });
+  s.update({}); await s.start();
+  const final = {}; for (let i = 1; i <= 40; i++) final[i] = { v: 'r' };
+  s.update(final);           // 0.25 秒合并还没到
+  s.dispose();               // 立刻离开
+  await wait(50);
+  assert.equal([...disk.values()][0].size, JSON.stringify(final).length, 'final 40 decisions written');
+  assert.deepEqual(pendingDrafts(), {}, 'nothing left pending');
+});
+test('1.9.2 old snapshot never overwrites newer decisions of the reopened pair', async () => {
+  disk.clear(); const old = new DraftSync(ctx('l2')); old.build = async (_m, _o, d) => ({ ...built(), bytes: textOf(d) });
+  old.update({}); await old.start();
+  const h = deferred(); hold = h.p;
+  const d40 = {}; for (let i = 1; i <= 40; i++) d40[i] = { v: 'r' };
+  old.update(d40); old.flush(); await tick(); await tick();       // 写盘挂在主进程
+  old.update({ ...d40, 41: { v: 'r' } });                           // 写盘期间又多了一个决定
+  old.dispose();                                                    // 离开：还要再写一次
+  const nu = new DraftSync(ctx('l2')); nu.build = async (_m, _o, d) => ({ ...built(), bytes: textOf(d) });
+  const newest = { ...d40, 41: { v: 'r' }, 1: { v: 'a' } };
+  nu.update({ ...d40, 41: { v: 'r' } }); nu.update(newest);        // 回到这一对，改了一处
+  hold = null; h.r();
+  await wait(400);
+  assert.equal([...disk.values()][0].size, JSON.stringify(newest).length, 'last write is the newest decisions');
+  assert.equal(nu.state.s, 'saved');
+  nu.dispose();
+});
+test('1.9.2 cannot write on quit: reported and recorded; reopening recovers', async () => {
+  disk.clear(); const s = new DraftSync(ctx('l3')); s.build = async (_m, _o, d) => ({ ...built(), bytes: textOf(d) });
+  s.update({}); await s.start();
+  const p = [...disk.keys()][0]; disk.set(p, { mtime: 999, size: 1 }); // 被别人改过
+  s.update({ 1: { v: 'r' }, 2: { v: 'r' } });
+  const left = await flushDrafts(500);
+  assert.equal(left.length, 1); assert.equal(left[0].behind, 2); assert.equal(left[0].s, 'modified');
+  assert.equal(pendingDrafts().l3.behind, 2, 'pending recorded for restart');
+  s.dispose();
+  // 重启后（这里直接新实例）：用户处理了冲突（改回登记的状态），打开这一对时自动补写
+  disk.set(p, records.l3.draft.stat);
+  const r = new DraftSync(ctx('l3')); r.build = async (_m, _o, d) => ({ ...built(), bytes: textOf(d) });
+  assert.equal(r.state.recovering, true);
+  r.update({ 1: { v: 'r' }, 2: { v: 'r' } });
+  await wait(100);
+  assert.equal(r.state.s, 'saved'); assert.deepEqual(pendingDrafts(), {}, 'pending cleared after recovery');
+  r.dispose();
 });

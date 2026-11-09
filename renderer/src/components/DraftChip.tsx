@@ -105,7 +105,8 @@ export function DraftChip({ state, sync, bPath, narrow, decided, pending, held =
           )}
           <p className="cap">{sameDir ? t('和对方文件在同一个文件夹 · 对方原文件不动') : state.path ? t('在 {d}', { d: dirOf(state.path) }) : ''}</p>
           {state.s === 'saved' && <p className="cap strong">{t('已写入 {n} 处决定 · {t} 保存', { n: decided, t: hm(state.at) })}</p>}
-          {state.s === 'saving' && <p className="cap strong">{t('正在写入…')}</p>}
+          {state.s === 'saving' && <p className="cap strong">{state.recovering ? t('上次离开时有 {n} 个决定没写进去，正在补写…', { n: state.behind || 1 }) : t('正在写入…')}</p>}
+          {!!state.behind && state.s !== 'saving' && state.s !== 'saved' && <p className="cap strong">{t('还有 {n} 个决定没写进这份审阅稿', { n: state.behind })}</p>}
           {state.s === 'saved' && state.prior > 0 && <p className="cap">{t('对方文件里原有的 {n} 处修订已按“接受”处理。', { n: state.prior })}</p>}
           {state.s === 'saved' && state.wordOpen && !un.length && <Notice tone="info" title={t('Word 正在打开这份审阅稿')}>{t('所有决定都已写进去。之后再做决定，要先在 Word 里关掉它，DocDiff 才能接着写。')}</Notice>}
           {state.s === 'locked' && <Notice tone="warn" title={t('Word 正在打开这份审阅稿')}>{t('决定先记在 DocDiff 里，关掉 Word 后自动补写，不会丢。')}</Notice>}
@@ -132,7 +133,7 @@ export function DraftChip({ state, sync, bPath, narrow, decided, pending, held =
             {state.s === 'modified' && <><button type="button" className="btn sm" onClick={() => { setOpen(false); sync.saveAsNew(); }}>{t('另存为新审阅稿')}</button><button type="button" className="btn sm" onClick={() => api.openExternalFile?.(state.path)}>{t('用 Word 打开')}</button></>}
             {state.s === 'gone' && <button type="button" className="btn sm" onClick={() => { setOpen(false); sync.saveAsNew(); }}>{t('重新生成')}</button>}
             {state.s === 'nowrite' && <button type="button" className="btn sm" onClick={() => sync.chooseFolder(t('选择放审阅稿的文件夹'))}>{sync.ctx.noDir ? t('选择文件夹…') : t('换个文件夹…')}</button>}
-            {state.s === 'error' && <button type="button" className="btn sm" onClick={() => sync.update((sync as any).decisions)}>{t('重试')}</button>}
+            {state.s === 'error' && <button type="button" className="btn sm" onClick={() => sync.retry()}>{t('重试')}</button>}
             {(state.s === 'saved' || state.s === 'locked') && state.path && <button type="button" className="btn sm" onClick={() => api.reveal?.(state.path)}>{t('在文件夹中显示')}</button>}
             <button type="button" className="btn sm primary" onClick={() => { setOpen(false); setFinal(true); }}>{t('生成定稿…')}</button>
           </div>

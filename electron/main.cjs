@@ -91,8 +91,9 @@ function createWindow() {
   mainWin.loadURL('app://local/index.html');
   mainWin.once('ready-to-show', () => { if (bounds.maximized) mainWin.maximize(); mainWin.show(); });
   const saveBounds = () => { if (!mainWin || mainWin.isDestroyed()) return; store.tryWrite('window.json', { ...mainWin.getNormalBounds(), maximized: mainWin.isMaximized() }); };
-  mainWin.on('close', saveBounds);
-  mainWin.on('closed', () => { mainWin = null; });
+  // 关窗 / 退出前先问渲染进程（1.9.2）：把还没写进审阅稿的决定、往来稿摘要写完；写不完时由渲染进程告诉用户
+  mainWin.on('close', (e) => { saveBounds(); if (closeOk) return; e.preventDefault(); askClose(); });
+  mainWin.on('closed', () => { mainWin = null; closeOk = false; asking = false; clearTimeout(askTimer); });
   // 全屏时 macOS 红绿灯隐藏，工具栏不再给它留位置（1.7.1）
   const sendFs = (v) => { if (mainWin && !mainWin.isDestroyed()) mainWin.webContents.send('menu', 'fullscreen', v); };
   mainWin.on('enter-full-screen', () => sendFs(true));
@@ -192,7 +193,7 @@ ipcMain.handle('chrome-info', () => ({ chrome: useOverlay ? 'overlay' : 'system'
 // electron-updater（配置方式见 docs/UPDATE.md）。
 const UPDATE_FEED = process.env.DOCDIFF_UPDATE_FEED
   || (() => { try { return fs.readFileSync(path.join(app.getPath('userData'), 'update-feed.txt'), 'utf8').trim(); } catch { return ''; } })()
-  || 'https://evonotevil.github.io/DocDiff/updates/latest.json';
+  || 'https://docdiff.app/updates/latest.json';
 
 /** 1.5.0 > 1.4.10：按段比较数字，不做字符串比较 */
 function cmpVer(a, b) {
@@ -342,7 +343,8 @@ ipcMain.handle('reveal', (_e, p) => shell.showItemInFolder(p));
 // ---------- 审阅稿（1.8）：写在对方文件旁边，先写临时文件再改名；绝不覆盖别人改过的文件 ----------
 const { saveDraft, statOf: draftStat, wordLock } = require('./draft-save.cjs');
 ipcMain.handle('draft-stat', (_e, p) => (p ? { stat: draftStat(p), locked: wordLock(p) } : null));
-ipcMain.handle('draft-save', (_e, req) => saveDraft(req));
+// 测试钩子：e2e 用 app.evaluate 设 global.__ddSaveDelay（毫秒），让写盘在改名前停一会儿，用来卡“主进程保存已提交、未完成”的时机
+ipcMain.handle('draft-save', (_e, req) => saveDraft(req, global.__ddSaveDelay ? { afterTemp: () => new Promise((r) => setTimeout(r, global.__ddSaveDelay)) } : {}));
 // ---------- 模板与往来稿（1.8） ----------
 ipcMain.handle('lib-get', () => library.get());
 ipcMain.handle('lib-save', (_e, ix, purge) => { try { library.save(ix, !!purge); return { ok: true }; } catch (err) { return { ok: false, error: String(err.message || err) }; } });
@@ -530,6 +532,26 @@ app.whenReady().then(() => {
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
 
+// 关窗 / 退出的确认（1.9.2）。渲染进程 8 秒内不回话（卡死、没装监听）就照常关，不会关不掉；
+// 渲染进程在问用户时先发 app-close-wait，停掉这个计时。
+let closeOk = false, asking = false, quitting = false, askTimer = null;
+function finishClose() {
+  if (quitting) app.quit();
+  else if (mainWin && !mainWin.isDestroyed()) mainWin.close();
+}
+function askClose() {
+  if (asking) return;
+  if (!mainWin || mainWin.isDestroyed() || mainWin.webContents.isCrashed()) { closeOk = true; finishClose(); return; }
+  asking = true;
+  mainWin.webContents.send('app-close-request');
+  askTimer = setTimeout(() => { asking = false; closeOk = true; finishClose(); }, 8000);
+}
+ipcMain.on('app-close-wait', () => { clearTimeout(askTimer); });
+ipcMain.on('app-close-reply', (_e, ok) => {
+  clearTimeout(askTimer); asking = false;
+  if (ok) { closeOk = true; finishClose(); } else quitting = false;
+});
+
 // 退出：先立刻退出，OCR worker 的清理不阻塞（Windows 上曾因此残留进程，导致安装程序提示
 // “DocDiff cannot be closed”）；3 秒后如果还没退干净就强制结束。
 function shutdown() {
@@ -548,4 +570,8 @@ app.on('window-all-closed', () => {
   shutdown();
   if (!isMac) { app.quit(); forceExitSoon(); }
 });
-app.on('before-quit', () => { shutdown(); forceExitSoon(); });
+app.on('before-quit', (e) => {
+  quitting = true;
+  if (!closeOk && mainWin && !mainWin.isDestroyed()) { e.preventDefault(); askClose(); return; }
+  shutdown(); forceExitSoon();
+});

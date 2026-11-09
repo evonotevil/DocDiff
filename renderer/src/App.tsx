@@ -8,7 +8,7 @@ import { buildDocx } from './lib/exportDocx';
 import { forEachPage, getPageCount, PageRange, BIG_PAGES, fullRange, rangeKey, clearPageCaches } from './lib/pages';
 import { PageRangeGate, RangeLine, RangeProgress } from './components/PageRangeGate';
 import { kbd, modPressed, isMac } from './lib/platform';
-import { t, setLang, initLang, Lang, isEn, fmtAgo, fmtShortDate } from './lib/i18n';
+import { t, setLang, initLang, Lang, isEn, fmtAgo, fmtShortDate, colon } from './lib/i18n';
 import { clauseMap, detectRisks, DEFAULT_KEYWORDS, defaultKeywords, Risk } from './lib/insight';
 import { DecMap, Dec, Verdict, pairKey, loadDecisions, saveDecisions, reviewProgress, initialsOf } from './lib/review';
 import { scopeInfo, pageList } from './lib/scope';
@@ -38,11 +38,12 @@ import { noteText, riskTag } from './lib/describe';
 import { useDiff } from './lib/useDiff';
 import { useDrop } from './lib/drop';
 import { buildPlan } from './lib/draft/plan';
-import { DraftSync, cleanStem, type DraftState } from './lib/draft/client';
+import { DraftSync, cleanStem, type DraftState, type DraftBehind, flushDrafts, onDraftBackground, pendingDrafts } from './lib/draft/client';
 import { DraftChip, REASON } from './components/DraftChip';
 import { TemplatesCard, TemplateCompareDialog, MatchNotice, RecentRow } from './components/Library';
 import { ThreadsList, VersionChip, AddVersionDialog, HintLine, ClauseHistory } from './components/Thread';
 import { hintsFor, clauseHistory } from './lib/hints';
+import { chime, warmChimes } from './lib/chime';
 import { type Library, type Template, type TplVersion, type Thread, type ThreadVersion, type Side as LibSide, type Round, EMPTY_LIB, loadLibrary, loadRounds, saveLibrary, putFile, readVersion, fingerprint, pick, versionLabel, stemOf, live, uid, UNDO_MS, defaultPair, roundOf, matchThreads, dropVersion } from './lib/library';
 
 const api = (window as any).api;
@@ -98,21 +99,7 @@ function loadPrefs(): Prefs {
   try { const v = getSetting('prefs-v2'); return { ...base, ...(typeof v === 'string' ? JSON.parse(v) : v || {}) }; } catch { return base; }
 }
 
-// ---------- 音效（很轻的提示音，可在设置里关闭） ----------
-let actx: AudioContext | null = null;
-function chime(kind: 'ok' | 'no' | 'hold' | 'done') {
-  try {
-    actx ||= new AudioContext();
-    const notes = kind === 'ok' ? [880, 1320] : kind === 'no' ? [330, 262] : kind === 'hold' ? [587, 587] : [523, 659, 784, 1047];
-    notes.forEach((f, i) => {
-      const o = actx!.createOscillator(), g = actx!.createGain();
-      o.type = 'sine'; o.frequency.value = f;
-      const t = actx!.currentTime + i * 0.09;
-      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.12, t + 0.015); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
-      o.connect(g).connect(actx!.destination); o.start(t); o.stop(t + 0.25);
-    });
-  } catch {}
-}
+// ---------- 音效：见 lib/chime.ts（1.9.2 起不用 AudioContext，避免第一次审阅决定卡主线程） ----------
 
 // ---------- 拖放（1.8 起放在 lib/drop.ts，弹窗里也能拖） ----------
 function textFile(text: string, side: Side): FileInfo {
@@ -298,6 +285,8 @@ export default function App() {
   const [toast, setToast] = useState<string | null>(null);
   const changeLang = (l: Lang) => { setLang(l); setLangState(l); api.setLang?.(l); };
   const [prefs, setPrefs] = useState<Prefs>(loadPrefs);
+  // 提示音打开时，进入修订审阅就在空闲时间把提示音准备好（不开音频设备，不阻塞）
+  useEffect(() => { if (tab === 2 && prefs.sound) warmChimes(); }, [tab, prefs.sound]);
   const set = <K extends keyof Prefs>(k: K) => (v: Prefs[K]) => setPrefs((p) => ({ ...p, [k]: v }));
   const prefsRef = useRef(prefs);
   prefsRef.current = prefs;
@@ -770,6 +759,8 @@ export default function App() {
   // 换了文件（交换左右、换版本、换文档）：上一对文件的撤销提示作废
   useEffect(() => { dropReviewUndo(); }, [pk]);
   const decFor = useRef<DiffResult | null>(null);
+  /** 当前决定属于哪一对文件（1.9.2：往来稿摘要只写给决定所属的那一轮） */
+  const decPk = useRef('');
   const lastLoaded = useRef<{ pk: string; snap: string; opts: any } | null>(null);
   const optSnap = { ignoreCase: prefs.ignoreCase, ignoreWs: prefs.ignoreWs, precision: prefs.precision, detectMoves: prefs.detectMoves, normPunct: prefs.normPunct, normQuotes: prefs.normQuotes, formatting };
   useEffect(() => {
@@ -781,6 +772,7 @@ export default function App() {
     }
     carryFrom.current = '';
     decFor.current = richRes;
+    decPk.current = pk;
     setDecisions(map);
     setDoneOpen(false);
     decideOrder.current = [];
@@ -823,7 +815,7 @@ export default function App() {
   // 只有真的写好（没被 Word 占着、没有写不进的处）才算“可以发给对方”（P1-1）
   // 生成审阅稿后第一次写好：盖一下章（1.9 · M10）
   useEffect(() => { if (draftState.fresh && draftState.s === 'saved') cheer('stamp'); }, [draftState.fresh, draftState.s]);
-  const draftReady = draftState.s === 'saved' && !draftState.unwritten.length && !!draftState.path;
+  const draftReady = draftState.s === 'saved' && !draftState.unwritten.length && !draftState.behind && !!draftState.path;
   const [finalReq, setFinalReq] = useState(0);
   /** 刚生成的定稿（完成页显示）；换了文件或决定变了就清掉 */
   const [finalMade, setFinalMade] = useState('');
@@ -850,21 +842,51 @@ export default function App() {
   const draftVer = activeTh && thread ? activeTh.versions.find((v) => v.id === thread.b) : null;
   useEffect(() => { if (draftSync) { draftSync.ctx.ver = draftVer ? `V${draftVer.n}` : undefined; const renamed = draftSync.ctx.reviewer !== reviewer || draftSync.ctx.initials !== (prefs.reviewerInitials.trim() || initialsOf(reviewer)); draftSync.ctx.initials = prefs.reviewerInitials.trim() || initialsOf(reviewer); if (renamed) { draftSync.ctx.reviewer = reviewer; draftSync.touch(); } draftSync.ctx.reviewer = reviewer; draftSync.ctx.onMissing = prefs.draftMissing; draftSync.ctx.pattern = prefs.draftName.trim() || t('{name}-我方意见'); draftSync.ctx.theirs = prefs.authorName.trim() || B?.meta['最后修改者'] || B?.meta['作者'] || t('修改方'); } }, [draftSync, reviewer, prefs.reviewerInitials, prefs.draftName, prefs.authorName, prefs.draftMissing, draftVer]);
   // 往来稿：这一轮的结论摘要存进往来稿（只存有结论或备注的处），供下一轮的“上轮”提示和条款历史使用
-  const roundTimer = useRef<any>(0);
+  // 1.9.2：待写的摘要按“往来稿 + 这一对版本”各自记，换到别的版本对、离开往来稿或退出时立刻写掉，不再被新版本对取消；
+  // 只在决定确实属于这一对版本时才写（换版本时新结果还没出来，不能把旧决定记到新的一轮上）。
+  const pendingRound = useRef<{ key: string; run: () => Promise<void> | void; timer: any } | null>(null);
+  const flushRound = () => { const p = pendingRound.current; if (!p) return Promise.resolve(); clearTimeout(p.timer); pendingRound.current = null; return Promise.resolve(p.run()); };
   useEffect(() => {
-    if (!thread || !richRes || decFor.current !== richRes) return;
-    clearTimeout(roundTimer.current);
-    roundTimer.current = setTimeout(() => {
-      const items = richRes.changes.filter((c) => decisions[c.id]?.v || decisions[c.id]?.note)
-        .map((c) => ({ clause: clauses.get(c.id) ?? null, before: c.before.slice(0, 300), after: c.after.slice(0, 300), v: decisions[c.id]?.v, note: decisions[c.id]?.note }));
-      const r: Round = { a: thread.a, b: thread.b, pk, total: richRes.changes.length, decided: richRes.changes.filter((c) => decisions[c.id]?.v).length, updated: Date.now(), items };
-      const th = libRef.current.threads.find((x) => x.id === thread.id);
+    const th0 = thread ? libRef.current.threads.find((x) => x.id === thread.id) : null;
+    const va = th0?.versions.find((v) => v.id === thread!.a), vb = th0?.versions.find((v) => v.id === thread!.b);
+    const mine = !!(thread && richRes && decFor.current === richRes && va && vb && decPk.current === pk && pairKey(va.file.sha, vb.file.sha) === pk);
+    const key = mine ? `${thread!.id}|${thread!.a}|${thread!.b}` : '';
+    if (pendingRound.current && pendingRound.current.key !== key) void flushRound();
+    if (!mine) return;
+    const th1 = thread!, res = richRes!, decs = decisions, cl = clauses, pk1 = pk;
+    const run = () => {
+      const items = res.changes.filter((c) => decs[c.id]?.v || decs[c.id]?.note)
+        .map((c) => ({ clause: cl.get(c.id) ?? null, before: c.before.slice(0, 300), after: c.after.slice(0, 300), v: decs[c.id]?.v, note: decs[c.id]?.note }));
+      const r: Round = { a: th1.a, b: th1.b, pk: pk1, total: res.changes.length, decided: res.changes.filter((c) => decs[c.id]?.v).length, updated: Date.now(), items };
+      const th = libRef.current.threads.find((x) => x.id === th1.id);
       if (!th) return;
       const old = th.rounds.find((x) => x.a === r.a && x.b === r.b);
       if (old && old.decided === r.decided && JSON.stringify(old.items) === JSON.stringify(r.items)) return;
-      updThread(th.id, (x) => ({ ...x, updated: Date.now(), rounds: [...x.rounds.filter((y) => !(y.a === r.a && y.b === r.b)), r] }));
-    }, 600);
+      return updThread(th.id, (x) => ({ ...x, updated: Date.now(), rounds: [...x.rounds.filter((y) => !(y.a === r.a && y.b === r.b)), r] }));
+    };
+    if (pendingRound.current) clearTimeout(pendingRound.current.timer);
+    const entry = { key, run, timer: 0 as any };
+    entry.timer = setTimeout(() => { if (pendingRound.current === entry) { pendingRound.current = null; void run(); } }, (window as any).__ddRoundDelay ?? 600); // 测试可以把等待拉长，卡住“摘要还没写”的时机
+    pendingRound.current = entry;
   }, [decisions, thread, richRes]);
+  // 审阅稿离开界面后在后台没能写完、或上次退出时没写完：明确告诉用户哪些决定还没写进去、怎么补
+  const [behindDlg, setBehindDlg] = useState<{ mode: 'bg' | 'start' | 'quit'; items: DraftBehind[] } | null>(null);
+  useEffect(() => {
+    onDraftBackground((e) => setBehindDlg((d) => ({ mode: 'bg', items: [...(d && d.mode !== 'quit' ? d.items.filter((x) => x.pk !== e.pk) : []), e] })));
+    const p = pendingDrafts();
+    const items = Object.entries(p).map(([pk, r]) => ({ pk, path: r.path, name: r.name, behind: r.behind, s: r.s }));
+    if (items.length) setBehindDlg({ mode: 'start', items });
+    return () => onDraftBackground(null);
+  }, []);
+  // 关窗 / 退出前（1.9.2）：先写掉往来稿摘要和审阅稿里剩下的决定；写不完时问用户
+  useEffect(() => api.onCloseRequest?.(async () => {
+    try { await flushRound(); } catch {}
+    let left: DraftBehind[] = [];
+    try { left = await flushDrafts(5000); } catch {}
+    if (!left.length) { api.closeReply?.(true); return; }
+    api.closeWait?.();
+    setBehindDlg({ mode: 'quit', items: left });
+  }), []);
   // 打开往来稿时把各轮的结论摘要读进来（首页只读索引，不带这些）
   useEffect(() => {
     if (!thread) return;
@@ -1249,6 +1271,23 @@ export default function App() {
           onExport={doExport} onHoldPending={() => decideAll('h', true)} onClose={() => setExportOpen(false)} busy={exportBusy}
           draft={draftReady ? { name: baseOfPath(draftState.path!), open: () => api.openExternalFile?.(draftState.path) } : null} />
       )}
+      {behindDlg && (() => {
+        const why = (x: DraftBehind) => x.s === 'locked' ? t('Word 正在使用这份审阅稿') : x.s === 'modified' ? t('审阅稿在 DocDiff 之外被改过，为了不覆盖已暂停') : x.s === 'gone' ? t('审阅稿被移走或删除了') : x.s === 'nowrite' ? t('文件夹写不进去') : x.s === 'error' ? t('写入出错{e}', { e: x.error ? colon() + x.error : '' }) : t('还没来得及写完');
+        const quit = behindDlg.mode === 'quit';
+        const close = () => { if (quit) api.closeReply?.(false); setBehindDlg(null); };
+        return (
+          <Modal title={quit ? t('还有决定没写进审阅稿') : behindDlg.mode === 'start' ? t('上次有决定没写进审阅稿') : t('有决定没写进审阅稿')} mood="think" onClose={close} className="behind-dlg"
+            footer={quit ? <><button className="btn" onClick={() => { setBehindDlg(null); api.closeReply?.(true); }}>{t('仍然退出')}</button><button className="btn primary" onClick={close}>{t('先不退出')}</button></> : <button className="btn primary" onClick={close}>{t('知道了')}</button>}>
+            <ul className="behind-list">
+              {behindDlg.items.map((x) => (
+                <li key={x.pk}><div className="file-row"><TypeTag type="docx" /><MidName name={x.name} /></div><p className="cap">{t('{n} 个决定没写进去', { n: x.behind })} · {why(x)}</p></li>
+              ))}
+            </ul>
+            <p className="behind-main">{t('这些决定都保存在 DocDiff 里，不会丢。在这份审阅稿写好之前，不要把它发给对方。')}</p>
+            <p className="bulk-note">{t('再打开这次比较时会自动补写；Word 正在用时，先在 Word 里关掉它。')}</p>
+          </Modal>
+        );
+      })()}
       {/* 有撤销提示时，新的提示叠在它上面，不再被吞掉（beta.7：如“审阅稿已重建”） */}
       {moment && !toast && <div className="moment solo" key={moment.n} aria-hidden><Mascot size={44} act={moment.act} /></div>}
       {toast && <div className={`toast${undoToast ? ' above' : ''}`} role="status" aria-live="polite" onMouseEnter={() => toastTimer.current.pause()} onMouseLeave={() => toastTimer.current.resume(1200)}>{moment && <span className="moment" key={moment.n} aria-hidden><Mascot size={44} act={moment.act} /></span>}{toast}</div>}
