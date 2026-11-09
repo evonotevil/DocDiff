@@ -1,11 +1,11 @@
 {
-  "version": "1.9.1",
-  "pubDate": "2026-11-06",
-  "notes": "· 往来稿支持版本命名、删除与撤销。\n· 新增两侧文档查找，支持匹配高亮和前后跳转。\n· 修复 Word 自动编号、重新起编和接续显示，默认忽略直引号与弯引号差异。\n· 优化首页页签、卡片滚动、存为往来稿及提示条体验。",
+  "version": "1.9.2",
+  "pubDate": "2026-11-09",
+  "notes": "· 修复快速审阅后切换比较、切版本或退出时，Word 审阅稿可能漏写的问题。\n· 离开前保存本轮结论，下一轮可查看上轮提示和条款历史。\n· 优化首次审阅决定的提示音播放，减少卡顿。",
   "downloads": {
-    "mac-arm64": "https://github.com/evonotevil/DocDiff/releases/download/v1.9.1/DocDiff-1.9.1-mac-arm64.dmg",
-    "mac-x64": "https://github.com/evonotevil/DocDiff/releases/download/v1.9.1/DocDiff-1.9.1-mac-x64.dmg",
-    "win-exe": "https://github.com/evonotevil/DocDiff/releases/download/v1.9.1/DocDiff-Setup-1.9.1.exe",
-    "page": "https://github.com/evonotevil/DocDiff/releases/tag/v1.9.1"
+    "mac-arm64": "https://github.com/evonotevil/DocDiff/releases/download/v1.9.2/DocDiff-1.9.2-mac-arm64.zip",
+    "mac-x64": "https://github.com/evonotevil/DocDiff/releases/download/v1.9.2/DocDiff-1.9.2-mac-x64.zip",
+    "win-exe": "https://github.com/evonotevil/DocDiff/releases/download/v1.9.2/DocDiff-Setup-1.9.2.exe",
+    "page": "https://github.com/evonotevil/DocDiff/releases/tag/v1.9.2"
   }
 }
