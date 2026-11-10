@@ -19,6 +19,23 @@ const sep = () => (isEn() ? '; ' : '；');
 export interface Ctx {
   A: DocModel; B: DocModel; res: DiffResult; clauses: Map<number, string | null>; risks: Risk[];
   decisions: DecMap; scope: ScopeInfo; reviewer: string;
+  /** 1.9.5：附批注清单（按条款：双方批注、回复、我方回复；内部批注单独一节） */
+  comments?: ReportComment[];
+}
+export interface ReportComment { clause: string | null; side: 'a' | 'b'; owner: 'ours' | 'theirs'; internal: boolean; resolved: boolean; author: string; date?: string; text: string; quote: string; replies: { author: string; text: string; ours: boolean }[] }
+
+function commentsHtml(list: ReportComment[]): string {
+  const who = (o: 'ours' | 'theirs', internal: boolean) => t(internal ? '内部' : o === 'ours' ? '我方' : '对方');
+  const table = (items: ReportComment[]) => {
+    const groups: { title: string; items: ReportComment[] }[] = [];
+    for (const c of items) { const title = c.clause ?? t('开头部分'); const g = groups[groups.length - 1]; if (g && g.title === title) g.items.push(c); else groups.push({ title, items: [c] }); }
+    let k = 0;
+    return `<table class="fixed"><colgroup><col style="width:5%"><col style="width:22%"><col style="width:26%"><col style="width:47%"></colgroup><thead><tr><th>#</th><th>${esc(t('作者'))}</th><th>${esc(t('批注的文字'))}</th><th>${esc(t('批注和回复'))}</th></tr></thead><tbody>${groups.map((g) => `
+      <tr class="grp"><td colspan="4">${esc(g.title)}</td></tr>
+      ${g.items.map((c) => `<tr><td class="num">${++k}</td><td><span class="tag">${esc(who(c.owner, c.internal))}</span> ${esc(c.author)}${c.resolved ? `<div class="muted">${esc(t('已解决'))}</div>` : ''}${c.side === 'a' ? `<div class="muted">${esc(t('我方稿'))}</div>` : ''}</td><td>${esc(short(c.quote, 60) || '—')}</td><td>${esc(c.text)}${c.replies.map((r) => `<div class="muted">↳ ${esc(r.author)}${esc(colon())}${esc(r.text)}</div>`).join('')}</td></tr>`).join('')}`).join('')}</tbody></table>`;
+  };
+  const main = list.filter((c) => !c.internal), inner = list.filter((c) => c.internal);
+  return `<h2>${esc(t('附：批注清单（{n}）', { n: list.length }))}</h2>${main.length ? table(main) : ''}${inner.length ? `<h2>${esc(t('内部批注（{n}）', { n: inner.length }))}</h2><p class="muted">${esc(t('对方稿里我方成员写的批注，只给自己看。'))}</p>${table(inner)}` : ''}`;
 }
 
 /** 变更按“区段 / 条款”分组，保持文档顺序 */
@@ -201,6 +218,7 @@ export function reportHtml(x: Ctx, blocksA: Block[], blocksB: Block[]): string {
   </tbody></table>
   ${res.changes.length ? `<h2>${esc(t('差异明细'))}</h2>
   <table class="fixed"><colgroup><col style="width:5%"><col style="width:9%"><col style="width:46%"><col style="width:9%"><col style="width:31%"></colgroup><thead><tr><th>#</th><th>${esc(t('类型'))}</th><th>${esc(t('原文 → 修改后'))}</th><th>${esc(t('结论'))}</th><th>${esc(t('审阅人 · 时间 · 备注'))}</th></tr></thead><tbody>${groups}</tbody></table>` : ''}
+  ${x.comments?.length ? commentsHtml(x.comments) : ''}
   ${res.changes.length ? `<h2 class="pb">${esc(t('附：修订全文'))}</h2><p class="muted">${esc(t('删除线 = 删除，下划线 = 新增，双线 = 移动，虚线 = 格式变化。'))}</p><div class="rl">${redlineHtml(res, blocksA, blocksB)}</div>` : ''}
   <p class="foot">${esc(t('由 DocDiff 在本机生成，文档没有上传。'))} ${esc(A.file.name)} → ${esc(B.file.name)}</p>
   </body></html>`;

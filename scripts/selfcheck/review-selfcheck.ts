@@ -136,6 +136,24 @@ const SCEN: [string, (cids: number[]) => Record<number, any>, 'draft' | 'final',
           if (rej !== expectView(res, act, 'reject')) problems.push(`${label}：“拒绝全部”后的正文和预期不一致`);
         }
       }
+      // 1.9.5：对方文件里已有批注时，回复每一条、去掉第一条，检查回复线程和去掉的批注
+      const roots = (B.comments || []).filter((c) => !c.parent);
+      if (roots.length) {
+        const drop = roots[0].id;
+        const dropIds = [drop, ...(B.comments || []).filter((c) => c.parent === drop).map((c) => c.id)];
+        const replies = roots.slice(1).map((c, i) => ({ parent: c.id, text: `自检回复 ${i + 1}`, at: Date.now() }));
+        try {
+          const out = await writeReview({ base: B.file.data, plan, decisions: {}, mode: 'draft', reviewer: '自检', reviewerInitials: '检', theirs: '对方', theirsDate: Date.now(), now: Date.now(), io, replies, dropComments: dropIds });
+          if (!(await xmlOk(out.bytes))) problems.push('批注回复：有部件不是合法 XML');
+          const D = await bytesModel(out.bytes);
+          const got = D.comments || [];
+          if (got.some((c) => dropIds.includes(c.id))) problems.push('批注回复：去掉的批注还在');
+          const mine = got.filter((c) => /^自检回复 \d+$/.test(c.text));
+          if (mine.length !== replies.length) problems.push(`批注回复：应有 ${replies.length} 条回复，写进 ${mine.length} 条`);
+          if (mine.some((c) => !c.parent || !replies.some((r) => r.parent === c.parent))) problems.push('批注回复：有回复没挂到原批注下');
+          if (bodyText(D) !== bodyText(await bytesModel(B.file.data))) problems.push('批注回复：正文被改动了');
+        } catch (e: any) { problems.push(`批注回复：写入失败（${String(e?.message || e).slice(0, 40)}）`); }
+      }
       ms.sort((a, b) => a - b);
       const head = `第 ${k} 组：${res.changes.length} 处差异，${un ? `${un} 处没写进` : '全部写进'}，写入用时中位 ${ms[ms.length >> 1] ?? '-'} ms`;
       if (problems.length) { fail++; log(`✗ ${head}\n    ` + problems.join('\n    ')); }

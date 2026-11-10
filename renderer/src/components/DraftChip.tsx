@@ -27,7 +27,9 @@ export const REASON: Record<Reason, string> = {
 };
 const hm = (ms?: number) => { if (!ms) return ''; const d = new Date(ms); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
 
-export function DraftChip({ state, sync, bPath, narrow, decided, pending, held = 0, finalPattern, onJump, flash, finalReq = 0, hideTip, origLabel, onFinal }: {
+export function DraftChip({ state, sync, bPath, narrow, decided, pending, held = 0, finalPattern, onJump, flash, finalReq = 0, hideTip, origLabel, onFinal, cmGone }: {
+  /** 1.9.5：定稿会去掉的批注（对方 / 我方），生成前写明 */
+  cmGone?: { theirs: number; ours: number };
   /** pending 里有几处是“待议”（已写成批注、等对方回复） */
   held?: number;
   /** 定稿生成后（完成页据此回到完成页并显示文件） */
@@ -55,7 +57,7 @@ export function DraftChip({ state, sync, bPath, narrow, decided, pending, held =
   const [tip, setTip] = useState(false);
   useEffect(() => { if (state.s === 'saved' && state.path && state.fresh && !hideTip) setTip(true); }, [state.s, state.path, state.fresh]);
   const closeTip = () => setTip(false);
-  const finalDlg = final && <FinalDialog sync={sync} bPath={bPath} pending={pending} held={held} pattern={finalPattern} onClose={() => setFinal(false)} flash={flash} onJump={onJump} origLabel={origLabel} onFinal={onFinal} hasDraft={state.s !== 'none'} />;
+  const finalDlg = final && <FinalDialog sync={sync} bPath={bPath} pending={pending} held={held} pattern={finalPattern} onClose={() => setFinal(false)} flash={flash} onJump={onJump} origLabel={origLabel} onFinal={onFinal} hasDraft={state.s !== 'none'} cmGone={cmGone} />;
   if (state.s === 'none') return (
     <>
       <button type="button" className="btn blue tb-start" onClick={() => sync.start(t('选择放审阅稿的文件夹'))}
@@ -144,7 +146,7 @@ export function DraftChip({ state, sync, bPath, narrow, decided, pending, held =
   );
 }
 
-function FinalDialog({ sync, bPath, pending, held, pattern, onClose, flash, onJump, origLabel, onFinal, hasDraft }: { sync: DraftSync; bPath: string; pending: number; held: number; pattern: string; onClose: () => void; flash: (m: string) => void; onJump: (cid: number) => void; origLabel?: string; onFinal?: (p: string) => boolean | void; hasDraft: boolean }) {
+function FinalDialog({ sync, bPath, pending, held, pattern, onClose, flash, onJump, origLabel, onFinal, hasDraft, cmGone }: { sync: DraftSync; bPath: string; pending: number; held: number; pattern: string; onClose: () => void; flash: (m: string) => void; onJump: (cid: number) => void; origLabel?: string; onFinal?: (p: string) => boolean | void; hasDraft: boolean; cmGone?: { theirs: number; ours: number } }) {
   const [pend, setPend] = useState<'b' | 'a'>('b');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -177,6 +179,11 @@ function FinalDialog({ sync, bPath, pending, held, pattern, onClose, flash, onJu
       footer={<><button type="button" className="btn big" onClick={onClose}>{t('取消')}</button><button type="button" className={`btn big ${missed?.length ? 'red' : 'primary'}`} disabled={busy} onClick={go}>{busy ? t('正在生成…') : missed?.length ? t('仍然生成定稿') : t('生成定稿')}</button></>}>
       <p>{hasDraft ? t('定稿是双方谈完后的干净版：接受的改动直接采用，拒绝的改回原文，没有修订标记和批注。审阅稿不受影响。')
         : t('定稿是双方谈完后的干净版：接受的改动直接采用，拒绝的改回原文，没有修订标记和批注。')}</p>
+      {cmGone && cmGone.theirs + cmGone.ours > 0 && (
+        <Notice tone="info" title={t('定稿会去掉全部 {n} 条批注（对方 {a}、我方 {b}）。', { n: cmGone.theirs + cmGone.ours, a: cmGone.theirs, b: cmGone.ours })}>
+          {t('包括你的回复。需要留底的话，先导出审阅记录存档。')}
+        </Notice>
+      )}
       {held > 0 && (
         <Notice tone="info" title={t('还有 {n} 处待议，建议和对方谈定后再生成', { n: held })}>
           {hasDraft ? t('待议的处已在审阅稿里写成批注，等对方回复。现在生成，这些处要先按下面的选择处理。')

@@ -26,6 +26,8 @@ export interface SettingsValues {
   draftMissing: 'auto' | 'ask';
   riskMoney: boolean; riskDate: boolean; keywords: string[];
   autoCheckUpdate: boolean;
+  /** 1.9.5：我方成员（批注作者是这些名字时算我方；审阅人自动算在内） */
+  ourMembers: string[];
 }
 export type Tab = 'general' | 'review' | 'files' | 'risk' | 'keys' | 'storage' | 'about';
 
@@ -123,6 +125,32 @@ function KeywordEditor({ value, onChange }: { value: string[]; onChange: (v: str
 }
 
 
+/** 1.9.5：我方成员（H4）。和“需要留意 · 关键词”同一套写法：胶囊 + 输入框 + 添加；审阅人固定在第一个、不能删 */
+function MemberEditor({ value, onChange, reviewer, authors }: { value: string[]; onChange: (v: string[]) => void; reviewer: string; authors: string[] }) {
+  const [draft, setDraft] = useState('');
+  const norm = (x: string) => x.replace(/\s+/g, '').toLowerCase();
+  const has = (x: string) => norm(x) === norm(reviewer) || value.some((y) => norm(y) === norm(x));
+  const add = (names: string[]) => { const n = names.map((x) => x.trim()).filter((x) => x && !has(x)); if (n.length) onChange([...value, ...n]); };
+  const sugg = authors.filter((x) => !has(x));
+  return (
+    <div className="kw-editor">
+      <div className="kws">
+        <span className="kw fixed">{t('{n}（审阅人）', { n: reviewer })}</span>
+        {value.map((k) => (
+          <span className="kw" key={k}>{k}<button className="kw-x" onClick={() => onChange(value.filter((x) => x !== k))} aria-label={t('从我方成员里去掉 {k}', { k })} title={t('删除')}><I.IconX /></button></span>
+        ))}
+      </div>
+      <div className="kw-add">
+        <TextInput size="m" id="our-input" value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add(draft.split(/[,，、;；]+/)); setDraft(''); } }} placeholder={t('输入姓名，回车添加')} aria-label={t('添加我方成员')} />
+        <button className="btn" onClick={() => { add(draft.split(/[,，、;；]+/)); setDraft(''); }} disabled={!draft.trim()}>{t('添加')}</button>
+      </div>
+      {sugg.length > 0 && (
+        <p className="set-hint">{t('从文件里读到的作者：')}{sugg.map((x, i) => <React.Fragment key={x}>{i > 0 && t('、')}<button type="button" className="link-btn" onClick={() => add([x])} title={t('加进我方成员')}>{x}</button></React.Fragment>)}{t('。点名字直接加进名单。')}</p>
+      )}
+    </div>
+  );
+}
+
 /** 审阅记录的占用与手动清理（1.7.3）：不再自动删除，由用户决定 */
 const DAY = 86400000;
 function ReviewStorage() {
@@ -169,8 +197,10 @@ function ReviewStorage() {
   );
 }
 
-export function SettingsModal({ v, set, onClose, upd, initialTab = 'general', sample }: {
+export function SettingsModal({ v, set, onClose, upd, initialTab = 'general', sample, authors = [] }: {
   sample?: string;
+  /** 1.9.5：当前两份文件里读到的批注作者 */
+  authors?: string[];
   v: SettingsValues; set: <K extends keyof SettingsValues>(k: K, val: SettingsValues[K]) => void; onClose: () => void;
   upd: Omit<React.ComponentProps<typeof UpdateSection>, 'auto' | 'setAuto'>; initialTab?: Tab;
 }) {
@@ -217,6 +247,11 @@ export function SettingsModal({ v, set, onClose, upd, initialTab = 'general', sa
                   <TextInput size="l" id="rv-author" value={v.authorName} placeholder={t('从对方文件读取，读不到时用“修改方”')} onChange={(e) => set('authorName', e.target.value)} />
                 </div>
                 <Opt label={t('接受的修订也加批注')} hint={t('关掉后，只有拒绝和待议带批注')}><Switch on={v.commentAccepted} onChange={(x) => set('commentAccepted', x)} label={t('接受的修订也加批注')} /></Opt>
+              </section>
+              <section className="set-sec" aria-labelledby="rv-s3">
+                <SH id="rv-s3" info={t('Word 批注的作者是这些名字时算我方（审阅人自动算在内），其他人算对方。个别批注可以在批注卡片里改归属，只影响那一对文件。名单只在本机保存。')}>{t('我方成员')}</SH>
+                <p className="set-desc">{t('Word 批注的作者是这些名字时算我方（审阅人自动算在内）。只在本机保存。')}</p>
+                <MemberEditor value={v.ourMembers} onChange={(x) => set('ourMembers', x)} reviewer={v.reviewerName.trim() || t('审阅人')} authors={authors} />
               </section>
             </div>
           )}

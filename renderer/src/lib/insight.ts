@@ -35,6 +35,14 @@ function isDocTitle(b: Block, isFirst: boolean) {
  * 页眉 / 页脚 / 脚注里的变更不挂条款，由区段本身说明位置。
  */
 export function clauseMap(res: DiffResult, blocksA: Block[], blocksB: Block[]): Map<number, string | null> {
+  const rowClause = rowClauses(res, blocksA, blocksB);
+  const out = new Map<number, string | null>();
+  for (const c of res.changes) out.set(c.id, rowClause[c.row] ?? null);
+  return out;
+}
+
+/** 每一行所属的条款（1.9.5 起批注也用：没有修订的批注按行找条款） */
+export function rowClauses(res: DiffResult, blocksA: Block[], blocksB: Block[]): (string | null)[] {
   const rowClause: (string | null)[] = [];
   let cur: string | null = null;
   let seenBody = false;
@@ -49,9 +57,7 @@ export function clauseMap(res: DiffResult, blocksA: Block[], blocksB: Block[]): 
     }
     rowClause[i] = cur;
   });
-  const out = new Map<number, string | null>();
-  for (const c of res.changes) out.set(c.id, rowClause[c.row] ?? null);
-  return out;
+  return rowClause;
 }
 
 // ---------------------------------------------------------------- 前后文

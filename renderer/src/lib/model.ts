@@ -10,6 +10,28 @@ export interface Run {
   hl?: string; // 高亮/底纹色
   font?: string;
   img?: string; // 图片指纹（内容哈希），用于检测图片变化
+  /** 1.9.5：解析时的批注位置标记（+id 开始、-id 结束、*id 引用），合并 run 时去掉，不会留在结果里 */
+  cm?: string;
+}
+
+/** 文档里的位置：正文第 b 个块（不含页眉）、第 c 个单元格（段落为 0）、第 o 个字符 */
+export interface DocPos { b: number; c: number; o: number }
+/**
+ * 1.9.5：Word 文档里已有的批注。只读正文里的；回复用 parent 指向被回复的那条。
+ * from / to 是被批注文字的范围（to 不含）；被批注的文字被修订删掉时 from == to，delText 记下被删的字。
+ */
+export interface DocComment {
+  id: string;
+  author: string;
+  initials?: string;
+  date?: string;
+  text: string;
+  parent?: string;
+  done?: boolean;
+  from?: DocPos;
+  to?: DocPos;
+  quote: string;
+  delText?: string;
 }
 
 export type BlockKind = 'p' | 'h' | 'li' | 'tr';
@@ -58,6 +80,8 @@ export interface DocModel {
   secBlocks?: { header: Block[]; footer: Block[]; footnote: Block[] };
   /** 区段识别情况，用来写“比较范围” */
   secInfo?: { header: 'found' | 'none' | 'unknown'; footer: 'found' | 'none' | 'unknown'; footnote: 'found' | 'none' | 'unknown'; pageNumbersDropped?: boolean };
+  /** 1.9.5：Word 批注（只有 docx 有） */
+  comments?: DocComment[];
 }
 
 /** 参与富文本比较的全部块：页眉 → 正文 → 脚注 → 页脚，每块带上区段标记 */

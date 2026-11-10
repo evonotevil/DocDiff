@@ -9,7 +9,10 @@ import { forEachPage, getPageCount, PageRange, BIG_PAGES, fullRange, rangeKey, c
 import { PageRangeGate, RangeLine, RangeProgress } from './components/PageRangeGate';
 import { kbd, modPressed, isMac } from './lib/platform';
 import { t, setLang, initLang, Lang, isEn, fmtAgo, fmtShortDate, colon } from './lib/i18n';
-import { clauseMap, detectRisks, DEFAULT_KEYWORDS, defaultKeywords, Risk } from './lib/insight';
+import { clauseMap, rowClauses, detectRisks, DEFAULT_KEYWORDS, defaultKeywords, Risk } from './lib/insight';
+import { buildThreads, cmView, internalComments, bestFor, authorsOf, normName, live as cmLive, type CmThread, type Owner } from './lib/comments';
+import { loadCm, saveCm, type CmState } from './lib/commentStore';
+import { CommentPop, CommentList, CommentHint, DropInternalModal, type CardActs } from './components/Comments';
 import { DecMap, Dec, Verdict, pairKey, loadDecisions, saveDecisions, reviewProgress, initialsOf } from './lib/review';
 import { scopeInfo, pageList } from './lib/scope';
 import { getSetting, setSetting as saveSetting, usePersistStatus } from './lib/persist';
@@ -82,6 +85,8 @@ interface Prefs {
   draftName: string; finalName: string;
   /** 以前的审阅稿被删了或挪走了：自动重新生成 / 先问我（beta.6） */
   draftMissing: 'auto' | 'ask';
+  /** 1.9.5：我方成员（批注作者是这些名字时算我方） */
+  ourMembers: string[];
 }
 const sysUser = (() => { try { return String(api.userName?.() || ''); } catch { return ''; } })();
 const DEFAULT_PREFS: Prefs = {
@@ -94,7 +99,7 @@ const DEFAULT_PREFS: Prefs = {
   authorName: '', commentAccepted: true,
   riskMoney: true, riskDate: true, keywords: DEFAULT_KEYWORDS,
   paperFollowTheme: false, celebrate: false, mascotWalk: true,
-  draftName: '', finalName: '', draftMissing: 'auto',
+  draftName: '', finalName: '', draftMissing: 'auto', ourMembers: [],
 };
 function loadPrefs(): Prefs {
   // 1.9：没设过关键词时按界面语言给默认值（loadPrefs 在 initLang 之后）
@@ -768,6 +773,83 @@ export default function App() {
   // ---------- 审阅决定：载入 / 保存 / 设置变化后的迁移 ----------
   const reviewer = prefs.reviewerName.trim() || t('审阅人');
   const pk = pairKey(A?.sha256, B?.sha256);
+
+  // ---------- 1.9.5：文档里已有的批注 ----------
+  const rowClause = useMemo(() => (richRes && RA && RB ? rowClauses(richRes, RA.blocks, RB.blocks) : []), [richRes, RA, RB]);
+  // 每一对文件自己的批注状态：按 pk 同步读出（换文件时不会把上一对的回复带进这一对的审阅稿）
+  const [cmVer, setCmVer] = useState(0);
+  const cmSt = useMemo<CmState>(() => loadCm(pk), [pk, cmVer]);
+  useEffect(() => { setCmOpen(null); }, [pk]);
+  const updCm = (f: (st: CmState) => CmState) => { saveCm(pk, f(loadCm(pk))); setCmVer((v) => v + 1); };
+  const ourMembers = prefs.ourMembers;
+  const threads = useMemo<CmThread[]>(() => (richRes && RA && RB && (RA.comments?.length || RB.comments?.length)
+    ? buildThreads(RA, RB, richRes, { ours: ourMembers, reviewer, overrides: cmSt.own, localReplies: cmSt.replies, rowClause }) : []),
+  [richRes, RA, RB, ourMembers, reviewer, cmSt.own, cmSt.replies, rowClause]);
+  const cmBy = useMemo(() => { const m = new Map<number, CmThread[]>(); for (const th of threads) for (const c of th.cids) (m.get(c) || m.set(c, []).get(c)!).push(th); return m; }, [threads]);
+  const cmRich = useMemo(() => (threads.length && richRes ? cmView(richRes, threads, 'rich') : undefined), [threads, richRes]);
+  const cmRed = useMemo(() => (threads.length && richRes ? cmView(richRes, threads, 'redline') : undefined), [threads, richRes]);
+  const cmCount = useMemo(() => threads.filter(cmLive).length, [threads]);
+  const ourSet = useMemo(() => new Set([...ourMembers, reviewer].map(normName)), [ourMembers, reviewer]);
+  const isOurs = (n: string) => ourSet.has(normName(n));
+  const internalList = useMemo(() => (RB && threads.length ? internalComments(RB, threads, { ours: ourMembers, reviewer, overrides: cmSt.own }) : []), [RB, threads, ourMembers, reviewer, cmSt.own]);
+  const internalLeft = internalList.filter((x) => !cmSt.drop.includes(x.id));
+  const unreplied = threads.filter((th) => th.side === 'b' && th.owner === 'theirs' && !th.resolved && !th.replied).length;
+  /** 写进审阅稿的：对对方批注的回复、不带入的批注（不带入一条时，它的回复一起去掉） */
+  const cmDraft = useMemo(() => {
+    const replies = Object.entries(cmSt.replies).filter(([k, v]) => k.startsWith('b:') && v.text.trim() && threads.some((th) => th.key === k)).map(([k, v]) => ({ parent: k.slice(2), text: v.text.trim(), at: v.at }));
+    const drop = new Set<string>();
+    for (const id of cmSt.drop) { drop.add(id); const th = threads.find((x) => x.side === 'b' && x.root.id === id); th?.replies.forEach((r) => drop.add(r.id)); }
+    return { replies, drop: [...drop].sort() };
+  }, [cmSt.replies, cmSt.drop, threads]);
+  const [cmOpen, setCmOpen] = useState<{ keys: string[]; n: number; reply?: boolean } | null>(null);
+  const cmAnchor = useRef<HTMLElement | null>(null);
+  const [cmJump, setCmJump] = useState<{ row: number; n: number } | null>(null);
+  const [dropAsk, setDropAsk] = useState(false);
+  const openCm = (keys: string[], el: HTMLElement, reply?: boolean) => {
+    cmAnchor.current = el;
+    setCmOpen((o) => ({ keys, n: (o?.n || 0) + 1, reply }));
+    updCm((st) => { const add = keys.filter((k) => !st.seen.includes(k)); return add.length ? { ...st, seen: [...st.seen, ...add] } : st; });
+  };
+  const cmActs: CardActs = {
+    reviewer,
+    replyOf: (k) => cmSt.replies[k],
+    onReply: (k, text) => updCm((st) => { const r = { ...st.replies }; if (text) r[k] = { text, at: Date.now() }; else delete r[k]; return { ...st, replies: r }; }),
+    onOwner: (k, o) => updCm((st) => { const own = { ...st.own }; if (o) own[k] = o; else delete own[k]; return { ...st, own }; }),
+    onAddMember: (name) => { setPrefs((p) => ({ ...p, ourMembers: [...p.ourMembers, name] })); flash(t('已把「{n}」加进我方成员', { n: name })); },
+    onDrop: (id, on) => updCm((st) => ({ ...st, drop: on ? [...new Set([...st.drop, id])] : st.drop.filter((d) => d !== id) })),
+    dropped: (id) => cmSt.drop.includes(id),
+    isOurs,
+  };
+  /** 定稿会去掉的批注：对方稿里已有的（按作者归属）+ 我方写的回复 */
+  const cmGone = useMemo(() => {
+    let theirs = 0, ours = Object.keys(cmSt.replies).filter((k) => k.startsWith('b:')).length;
+    for (const th of threads) if (th.side === 'b') { if (th.owner === 'ours') ours++; else theirs++; for (const r of th.replies) { if (isOurs(r.author)) ours++; else theirs++; } }
+    return { theirs, ours };
+  }, [threads, cmSt.replies, ourSet]);
+  /** 比对报告 / 审阅记录存档里的批注：全部（含已解决、我方回复） */
+  const reportComments = () => threads.map((th) => ({
+    clause: th.clause, side: th.side, owner: th.owner, internal: th.internal, resolved: th.resolved, author: th.root.author, date: th.root.date, text: th.root.text, quote: th.root.quote || th.root.delText || '',
+    replies: [...th.replies.map((r) => ({ author: r.author, text: r.text, ours: isOurs(r.author) })), ...(cmSt.replies[th.key] ? [{ author: reviewer, text: cmSt.replies[th.key].text, ours: true }] : [])],
+  }));
+  /** 检查器里点了一条批注：纸面滚到那里，打开卡片（有修订的同时选中那处修订） */
+  const pickCm = (th: CmThread, el: HTMLElement) => {
+    if (th.row === undefined) { openCm([th.key], el); return; }
+    if (th.cids.length) setSelCid(th.cids[0]);
+    setCmJump((j) => ({ row: th.row!, n: (j?.n || 0) + 1 }));
+    setTimeout(() => {
+      const pin = mainRef.current?.querySelector(`.cm-pin[data-cmk~="${th.key}"]`) as HTMLElement | null;
+      openCm([th.key], pin || el);
+    }, 420);
+  };
+  /** 画布里点了批注标 / 点线文字、检查器差异行尾的批注标 */
+  const onCmClick = (e: React.MouseEvent) => {
+    const el = (e.target as HTMLElement).closest('[data-cmk]') as HTMLElement | null;
+    if (!el || el.closest('.cm-pop') || !el.dataset.cmk) return;
+    if (el.dataset.cmOnly) { e.stopPropagation(); e.preventDefault(); }
+    const keys = el.dataset.cmk.split(' ').filter(Boolean);
+    if (cmOpen && cmOpen.keys.join(' ') === keys.join(' ') && cmAnchor.current === el) { setCmOpen(null); return; }
+    openCm(keys, el);
+  };
   // 1.9.3（F13）：格式变化 ≥ 10 处、占一半以上时提示；其中 6 成以上是同一类整段字体 / 字号变化时说清是哪一类
   const [fmtQuiet, setFmtQuiet] = useState(0);
   const fmtNoHint = (k: string) => { try { const all: string[] = JSON.parse(localStorage.getItem('docdiff.fmtHintOff') || '[]'); if (!all.includes(k)) localStorage.setItem('docdiff.fmtHintOff', JSON.stringify([...all, k].slice(-200))); } catch {} setFmtQuiet((x) => x + 1); };
@@ -874,9 +956,13 @@ export default function App() {
     });
     const off = sync.subscribe(setDraftState);
     setDraftSync(sync);
+    sync.setComments(cmDraftRef.current);
     if (decFor.current === richRes) sync.update(decisions);
     return () => { off(); sync.dispose(); };
   }, [richRes, pk, draftArmed]);
+  const cmDraftRef = useRef(cmDraft);
+  cmDraftRef.current = cmDraft;
+  useEffect(() => { draftSync?.setComments(cmDraft); }, [draftSync, cmDraft]);
   const draftVer = activeTh && thread ? activeTh.versions.find((v) => v.id === thread.b) : null;
   useEffect(() => { if (draftSync) { draftSync.ctx.ver = draftVer ? `V${draftVer.n}` : undefined; const renamed = draftSync.ctx.reviewer !== reviewer || draftSync.ctx.initials !== (prefs.reviewerInitials.trim() || initialsOf(reviewer)); draftSync.ctx.initials = prefs.reviewerInitials.trim() || initialsOf(reviewer); if (renamed) { draftSync.ctx.reviewer = reviewer; draftSync.touch(); } draftSync.ctx.reviewer = reviewer; draftSync.ctx.onMissing = prefs.draftMissing; draftSync.ctx.pattern = prefs.draftName.trim() || t('{name}-我方意见'); draftSync.ctx.theirs = prefs.authorName.trim() || B?.meta['最后修改者'] || B?.meta['作者'] || t('修改方'); } }, [draftSync, reviewer, prefs.reviewerInitials, prefs.draftName, prefs.authorName, prefs.draftMissing, draftVer]);
   // 往来稿：这一轮的结论摘要存进往来稿（只存有结论或备注的处），供下一轮的“上轮”提示和条款历史使用
@@ -959,7 +1045,7 @@ export default function App() {
 
   const curRes: DiffResult | null = tab === 0 || tab === 2 ? richRes : tab === 1 ? plainRes : tab === 4 ? ocrRes : null;
   const changes: Change[] = curRes?.changes || [];
-  const shown: Change[] = useMemo(() => (filter === 'all' ? changes : filter === 'risk' ? changes.filter((c) => riskById.has(c.id)) : changes.filter((c) => c.kind === filter)), [changes, filter, riskById]);
+  const shown: Change[] = useMemo(() => (filter === 'all' || filter === 'cm' ? changes : filter === 'risk' ? changes.filter((c) => riskById.has(c.id)) : changes.filter((c) => c.kind === filter)), [changes, filter, riskById]);
   // 悬停清单里的一行：纸上对应的字和地图刻度描边（不跳转）
   const hoverCid = useCallback((id: number | null) => {
     document.querySelectorAll('.hov').forEach((el) => el.classList.remove('hov'));
@@ -1108,7 +1194,7 @@ export default function App() {
     setExportBusy(true);
     try {
       if (kind === 'report') {
-        const html = reportHtml({ A, B, res: richRes, clauses, risks, decisions, scope, reviewer }, RA.blocks, RB.blocks);
+        const html = reportHtml({ A, B, res: richRes, clauses, risks, decisions, scope, reviewer, comments: reportComments() }, RA.blocks, RB.blocks);
         const p = await api.htmlToPdf({ html, defaultName: `${baseName}-${t('比对报告')}.pdf` });
         if (p) { flash(t('已导出：{p}', { p }), 'plane'); setExportOpen(false); }
       } else {
@@ -1118,6 +1204,14 @@ export default function App() {
           authorDate: new Date(B.file.mtime || Date.now()),
           reviewer: { name: reviewer, initials: prefs.reviewerInitials.trim() || initialsOf(reviewer) },
           decisions, commentAccepted: prefs.commentAccepted, risks: riskById, changes: richRes.changes, title: baseName,
+          // 1.9.5：审阅记录存档保留全部批注（对方的、我方的、回复），每条线程写成一条批注
+          docComments: kind === 'final' ? threads.map((th) => {
+            const tag = t(th.internal ? '内部' : th.owner === 'ours' ? '我方' : '对方');
+            const lines = [`[${tag}${th.resolved ? ' · ' + t('已解决') : ''}${th.side === 'a' ? ' · ' + t('我方稿') : ''}] ${th.root.text}`];
+            for (const r of th.replies) lines.push(`↳ ${r.author}${colon()}${r.text}`);
+            if (cmSt.replies[th.key]) lines.push(`↳ ${reviewer}${colon()}${cmSt.replies[th.key].text}`);
+            return { row: th.row, author: th.root.author, initials: th.root.initials || '', date: th.root.date, lines };
+          }) : undefined,
         });
         const p = await api.saveFile({ defaultName: `${baseName}-${t(kind === 'final' ? '审阅记录存档' : '修订稿')}.docx`, data: bytes, filters: [{ name: t('Word 文档'), extensions: ['docx'] }] });
         if (p) { flash(t('已导出：{p}', { p }), 'plane'); setExportOpen(false); }
@@ -1289,6 +1383,7 @@ export default function App() {
     reviewerName: prefs.reviewerName, reviewerInitials: prefs.reviewerInitials, authorName: prefs.authorName, commentAccepted: prefs.commentAccepted,
     draftName: prefs.draftName, finalName: prefs.finalName, draftMissing: prefs.draftMissing,
     riskMoney: prefs.riskMoney, riskDate: prefs.riskDate, keywords: prefs.keywords, autoCheckUpdate: prefs.autoCheckUpdate,
+    ourMembers: prefs.ourMembers,
   };
   const setSetting = <K extends keyof SettingsValues>(k: K, v: SettingsValues[K]) => {
     if (k === 'lang') return changeLang(v as Lang);
@@ -1304,7 +1399,7 @@ export default function App() {
       {keysOpen && <KeysModal onClose={() => setKeysOpen(false)} />}
       {pwd && <PasswordModal name={pwd.file.name} wrong={pwd.wrong} onCancel={() => setPwd(null)} onOk={(p) => { const x = pwd; setPwd(null); loadFile(x.side, x.file, p); }} />}
       {pasteSide !== null && <PasteModal side={pasteSide} onCancel={() => setPasteSide(null)} onOk={(t) => { const s = pasteSide; setPasteSide(null); loadFile(s, textFile(t, s)); }} />}
-      {showSettings && <SettingsModal v={settingsValues} set={setSetting} onClose={() => setShowSettings(false)} initialTab={showSettings} sample={B?.type === 'docx' ? B.file.name : undefined}
+      {showSettings && <SettingsModal v={settingsValues} set={setSetting} onClose={() => setShowSettings(false)} initialTab={showSettings} sample={B?.type === 'docx' ? B.file.name : undefined} authors={authorsOf(A, B)}
         upd={{ info: upd, checking: checkingUpd, onCheck: () => checkUpdate(true), onSkip: (v) => { set('skipVersion')(v); flash(t('已跳过 {v}，下次有更新的版本再提醒你', { v })); } }} />}
       {exportOpen && richRes && (
         <ExportDialog total={richRes.changes.length} undecided={richRes.changes.length - richRes.changes.filter((c) => decisions[c.id]?.v).length} risks={risks.length}
@@ -1673,10 +1768,10 @@ export default function App() {
       <button className="btn primary" onClick={diffJob.retry}>{t('重新比较')}</button>
     </div>
   );
-  else if (tab === 0 && richRes && RA && RB) body = richRes.rows.length ? <RichView A={RA} B={RB} res={richRes} selCid={selCid} onSel={setSelCid} hideUnchanged={prefs.hideRich} />
+  else if (tab === 0 && richRes && RA && RB) body = richRes.rows.length ? <RichView A={RA} B={RB} res={richRes} selCid={selCid} onSel={setSelCid} hideUnchanged={prefs.hideRich} cm={cmRich} cmOpen={cmOpen?.keys[0] ?? null} jumpTo={cmJump} />
     : <div className="empty-state"><Mascot mood="oops" size={96} /><h2>{t('没找到可以比较的文字')}</h2><div>{t((A.type === 'pdf' || B.type === 'pdf') ? '如果是扫描件，试试「OCR 文本」或「图像」模式。' : '两份文档好像都是空的。')}</div></div>;
   else if (tab === 1 && plainRes && plainBlocks) body = <PlainView A={plainBlocks[0]} B={plainBlocks[1]} res={plainRes} selCid={selCid} onSel={setSelCid} layout={prefs.layout} wrap={prefs.wrap} hideUnchanged={prefs.hidePlain} />;
-  else if (tab === 2 && richRes && RA && RB) body = changes.length ? <RedlineView A={RA} B={RB} res={richRes} selCid={selCid} onSel={setSelCid} decisions={decisions} innerRef={redlineRef} />
+  else if (tab === 2 && richRes && RA && RB) body = changes.length ? <RedlineView A={RA} B={RB} res={richRes} selCid={selCid} onSel={setSelCid} decisions={decisions} innerRef={redlineRef} cm={cmRed} cmOpen={cmOpen?.keys[0] ?? null} jumpTo={cmJump} />
     : <div className="empty-state"><Mascot mood="cheer" size={96} act="jump" /><h2>{t(prefs.mascotWalk ? '一字不差' : '没有需要审阅的修订')}</h2>{sameText}</div>;
   else if (tab === 3 && needGate && counts) body = <PageRangeGate mode="image" pagesA={counts.a} pagesB={counts.b} initial={pageRanges[pairSha]} onConfirm={setPageRange} />;
   else if (tab === 3) body = <ImageView head={rangeHead} suspect={suspectPages} state={imgState} mode={prefs.imgMode} zoom={zoom} fade={fade} setFade={setFade} slider={slider} setSlider={setSlider} showBoxes={prefs.showBoxes} onlyDiff={onlyDiffPages} scrollRef={imgScroll} />;
@@ -1700,6 +1795,9 @@ export default function App() {
   const cur = changes.find((c) => c.id === selCid);
   const curIdx = changes.findIndex((c) => c.id === selCid);
   const curDec = cur ? decisions[cur.id] : undefined;
+  /** 1.9.5（H3）：这处修订上最相关的一条批注；审完最后一处时，还有多少条“没有修订的地方”的批注没打开过 */
+  const curCm = cur && isRichTab ? bestFor(cmBy.get(cur.id) || []) : null;
+  const restCm = cur && curIdx === changes.length - 1 ? threads.filter((th) => th.plain && cmLive(th) && !cmSt.seen.includes(th.key)).length : 0;
 
   // ---------- 比较设置（工具栏齿轮的弹出层） ----------
   const compareSettings = tab === 3 ? (
@@ -1758,7 +1856,7 @@ export default function App() {
           {changes.length > 0 && <span className="cnt">{filter !== 'all' ? `${shown.length} / ${changes.length}` : changes.length}</span>}
           {tab === 2 && changes.length > 0 && <button ref={moreRef} type="button" className="ibtn sm act" onClick={() => setPop(pop === 'more' ? null : 'more')} title={t('全部接受 / 全部拒绝')} aria-label={t('更多操作')} aria-expanded={pop === 'more'}><I.IconMore /></button>}
         </div>
-        {changes.length > 0 && stats && <FilterChips stats={stats} risks={isRichTab ? risks.length : 0} value={filter} onChange={setFilter} />}
+        {(changes.length > 0 || (isRichTab && cmCount > 0)) && stats && <FilterChips stats={stats} risks={isRichTab ? risks.length : 0} comments={isRichTab ? cmCount : 0} value={filter} onChange={setFilter} />}
         {isRichTab && fmtHint && (
           <div className="fmt-hint" role="status">
             <Notice tone="info" title={fmtHint.kind === 'font' ? t('{n} 处是格式变化，多数是整段字体不同', { n: fmtHint.n }) : fmtHint.kind === 'size' ? t('{n} 处是格式变化，多数是整段字号不同', { n: fmtHint.n }) : fmtHint.kind === 'both' ? t('{n} 处是格式变化，多数是整段字体、字号不同', { n: fmtHint.n }) : t('{n} 处是格式变化', { n: fmtHint.n })}>
@@ -1770,9 +1868,11 @@ export default function App() {
         {isRichTab && fmtOff && fmtOff.pk === pk && !formatting && (
           <div className="fmt-off" role="status"><span>{t('已隐藏 {n} 处格式变化', { n: fmtOff.n })}</span><button type="button" className="link-btn" onClick={() => { setFormatting(true); fmtNoHint(pk); setFmtOff(null); }}>{t('恢复')}</button></div>
         )}
-        {changes.length > 0 ? (
+        {isRichTab && filter === 'cm' ? (
+          <CommentList key={lang} threads={threads} sel={cmOpen?.keys[0] ?? null} onSel={pickCm} acts={cmActs} />
+        ) : changes.length > 0 ? (
           <ChangeList key={lang} changes={shown} all={changes} sel={selCid} onSel={setSelCid} onHover={hoverCid} decisions={tab === 2 ? decisions : undefined}
-            clauses={isRichTab ? clauses : noClauses} risks={isRichTab ? riskById : new Map()} grouped={isRichTab} />
+            clauses={isRichTab ? clauses : noClauses} risks={isRichTab ? riskById : new Map()} grouped={isRichTab} cmBy={isRichTab ? cmBy : undefined} />
         ) : (
           <div className="insp-empty">
             {curRes ? <><b>{t('在已比较的范围内未发现差异。')}</b>{scope?.notCompared.length ? <span>{t('未比较：{x}', { x: scope.notCompared.join(t('、')) })}</span> : null}</>
@@ -1809,6 +1909,13 @@ export default function App() {
     );
   }
 
+  // 1.9.5（H5 ②）：审阅稿里混着我方内部批注
+  const internalNotice = (cls?: string) => (
+    <Notice tone="warn" className={cls} title={t('审阅稿里有 {n} 条我方内部批注。', { n: internalLeft.length })}
+      action={<><button type="button" className="btn sm" onClick={() => setDropAsk(true)}>{t('不带入…')}</button><button type="button" className="btn sm" onClick={() => updCm((st) => ({ ...st, keep: true }))}>{t('保留')}</button></>}>
+      {t('这份要发给对方，这 {n} 条会一起发出去。', { n: internalLeft.length })}
+    </Notice>
+  );
   const crossFormat = A.type !== B.type && (A.type === 'pdf' || B.type === 'pdf') && isRichTab && dismissCross !== docSig;
   const askReviewer = tab === 2 && changes.length > 0 && !prefs.reviewerAsked;
   // 1.9.3（F12）：有快捷键的按钮，悬停提示统一写成「名称 · 快捷键」
@@ -1817,7 +1924,7 @@ export default function App() {
 
   return (
     <MascotOn.Provider value={prefs.mascotWalk}>
-    <div className={`app shell ${navOpen ? '' : 'nav-mini'} ${hasInsp && inspOpen && !narrow ? '' : 'insp-off'} ${narrow ? 'narrow' : ''}`}>
+    <div onClickCapture={onCmClick} className={`app shell ${navOpen ? '' : 'nav-mini'} ${hasInsp && inspOpen && !narrow ? '' : 'insp-off'} ${narrow ? 'narrow' : ''}`}>
       <nav className="nav" aria-label={t('比较模式')}>
         {navOpen && (
           <div className="nav-h drag">
@@ -1879,7 +1986,7 @@ export default function App() {
         {richRes && tab === 2 && draftSync && B && (
           <DraftChip state={draftState} sync={draftSync} bPath={B.file.path} narrow={false} finalReq={finalReq} hideTip={tab === 2 && doneOpen} origLabel={origLabel} decided={richRes.changes.filter((c) => decisions[c.id]?.v).length}
             pending={richRes.changes.filter((c) => !decisions[c.id]?.v || decisions[c.id]?.v === 'h').length} held={heldN} onFinal={(p) => { setFinalMade(p); cheer('gradcap'); if (allDecided) setDoneOpen(true); return allDecided; }} finalPattern={prefs.finalName.trim() || t('{name}-定稿')}
-            onJump={(cid) => { setTab(2); setFilter('all'); setSelCid(cid); }} flash={flash} />
+            onJump={(cid) => { setTab(2); setFilter('all'); setSelCid(cid); }} flash={flash} cmGone={cmGone} />
         )}
         {richRes && isRichTab && <button type="button" className={`btn tb-export ${tab === 2 ? '' : 'primary'}`} onClick={openExport} title={t('导出')} aria-label={t('导出')}><I.IconExport /><span className="lbl">{t('导出')}</span></button>}
         {hasInsp && <button type="button" className="ibtn" onClick={toggleAside} title={toggleTitle(inspOpen, '检查器', inspKey)} aria-label={t(inspOpen ? '收起检查器' : '展开检查器')} aria-expanded={inspOpen}><I.IconPanelRight /></button>}
@@ -1902,6 +2009,7 @@ export default function App() {
               {pdfUpgrade.kept > 0 ? t('对得上的 {n} 个已经带回。对不上的不会挪到别的条款，这几处请重新看一下。', { n: pdfUpgrade.kept }) : t('对不上的不会挪到别的条款，这几处请重新看一下。')}
             </Notice>
           : <Notice tone="info" className="bar" title={t('这份 PDF 的段落读法更新了，上次的 {n} 个决定都已带回。', { n: pdfUpgrade.kept })} />)}
+        {tab === 2 && draftSync && draftState.s !== 'none' && internalLeft.length > 0 && !cmSt.keep && !doneOpen && internalNotice('bar cm-int')}
         {lostBanner && (
           <Notice tone="warn" className="bar" title={t('{n} 个决定对不上了。', { n: lostBanner.n })}
             action={<button className="btn sm" onClick={lostBanner.restore}>{t('改回原来的设置')}</button>} onClose={() => setLostBanner(null)}>
@@ -1949,7 +2057,7 @@ export default function App() {
           <FindAll.Provider value={findOpen && findable}><React.Fragment key={lang}>{body}</React.Fragment></FindAll.Provider>
           {sameBurst > 0 && <Confetti key={sameBurst} n={30} />}
           {findOpen && findable && <FindBar rootRef={mainRef} focusKey={findKey} onClose={() => setFindOpen(false)} dep={[tab, curRes, prefs.hideRich, prefs.hidePlain, prefs.layout, decisions]} />}
-          {showMap && <ChangeMap changes={changes} filter={filter === 'all' || filter === 'risk' ? [] : [filter]} selCid={selCid} onSel={setSelCid} dep={[curRes, tab, prefs.hideRich, prefs.hidePlain, prefs.layout, prefs.wrap, decisions, inspOpen, navOpen, askReviewer]} />}
+          {showMap && <ChangeMap changes={changes} filter={filter === 'all' || filter === 'risk' || filter === 'cm' ? [] : [filter]} selCid={selCid} onSel={setSelCid} dep={[curRes, tab, prefs.hideRich, prefs.hidePlain, prefs.layout, prefs.wrap, decisions, inspOpen, navOpen, askReviewer]} />}
         </div>
         {askReviewer && (
           <div className="reviewer-ask" role="note">
@@ -1985,7 +2093,7 @@ export default function App() {
                 </span>
               ) : <span className="rb-where">{t('点文中任意一处修订开始审阅')}</span>}
               {cur && <div className="rb-diff">{cur.kind === 'mod' ? <><del>{short(cur.before, 60)}</del><span className="arrow">→</span><ins>{short(cur.after, 60)}</ins></> : cur.kind === 'ins' ? <ins>{short(cur.after, 120)}</ins> : cur.kind === 'del' ? <del>{short(cur.before, 120)}</del> : cur.kind === 'fmt' ? <>{short(cur.before, 60)}<em>（{noteText(cur)}）</em></> : <>{short(cur.before, 100)}<em>（{t('整段移动')}）</em></>}</div>}
-              {cur && activeTh && hints.get(cur.id) && <HintLine hint={hints.get(cur.id)!} th={activeTh} onReuse={(v) => decide(cur.id, v)} />}
+              {cur && activeTh && hints.get(cur.id) && !curCm && <HintLine hint={hints.get(cur.id)!} th={activeTh} onReuse={(v) => decide(cur.id, v)} />}
               <label className="rb-note">
                 <input id="note-input" ref={noteRef} disabled={!cur} value={cur ? decisions[cur.id]?.note || '' : ''} placeholder={t('备注（可选），会写进 Word 批注')}
                   onChange={(e) => cur && setNote(cur.id, e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') (e.target as HTMLInputElement).blur(); }} aria-label={t('备注')} />
@@ -1998,6 +2106,11 @@ export default function App() {
               <button className="btn hold" disabled={!cur} onClick={() => decide(selCid, 'h')} title={`${isEn() ? 'Keep open' : t('待议')} · H`}>{isEn() ? 'Keep open' : t('待议')}<Kbd>H</Kbd></button>
               <button className="btn primary" disabled={!cur} onClick={() => decide(selCid, 'a')} title={`${t('接受')} · A`}>{t('接受')}<Kbd>A</Kbd></button>
             </div>
+            {(curCm || restCm > 0) && (
+              <CommentHint th={curCm} more={(cur ? cmBy.get(cur.id)?.length || 1 : 1) - 1} rest={curCm ? 0 : restCm}
+                onOpen={(el) => curCm && openCm((cmBy.get(cur!.id) || [curCm]).map((x) => x.key), el)} onReply={(el) => curCm && openCm([curCm.key], el, true)}
+                onRest={() => { setFilter('cm'); if (!inspOpen) toggleAside(); }} />
+            )}
           </div>
         )}
         {tab === 2 && doneOpen && (
@@ -2013,6 +2126,17 @@ export default function App() {
               <div className="done-stats">
                 {(['a', 'r', 'h'] as Verdict[]).map((v) => <div key={v} className={`done-stat ${v}`}><div className="h">{t(v === 'a' ? '接受' : v === 'r' ? '拒绝' : '待议')}</div><div className="v">{changes.filter((c) => decisions[c.id]?.v === v).length}</div></div>)}
               </div>
+              {(unreplied > 0 || (draftSync && internalLeft.length > 0 && !cmSt.keep)) && (
+                <div className="done-cm">
+                  {unreplied > 0 && (
+                    <Notice tone="info" title={t('对方有 {n} 条批注还没回复。', { n: unreplied })}
+                      action={<button type="button" className="btn sm" onClick={() => { setDoneOpen(false); setFilter('cm'); if (!inspOpen) toggleAside(); }}>{t('去看看')}</button>}>
+                      {t('不影响审阅稿。回复会作为批注的回复写进审阅稿，看一眼再发也来得及。')}
+                    </Notice>
+                  )}
+                  {draftSync && internalLeft.length > 0 && !cmSt.keep && internalNotice()}
+                </div>
+              )}
               {doneActs}
             </div>
           </div>
@@ -2047,6 +2171,8 @@ export default function App() {
         <AddVersionDialog th={th} file={addVer.f} busy={libBusy} onClose={() => setAddVer(null)} onDropFiles={(fs) => { if (fs[0]?.path) setAddVer({ id: th.id, f: fs[0] }); else if (fs[0]) flash(t('这个文件没有路径，请用“选择”打开')); }}
           onPick={async () => { const f: FileInfo | null = await api.openDialog(); if (f) setAddVer({ id: th.id, f }); }}
           onDone={(side, against) => { const f = addVer.f!; setAddVer(null); addThreadVersion(th, f, side, against); }} />) : null; })()}
+      {cmOpen && <CommentPop key={cmOpen.n} anchor={cmAnchor} threads={cmOpen.keys.map((k) => threads.find((x) => x.key === k)).filter(Boolean) as CmThread[]} acts={cmActs} onClose={() => setCmOpen(null)} autoReply={cmOpen.reply} />}
+      {dropAsk && <DropInternalModal items={internalLeft} onClose={() => setDropAsk(false)} onOk={(ids) => { setDropAsk(false); updCm((st) => ({ ...st, drop: [...new Set([...st.drop, ...ids])] })); flash(t('生成审阅稿时不带入这 {n} 条', { n: ids.length })); }} />}
       {careCard}
       {modals}
     </div>

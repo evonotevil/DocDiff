@@ -1,9 +1,10 @@
 import JSZip from 'jszip';
-import type { Block, Run, DocModel, FileInfo } from './model';
+import type { Block, Run, DocModel, FileInfo, DocComment, DocPos } from './model';
 import { blockText, isPageNumberText } from './model';
 import { markAction, rowDeleted } from './trackedStructure';
 
 const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+const W14 = 'http://schemas.microsoft.com/office/word/2010/wordml';
 
 type RPr = Partial<Omit<Run, 't'>>;
 interface StyleDef { name: string; basedOn?: string; rPr: RPr; outline?: number; type: string; numId?: string; ilvl?: number }
@@ -180,10 +181,18 @@ export async function parseDocx(file: FileInfo): Promise<DocModel> {
 
   // ---- body walk ----
   const blocks: Block[] = [];
+  // 1.9.5：批注范围。开始 / 结束标记先当作空 run 放进段落，读完正文再换算成位置；
+  // 范围里被修订删掉的字（按“接受”不在正文里）另外记下来
+  const cmOpen = new Set<string>();
+  const cmDel = new Map<string, string>();
+  const delText = (el: Element) => Array.from(el.getElementsByTagNameNS(W, 'delText')).map((x) => x.textContent || '').join('');
 
   const collectRuns = async (container: Element, base: RPr, out: Run[]) => {
     for (const el of kids(container)) {
       const ln = el.localName;
+      if (ln === 'commentRangeStart') { const id = wattr(el, 'id'); if (id) { out.push({ t: '', cm: '+' + id }); cmOpen.add(id); } continue; }
+      if (ln === 'commentRangeEnd') { const id = wattr(el, 'id'); if (id) { out.push({ t: '', cm: '-' + id }); cmOpen.delete(id); } continue; }
+      if ((ln === 'del' || ln === 'moveFrom') && cmOpen.size) { const d = delText(el); if (d) for (const id of cmOpen) cmDel.set(id, (cmDel.get(id) || '') + d); }
       if (ln === 'r') {
         const rPr = kid(el, 'rPr');
         const rs = wattr(kid(rPr, 'rStyle'), 'val');
@@ -192,6 +201,7 @@ export async function parseDocx(file: FileInfo): Promise<DocModel> {
         for (const c of kids(el)) {
           const cl = c.localName;
           if (cl === 't') out.push({ ...st, t: c.textContent || '' });
+          else if (cl === 'commentReference') { const id = wattr(c, 'id'); if (id) out.push({ t: '', cm: '*' + id }); }
           else if (cl === 'tab') out.push({ ...st, t: '\t' });
           else if (cl === 'br' || cl === 'cr') { if (wattr(c, 'type') !== 'page') out.push({ ...st, t: '\n' }); }
           else if (cl === 'noBreakHyphen') out.push({ ...st, t: '‑' });
@@ -255,18 +265,29 @@ export async function parseDocx(file: FileInfo): Promise<DocModel> {
   // 规则和 draft/ooxml.ts 的 acceptExisting 共用 trackedStructure.ts，两边必须一致
   const walk = async (container: Element, out: Block[] = blocks) => {
     let carry: Run[] = [];
+    // 段落之间的批注标记：开始挂到下一块的开头，结束挂到上一块的末尾（不新增块，块数要和审阅稿写入时的定位一致）
+    let lead: Run[] = [];
+    const firstRuns = (b: Block) => (b.kind === 'tr' ? (b.cells![0] ||= []) : b.runs);
+    const lastRuns = (b: Block) => (b.kind === 'tr' ? (b.cells![b.cells!.length - 1] ||= []) : b.runs);
+    const pushBlock = (b: Block) => { if (lead.length) { firstRuns(b).unshift(...lead); lead = []; } out.push(b); };
     for (const el of kids(container)) {
       const ln = el.localName;
+      if (ln === 'commentRangeStart') { const id = wattr(el, 'id'); if (id) { lead.push({ t: '', cm: '+' + id }); cmOpen.add(id); } continue; }
+      if (ln === 'commentRangeEnd') {
+        const id = wattr(el, 'id');
+        if (id) { const m = { t: '', cm: '-' + id }; const last = out[out.length - 1]; if (carry.length) carry.push(m); else if (last) lastRuns(last).push(m); else lead.push(m); cmOpen.delete(id); }
+        continue;
+      }
       if (ln === 'p') {
         const act = markAction(el);
         if (act === 'drop' && !carry.length) continue;
         if (act === 'drop' || act === 'merge') { carry.push(...(await paraBlock(el, true)).runs); continue; }
         const b = await paraBlock(el);
         if (carry.length) { b.runs = [...carry, ...b.runs]; carry = []; }
-        out.push(b);
+        pushBlock(b);
         continue;
       }
-      if (carry.length) { out.push({ kind: 'p', runs: carry }); carry = []; }
+      if (carry.length) { pushBlock({ kind: 'p', runs: carry }); carry = []; }
       if (ln === 'tbl') {
         for (const tr of kids(el, 'tr')) {
           if (rowDeleted(tr)) continue; // 对方修订删除的整行：按“接受”不存在
@@ -289,12 +310,13 @@ export async function parseDocx(file: FileInfo): Promise<DocModel> {
             if (cc.length) { if (!first) cr.push({ t: '\n' }); cr.push(...cc); }
             cells.push(cr);
           }
-          out.push({ kind: 'tr', runs: [], cells });
+          pushBlock({ kind: 'tr', runs: [], cells });
         }
       } else if (ln === 'sdt') await walk(kid(el, 'sdtContent') || el, out);
       else if (ln === 'customXml' || ln === 'ins') await walk(el, out);
     }
-    if (carry.length) out.push({ kind: 'p', runs: carry });
+    if (carry.length) pushBlock({ kind: 'p', runs: carry });
+    if (lead.length && out.length) { lastRuns(out[out.length - 1]).push(...lead); lead = []; }
   };
   const body = doc.getElementsByTagNameNS(W, 'body')[0];
   if (body) await walk(body);
@@ -364,7 +386,10 @@ export async function parseDocx(file: FileInfo): Promise<DocModel> {
   }
   notes.forEach((b) => delete (b as any)._first);
 
-  // 合并相邻同样式 run，去掉完全空的段落尾部
+  // ---- 1.9.5：批注（只读正文里的；页眉、脚注里的批注很少见，不读） ----
+  const comments = await readComments(blocks, cmDel, xml);
+
+  // 合并相邻同样式 run，去掉完全空的段落尾部（批注标记是空 run，这里一起去掉）
   for (const b of [...blocks, ...hdr.blocks, ...ftr.blocks, ...notes]) {
     if (b.kind === 'tr') b.cells = b.cells!.map(mergeRuns);
     else b.runs = mergeRuns(b.runs);
@@ -398,13 +423,87 @@ export async function parseDocx(file: FileInfo): Promise<DocModel> {
   meta['批注数量'] = cmts ? String((await xml('word/comments.xml'))!.getElementsByTagNameNS(W, 'comment').length) : '0';
 
   return {
-    file, type: 'docx', blocks, meta, pageCount,
+    file, type: 'docx', blocks, meta, pageCount, comments: comments.length ? comments : undefined,
     secBlocks: { header: hdr.blocks, footer: ftr.blocks, footnote: notes },
     secInfo: {
       header: hdr.blocks.length ? 'found' : 'none', footer: ftr.blocks.length ? 'found' : 'none',
       footnote: notes.length ? 'found' : 'none', pageNumbersDropped: hdr.dropped || ftr.dropped,
     },
   };
+}
+
+/** 正文里批注标记的位置 → 批注列表（含回复关系、已解决状态） */
+async function readComments(blocks: Block[], cmDel: Map<string, string>, xml: (p: string) => Promise<Document | null>): Promise<DocComment[]> {
+  const cdoc = await xml('word/comments.xml');
+  if (!cdoc) return [];
+  const starts = new Map<string, DocPos>(), ends = new Map<string, DocPos>(), refs = new Map<string, DocPos>();
+  blocks.forEach((b, bi) => {
+    const cells = b.kind === 'tr' ? b.cells || [] : [b.runs];
+    cells.forEach((runs, ci) => {
+      let o = 0;
+      for (const r of runs) {
+        if (r.cm) {
+          const id = r.cm.slice(1), pos = { b: bi, c: ci, o };
+          const m = r.cm[0] === '+' ? starts : r.cm[0] === '-' ? ends : refs;
+          if (!m.has(id) || m === ends) m.set(id, pos);
+        } else o += r.t.length;
+      }
+    });
+  });
+  const cellText = (b: number, c: number) => { const bl = blocks[b]; if (!bl) return ''; const rs = bl.kind === 'tr' ? bl.cells?.[c] || [] : bl.runs; return rs.map((r) => r.t).join(''); };
+  const cellsOf = (b: number) => { const bl = blocks[b]; return bl?.kind === 'tr' ? Math.max(1, bl.cells?.length || 1) : 1; };
+  const slice = (from: DocPos, to: DocPos) => {
+    const parts: string[] = [];
+    for (let b = from.b; b <= to.b && b < blocks.length; b++) {
+      for (let c = b === from.b ? from.c : 0; c < cellsOf(b) && (b < to.b || c <= to.c); c++) {
+        const s = cellText(b, c);
+        parts.push(s.slice(b === from.b && c === from.c ? from.o : 0, b === to.b && c === to.c ? to.o : s.length));
+      }
+    }
+    return parts.join('\n');
+  };
+  const lt = (x: DocPos, y: DocPos) => x.b < y.b || (x.b === y.b && (x.c < y.c || (x.c === y.c && x.o < y.o)));
+  const ext = await xml('word/commentsExtended.xml');
+  const exByPara = new Map<string, { parent?: string; done?: boolean }>();
+  if (ext) for (const e of Array.from(ext.getElementsByTagNameNS('*', 'commentEx'))) {
+    const a = (n: string) => e.getAttributeNS(e.namespaceURI, n) ?? e.getAttribute('w15:' + n) ?? e.getAttribute(n);
+    const pid = a('paraId');
+    if (pid) exByPara.set(pid.toUpperCase(), { parent: a('paraIdParent')?.toUpperCase() || undefined, done: a('done') === '1' || a('done') === 'true' });
+  }
+  const out: DocComment[] = [];
+  const byPara = new Map<string, string>();
+  const paraOf = new Map<string, string>();
+  for (const cm of Array.from(cdoc.getElementsByTagNameNS(W, 'comment'))) {
+    const id = wattr(cm, 'id');
+    if (id == null) continue;
+    const ps = kids(cm, 'p');
+    const text = ps.map((p) => {
+      let s = '';
+      for (const n of Array.from(p.getElementsByTagNameNS(W, '*'))) { if (n.localName === 't') s += n.textContent || ''; else if (n.localName === 'tab') s += '\t'; else if (n.localName === 'br') s += '\n'; }
+      return s;
+    }).join('\n').trim();
+    const last = ps[ps.length - 1];
+    const pid = (last?.getAttributeNS(W14, 'paraId') || last?.getAttribute('w14:paraId') || '').toUpperCase();
+    if (pid) { byPara.set(pid, id); paraOf.set(id, pid); }
+    let from = starts.get(id), to = ends.get(id);
+    const ref = refs.get(id);
+    if (!from && ref) from = ref;
+    if (from && !to) to = ref && !lt(ref, from) ? ref : { ...from, o: cellText(from.b, from.c).length };
+    if (from && to && lt(to, from)) to = from;
+    const c: DocComment = { id, author: wattr(cm, 'author') || '', initials: wattr(cm, 'initials') || undefined, date: wattr(cm, 'date') || undefined, text, quote: from && to ? slice(from, to) : '' };
+    if (from && to) { c.from = from; c.to = to; }
+    const d = cmDel.get(id);
+    if (d) c.delText = d;
+    out.push(c);
+  }
+  for (const c of out) {
+    const pid = paraOf.get(c.id);
+    const ex = pid ? exByPara.get(pid) : undefined;
+    if (!ex) continue;
+    if (ex.done) c.done = true;
+    if (ex.parent && byPara.has(ex.parent) && byPara.get(ex.parent) !== c.id) c.parent = byPara.get(ex.parent);
+  }
+  return out;
 }
 
 function mergeRuns(runs: Run[]): Run[] {

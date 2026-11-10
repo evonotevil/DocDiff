@@ -2,7 +2,9 @@ import React, { useCallback, useContext, useEffect, useLayoutEffect, useRef, use
 import { FindAll } from '../components/FindBar';
 import type { DocModel } from '../lib/model';
 import type { DiffResult, Row } from '../lib/engine';
-import { BlockGroup, RTok } from '../components/DocBlock';
+import { BlockGroup, RTok, splitCm } from '../components/DocBlock';
+import type { CmRowView } from '../lib/comments';
+import { CommentPin } from '../components/Comments';
 import { t } from '../lib/i18n';
 import { fmtText, blockTagText, blockNoteText } from '../lib/describe';
 import { useSections, SecHead, SecHeadProps } from './sections';
@@ -114,7 +116,9 @@ function lineRectAt(span: HTMLElement, y?: number): DOMRect | null {
   return rs.find((r) => y >= r.top - 2 && y <= r.bottom + 2) || rs.reduce((a, b) => (Math.abs(a.top - y) < Math.abs(b.top - y) ? a : b));
 }
 
-export const RichView = React.memo(function RichView({ A, B, res, selCid, onSel, hideUnchanged }: { A: DocModel; B: DocModel; res: DiffResult; selCid: number | null; onSel: (id: number) => void; hideUnchanged: boolean }) {
+export const RichView = React.memo(function RichView({ A, B, res, selCid, onSel, hideUnchanged, cm, cmOpen, jumpTo }: { A: DocModel; B: DocModel; res: DiffResult; selCid: number | null; onSel: (id: number) => void; hideUnchanged: boolean;
+  /** 1.9.5：批注（每行的批注标和点线）、打开着的批注、要跳到的行（检查器里点了没有修订的批注） */
+  cm?: Map<number, CmRowView>; cmOpen?: string | null; jumpTo?: { row: number; n: number } | null }) {
   const ref = useRef<HTMLDivElement>(null);
   const richRef = useRef<HTMLDivElement>(null);
   const skipScroll = useRef(false);
@@ -131,6 +135,14 @@ export const RichView = React.memo(function RichView({ A, B, res, selCid, onSel,
   useScrollToChange(ref, selCid, rowOfCid, (row) => { secs.reveal(res.rows[row]?.sec); setForce([bounds.of[row] ?? 0]); if (hideUnchanged && !expanded.has(row)) setExpanded((s) => new Set(s).add(row)); }, skipScroll, true);
 
   const rows = res.rows;
+  // 1.9.5：检查器里点了一条批注：跳到那一行（隐藏未变化时先展开）
+  useEffect(() => {
+    if (!jumpTo) return;
+    const row = jumpTo.row;
+    secs.reveal(res.rows[row]?.sec);
+    if (hideUnchanged && !expanded.has(row)) setExpanded((st) => new Set(st).add(row));
+    jump(row);
+  }, [jumpTo?.n]);
 
   // 把屏幕坐标换算成 .rich 内的坐标（随内容一起滚动）
   const toBox = useCallback((rect: DOMRect, cell: HTMLElement): Box => {
@@ -206,7 +218,7 @@ export const RichView = React.memo(function RichView({ A, B, res, selCid, onSel,
   };
 
   const onClick = (e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest('.movetag, button')) return;
+    if ((e.target as HTMLElement).closest('.movetag, button, .cm-mark')) return;
     const sel = window.getSelection();
     if (sel && !sel.isCollapsed) return; // 正在选中文字，不做对齐
     const target = e.target as HTMLElement;
@@ -410,8 +422,10 @@ export const RichView = React.memo(function RichView({ A, B, res, selCid, onSel,
     const r = rows[v];
     const whole = r.kind === 'removed' || r.kind === 'added' || r.kind.startsWith('moved');
     const hasSel = selCid != null && (whole ? r.cids.includes(selCid) : (r.blockCid === selCid || r.cids.includes(selCid)));
+    const cmv = cm?.get(v);
     return <RichRow key={v} v={v} r={r} A={A} B={B} edge={edge} selRow={selCid != null && (whole ? r.cids.includes(selCid) : r.blockCid === selCid)} sc={!whole && hasSel ? selCid : null}
-      alignA={align && align.row === v && align.side === 'a' ? align.px : 0} alignB={align && align.row === v && align.side === 'b' ? align.px : 0} onJump={jump} />;
+      alignA={align && align.row === v && align.side === 'a' ? align.px : 0} alignB={align && align.row === v && align.side === 'b' ? align.px : 0} onJump={jump}
+      cmv={cmv} cmOpen={cmv && cmOpen && cmv.pins.some((p) => p.threads.some((x) => x.key === cmOpen)) ? cmOpen : null} />;
   };
   return (
     <>
@@ -443,9 +457,15 @@ export const RichView = React.memo(function RichView({ A, B, res, selCid, onSel,
 });
 
 /** 一行（左右两格）。按值比较 props：选中别的差异、对齐别的行时，这一行不重新渲染 */
-const RichRow = React.memo(function RichRow({ v, r, A, B, edge, selRow, sc, alignA, alignB, onJump }: {
+const RichRow = React.memo(function RichRow({ v, r, A, B, edge, selRow, sc, alignA, alignB, onJump, cmv, cmOpen }: {
   v: number; r: Row; A: DocModel; B: DocModel; edge: string; selRow: boolean; sc: number | null; alignA: number; alignB: number; onJump: (row: number) => void;
+  cmv?: CmRowView; cmOpen?: string | null;
 }) {
+  const pin = (side: Side) => {
+    const p = cmv?.pins.find((x) => x.side === side);
+    return p ? <div className="cm-pins">{<CommentPin threads={p.threads} open={!!cmOpen && p.threads.some((x) => x.key === cmOpen)} />}</div> : null;
+  };
+  const hasPin = (side: Side) => (cmv?.pins.some((x) => x.side === side) ? ' has-cm' : '');
   const la = r.ai !== undefined ? (r.aList || [r.ai]).map((i) => A.blocks[i]) : null;
   const lb = r.bi !== undefined ? (r.bList || [r.bi]).map((i) => B.blocks[i]) : null;
   const sr = selRow ? ' sel-row' : '';
@@ -456,14 +476,16 @@ const RichRow = React.memo(function RichRow({ v, r, A, B, edge, selRow, sc, alig
   };
   return (
     <>
-      <div className={`cell k-${r.kind}${edge}${la ? sr : ' ph'}`} data-row={v} data-side="a">
+      <div className={`cell k-${r.kind}${edge}${la ? sr : ' ph'}${hasPin('a')}`} data-row={v} data-side="a">
         {alignA > 0 && <div className="align-spacer" style={{ height: alignA }} />}
-        {la ? <BlockGroup blocks={la} toks={sideToks(r, 'a')} selCid={sc} className={r.blockDesc ? 'bnote' : ''} /> : <div className="phline" />}
+        {la ? <BlockGroup blocks={la} toks={splitCm(sideToks(r, 'a'), cmv?.slices, 'a')} selCid={sc} className={r.blockDesc ? 'bnote' : ''} /> : <div className="phline" />}
         {moveTag('a')}
+        {pin('a')}
       </div>
-      <div className={`cell k-${r.kind}${edge}${lb ? sr : ' ph'}`} data-row={v} data-side="b">
+      <div className={`cell k-${r.kind}${edge}${lb ? sr : ' ph'}${hasPin('b')}`} data-row={v} data-side="b">
         {alignB > 0 && <div className="align-spacer" style={{ height: alignB }} />}
-        {lb ? <BlockGroup blocks={lb} toks={sideToks(r, 'b')} selCid={sc} className={r.blockDesc ? 'bnote' : ''} /> : <div className="phline" />}
+        {lb ? <BlockGroup blocks={lb} toks={splitCm(sideToks(r, 'b'), cmv?.slices, 'b')} selCid={sc} className={r.blockDesc ? 'bnote' : ''} /> : <div className="phline" />}
+        {pin('b')}
         {moveTag('b')}
         {r.blockDesc && <span className="movetag fmt" data-cid={r.blockCid} title={blockNoteText(r.blockDesc)}>{blockTagText(r.blockDesc)}</span>}
       </div>

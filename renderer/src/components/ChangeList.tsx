@@ -6,6 +6,8 @@ import type { Risk } from '../lib/insight';
 import { t } from '../lib/i18n';
 import { noteText, riskTag } from '../lib/describe';
 import { groupChanges } from '../lib/report';
+import type { CmThread } from '../lib/comments';
+import * as I from './icons';
 
 const KINDS: Record<string, string> = { del: '删除', ins: '新增', mod: '修改', fmt: '格式', move: '移动' };
 export const KIND_LABEL = new Proxy({} as Record<string, string>, { get: (_, k: string) => t(KINDS[k] || k) });
@@ -20,9 +22,11 @@ const hhmm = (ts: number) => { const d = new Date(ts); const p = (x: number) => 
  * 差异清单（规范 3.0 · 行）：检查器的主体。行高 40、圆角 12；前置 22px 编号圆（审阅后变成 ✓ / ✕ / ?），
  * 文字单行，行尾只放“需要留意”的 ⚠。悬停时通知纸面描边（onHover），点击选中。
  */
-export function ChangeList({ changes, all, sel, onSel, onHover, decisions, clauses, risks, grouped = true }: {
+export function ChangeList({ changes, all, sel, onSel, onHover, decisions, clauses, risks, grouped = true, cmBy }: {
   changes: Change[]; all: Change[]; sel: number | null; onSel: (id: number) => void; onHover?: (id: number | null) => void;
   decisions?: DecMap; clauses: Map<number, string | null>; risks: Map<number, Risk>; grouped?: boolean;
+  /** 1.9.5：有批注的差异行尾多一个小批注标 */
+  cmBy?: Map<number, CmThread[]>;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   // 1.7.4：换筛选时先画前 FIRST 条，之后每帧补一批到 PAGE 条。一次换掉 400 行（约 2000 个节点）要 150 ms 以上，
@@ -84,7 +88,7 @@ export function ChangeList({ changes, all, sel, onSel, onHover, decisions, claus
       {groups.map((g, gi) => (
         <div className="dgroup" key={gi + g.title}>
           {g.title && <div className="grp" title={g.title}>{g.title}</div>}
-          {g.items.map((c) => <DRow key={c.id} c={c} n={order.get(c.id) ?? 0} isSel={c.id === sel} d={decisions?.[c.id]} risk={risks.get(c.id)} onSel={onSel} hov={hov} />)}
+          {g.items.map((c) => <DRow key={c.id} c={c} n={order.get(c.id) ?? 0} isSel={c.id === sel} d={decisions?.[c.id]} risk={risks.get(c.id)} onSel={onSel} hov={hov} cms={cmBy?.get(c.id)} />)}
         </div>
       ))}
       {changes.length > cap && limit >= cap && <button className="btn sm plain block" onClick={() => setCap((c) => c + PAGE)}>{t('再显示 {n} 处', { n: Math.min(PAGE, changes.length - cap) })}</button>}
@@ -98,7 +102,7 @@ export function short(s: string, n = 90) {
 }
 
 /** 清单的一行（1.7.4 按值比较）：J / K 换选中时只有前后两行重新渲染 */
-const DRow = React.memo(function DRow({ c, n, isSel, d, risk, onSel, hov }: { c: Change; n: number; isSel: boolean; d?: Dec; risk?: Risk; onSel: (id: number) => void; hov: (id: number | null) => void }) {
+const DRow = React.memo(function DRow({ c, n, isSel, d, risk, onSel, hov, cms }: { c: Change; n: number; isSel: boolean; d?: Dec; risk?: Risk; onSel: (id: number) => void; hov: (id: number | null) => void; cms?: CmThread[] }) {
   const rec = d?.v ? `${t(VERDICT[d.v])}${d.by ? ' · ' + d.by : ''}${d.at ? ' · ' + hhmm(d.at) : ''}${d.note ? ' · ' + d.note : ''}` : '';
   return (
     <button type="button" data-chg={c.id} className={`drow k-${c.kind} ${isSel ? 'sel' : ''} ${d?.v ? 'done v-' + d.v : ''}`}
@@ -114,6 +118,12 @@ const DRow = React.memo(function DRow({ c, n, isSel, d, risk, onSel, hov }: { c:
       </span>
       {d?.note && <span className="meta note" aria-hidden="true">✎</span>}
       {risk && <span className="rk" aria-hidden="true">⚠<span>{riskTag(risk)}</span></span>}
+      {cms && cms.length > 0 && (
+        // 点行尾的批注标：打开批注卡片（不改变当前选中的差异）；按钮里不能再套按钮，用 span，由画布外层统一处理
+        <span className={`cm-pin static ${cms.some((x) => x.owner === 'theirs') ? 'theirs' : 'ours'}`} data-cmk={cms.map((x) => x.key).join(' ')} data-cm-only="1" title={t('{n} 条批注', { n: cms.length })}>
+          <I.IconComment size={14} /><span>{cms.length}</span>
+        </span>
+      )}
     </button>
   );
 });

@@ -5,7 +5,9 @@ import type { DocModel } from '../lib/model';
 import type { DiffResult } from '../lib/engine';
 import type { DecMap } from '../lib/review';
 import { redlinePieces, Decision } from '../lib/exportDocx';
-import { BlockGroup, RTok } from '../components/DocBlock';
+import { BlockGroup, RTok, splitCm } from '../components/DocBlock';
+import type { CmRowView } from '../lib/comments';
+import { CommentPin } from '../components/Comments';
 import { useScrollToChange } from './RichView';
 import { fmtText } from '../lib/describe';
 import { useSections, SecHead } from './sections';
@@ -13,9 +15,11 @@ import { useSections, SecHead } from './sections';
 const STEP = 60;
 const CLS: Record<string, string> = { del: 'r-del', ins: 'r-ins', mdel: 'r-mdel', mins: 'r-mins' };
 
-export function RedlineView({ A, B, res, selCid, onSel, decisions, innerRef }: {
+export function RedlineView({ A, B, res, selCid, onSel, decisions, innerRef, cm, cmOpen, jumpTo }: {
   A: DocModel; B: DocModel; res: DiffResult; selCid: number | null; onSel: (id: number) => void;
   decisions: DecMap; innerRef: React.RefObject<HTMLDivElement>;
+  /** 1.9.5：批注、打开着的批注、要跳到的行 */
+  cm?: Map<number, CmRowView>; cmOpen?: string | null; jumpTo?: { row: number; n: number } | null;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const secs = useSections(res);
@@ -31,6 +35,16 @@ export function RedlineView({ A, B, res, selCid, onSel, decisions, innerRef }: {
     return () => cancelAnimationFrame(id);
   }, [limit, res]);
   useScrollToChange(ref, selCid, (cid) => res.changes.find((c) => c.id === cid)?.row, (row) => { secs.reveal(res.rows[row]?.sec); setLimit((l) => Math.max(l, row + STEP)); });
+  useEffect(() => {
+    if (!jumpTo) return;
+    const row = jumpTo.row;
+    secs.reveal(res.rows[row]?.sec);
+    setLimit((l) => Math.max(l, row + STEP));
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const el = ref.current?.querySelector(`[data-row="${row}"]`) as HTMLElement | null;
+      if (el) { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); el.classList.remove('row-flash'); void el.offsetWidth; el.classList.add('row-flash'); }
+    }));
+  }, [jumpTo?.n]);
   const onClick = (e: React.MouseEvent) => {
     const el = (e.target as HTMLElement).closest('[data-cid]') as HTMLElement | null;
     if (el?.dataset.cid) onSel(Number(el.dataset.cid));
@@ -43,7 +57,8 @@ export function RedlineView({ A, B, res, selCid, onSel, decisions, innerRef }: {
             if (i >= limit) return null;
             const head = secs.headAt(i);
             if (secs.hidden(r.sec)) return head ? <SecHead key={'h' + i} {...head} /> : null;
-            const body = <RedlineRow key={i} i={i} r={r} A={A} B={B} decisions={decisions} selCid={selCid} />;
+            const cmv = cm?.get(i);
+            const body = <RedlineRow key={i} i={i} r={r} A={A} B={B} decisions={decisions} selCid={selCid} cmv={cmv} cmOpen={cmv && cmOpen && cmv.pins.some((p) => p.threads.some((x) => x.key === cmOpen)) ? cmOpen : null} />;
             return head ? <React.Fragment key={i}><SecHead {...head} />{body}</React.Fragment> : body;
           })}
         </div>
@@ -56,7 +71,7 @@ export function RedlineView({ A, B, res, selCid, onSel, decisions, innerRef }: {
  * 一段修订（1.7.4 拆出来并按值比较）：只有这一段涉及的差异的结论、或选中状态变了才重新渲染。
  * 以前切到修订审阅时整篇会连续渲染 3–4 次（选中第一处、读入结论…），十几页 PDF 每次约 150 ms。
  */
-const RedlineRow = React.memo(function RedlineRow({ i, r, A, B, decisions, selCid }: { i: number; r: Row; A: DocModel; B: DocModel; decisions: DecMap; selCid: number | null }) {
+const RedlineRow = React.memo(function RedlineRow({ i, r, A, B, decisions, selCid, cmv, cmOpen }: { i: number; r: Row; A: DocModel; B: DocModel; decisions: DecMap; selCid: number | null; cmv?: CmRowView; cmOpen?: string | null }) {
   // 界面上：接受 → 新文字，拒绝 → 原文；待议和未处理都还是修订（待议多一层黄色底线）
   const dec = (cid?: number): Decision => { const v = cid === undefined ? undefined : decisions[cid]?.v; return v === 'a' || v === 'r' ? v : undefined; };
   const rp = redlinePieces(r, dec, false);
@@ -68,15 +83,23 @@ const RedlineRow = React.memo(function RedlineRow({ i, r, A, B, decisions, selCi
     let cls = p.mark ? CLS[p.mark] : undefined;
     if (!cls && p.fmt) cls = 'r-fmt';
     if (cls && p.cid !== undefined && decisions[p.cid]?.v === 'h') cls += ' r-hold';
-    return { tok: { t: p.t, st: p.st, c: p.cell, key: '', ws: false, sep: p.sep, blk: p.blk }, cls, cid: cls ? p.cid : undefined, title: p.fmt && cls?.startsWith('r-fmt') ? fmtText(p.fmt) : undefined, style: p.st };
+    return { tok: { t: p.t, st: p.st, c: p.cell, key: '', ws: false, sep: p.sep, blk: p.blk }, cls, cid: cls ? p.cid : undefined, title: p.fmt && cls?.startsWith('r-fmt') ? fmtText(p.fmt) : undefined, style: p.st, mi: p.mi, src: p.src } as RTok;
   });
+  const marked = splitCm(toks, cmv?.slices, 'b', (x) => x.src ?? null);
+  const pin = cmv?.pins[0];
   const pend = r.cids.length && dec(r.cids[0]) === undefined;
   const bcls = pend && (r.kind === 'removed') ? 'bdel' : pend && r.kind === 'added' ? 'bins' : pend && r.kind.startsWith('moved') ? 'bmove' : '';
   const whole = r.kind === 'removed' || r.kind === 'added' || r.kind.startsWith('moved');
   const selRow = selCid != null && (whole ? r.cids.includes(selCid) : r.blockCid === selCid);
-  return <div data-row={i} className={selRow ? 'sel-row' : undefined}><BlockGroup blocks={blocks} toks={toks} selCid={whole ? null : selCid} className={bcls} /></div>;
+  const cls = [selRow ? 'sel-row' : '', pin ? 'has-cm' : ''].filter(Boolean).join(' ') || undefined;
+  return (
+    <div data-row={i} className={cls}>
+      <BlockGroup blocks={blocks} toks={marked} selCid={whole ? null : selCid} className={bcls} />
+      {pin && <div className="cm-pins"><CommentPin threads={pin.threads} open={!!cmOpen} /></div>}
+    </div>
+  );
 }, (a, b) => {
-  if (a.r !== b.r || a.A !== b.A || a.B !== b.B || a.i !== b.i) return false;
+  if (a.r !== b.r || a.A !== b.A || a.B !== b.B || a.i !== b.i || a.cmv !== b.cmv || a.cmOpen !== b.cmOpen) return false;
   const ids = b.r.blockCid !== undefined ? [...b.r.cids, b.r.blockCid] : b.r.cids;
   // 选中状态只影响包含这处差异的段落
   const relA = a.selCid != null && ids.includes(a.selCid) ? a.selCid : null;

@@ -1,3 +1,4 @@
+import * as I from './icons';
 import React from 'react';
 import type { ChangeKind } from '../lib/engine';
 import type { ScopeInfo } from '../lib/scope';
@@ -7,13 +8,13 @@ export const KIND_ORDER: ChangeKind[] = ['del', 'ins', 'mod', 'fmt', 'move'];
 const KIND_NAME: Record<ChangeKind, string> = { del: '删除', ins: '新增', mod: '修改', fmt: '格式', move: '移动' };
 const KIND_HINT: Record<ChangeKind, string> = { del: '删除线', ins: '下划线', mod: '删除线 + 下划线', fmt: '虚线下划线', move: '双线' };
 
-export type Filter = 'all' | ChangeKind | 'risk';
+export type Filter = 'all' | ChangeKind | 'risk' | 'cm';
 
 /**
  * 筛选片（规范 3.0）：检查器里唯一的筛选入口，同时就是“差异概览”的计数。
  * 一次只选一个；再点一次已选的回到“全部”。数量为 0 的类别不出现。
  */
-export function FilterChips({ stats, risks, value, onChange }: { stats: Record<ChangeKind, number>; risks: number; value: Filter; onChange: (f: Filter) => void }) {
+export function FilterChips({ stats, risks, comments = 0, value, onChange }: { stats: Record<ChangeKind, number>; risks: number; /** 1.9.5：「批注 N」，0 不显示 */ comments?: number; value: Filter; onChange: (f: Filter) => void }) {
   const total = KIND_ORDER.reduce((n, k) => n + (stats[k] || 0), 0);
   const pick = (f: Filter) => onChange(value === f ? 'all' : f);
   return (
@@ -29,6 +30,12 @@ export function FilterChips({ stats, risks, value, onChange }: { stats: Record<C
         <button type="button" className={`fchip warn ${value === 'risk' ? 'on' : ''}`} aria-pressed={value === 'risk'} onClick={() => pick('risk')}
           title={t('命中金额、期限、关键词规则的差异')}>
           <span className="fwarn" aria-hidden="true">⚠</span>{t('需要留意')}<span className="c">{risks}</span>
+        </button>
+      )}
+      {comments > 0 && (
+        <button type="button" className={`fchip cm ${value === 'cm' ? 'on' : ''}`} aria-pressed={value === 'cm'} onClick={() => pick('cm')}
+          title={t('文档里已有的批注：对方没解决的和我方的。点一下只看批注')}>
+          <I.IconComment size={14} />{t('批注')}<span className="c">{comments}</span>
         </button>
       )}
     </div>

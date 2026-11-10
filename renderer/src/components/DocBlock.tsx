@@ -3,7 +3,34 @@ import type { Block, Run } from '../lib/model';
 import type { Tok } from '../lib/engine';
 import { t } from '../lib/i18n';
 
-export interface RTok { tok: Tok; cls?: string; cid?: number; title?: string; style?: Run; mi?: number; mj?: number }
+export interface RTok { tok: Tok; cls?: string; cid?: number; title?: string; style?: Run; mi?: number; mj?: number;
+  /** 1.9.5：被批注的文字（点线），值是批注键（空格分隔） */
+  cm?: string;
+  /** 修订审阅：片段来自哪一侧（删除的字来自原始文档） */
+  src?: 'a' | 'b' }
+
+/** 1.9.5：按批注范围把 token 切开，被批注的片段带上 cm（slices 的键是 “side:合并序号”） */
+export function splitCm(toks: RTok[], slices: Map<string, { s: number; e: number; key: string }[]> | undefined, side: 'a' | 'b', srcOf?: (r: RTok) => 'a' | 'b' | null): RTok[] {
+  if (!slices || !slices.size) return toks;
+  const out: RTok[] = [];
+  for (const r of toks) {
+    const sd = srcOf ? srcOf(r) : side;
+    const list = r.mi !== undefined && sd ? slices.get(`${sd}:${r.mi}`) : undefined;
+    if (!list || r.tok.sep || r.tok.psep || !r.tok.t) { out.push(r); continue; }
+    const text = r.tok.t;
+    // 切点：每段批注的起止
+    const cuts = new Set<number>([0, text.length]);
+    for (const x of list) { cuts.add(Math.max(0, Math.min(text.length, x.s))); cuts.add(Math.max(0, Math.min(text.length, x.e))); }
+    const pts = [...cuts].sort((a, b) => a - b);
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i], b = pts[i + 1];
+      if (b <= a) continue;
+      const keys = [...new Set(list.filter((x) => x.s <= a && x.e >= b).map((x) => x.key))];
+      out.push({ ...r, tok: { ...r.tok, t: text.slice(a, b) }, cm: keys.length ? keys.join(' ') : undefined });
+    }
+  }
+  return out;
+}
 
 /** 文档原有的文字颜色 / 突出显示用 CSS 变量传递：浅色模式原样显示，深色模式由 CSS 调亮 / 调淡（导出 PDF 时仍是原色） */
 export function runStyle(st: Run, withHl = true): React.CSSProperties {
@@ -41,7 +68,7 @@ export function coalesce(toks: RTok[]): RTok[] {
   for (const r of toks) {
     const prev = out[out.length - 1];
     if (prev && mergeable(r) && mergeable(prev)
-      && prev.cls === r.cls && prev.cid === r.cid && prev.title === r.title
+      && prev.cls === r.cls && prev.cid === r.cid && prev.title === r.title && prev.cm === r.cm
       && prev.tok.c === r.tok.c && (prev.tok.blk || 0) === (r.tok.blk || 0)
       && styleKey(prev.style || prev.tok.st) === styleKey(r.style || r.tok.st)) {
       out[out.length - 1] = { ...prev, mj: r.mi ?? r.mj ?? prev.mj, tok: { ...prev.tok, t: prev.tok.t + r.tok.t } };
@@ -57,11 +84,11 @@ function TokSpan({ r, selCid }: { r: RTok; selCid?: number | null }) {
   if (tk.sep || tk.psep) return null;
   const st = r.style || tk.st;
   const hasC = !!(st.color && st.color !== '#000000'), hasH = !r.cls && !!st.hl;
-  const cls = [r.cls, hasC ? 'rc' : '', hasH ? 'rh' : '', r.cid !== undefined && r.cid === selCid ? 'sel-cid' : ''].filter(Boolean).join(' ') || undefined;
+  const cls = [r.cls, hasC ? 'rc' : '', hasH ? 'rh' : '', r.cid !== undefined && r.cid === selCid ? 'sel-cid' : '', r.cm ? 'cm-mark' : ''].filter(Boolean).join(' ') || undefined;
   if (st.img) {
     return <span className={['img-tok', cls].filter(Boolean).join(' ')} data-cid={r.cid} data-mi={r.mi} title={r.title || `${t('图片')} ${st.img}`}>🖼 {t('图片')}</span>;
   }
-  return <span className={cls} style={runStyle(st, !r.cls)} data-cid={r.cid} data-mi={r.mi} data-mj={r.mj !== undefined && r.mj !== r.mi ? r.mj : undefined} title={r.title}>{tk.t}</span>;
+  return <span className={cls} style={runStyle(st, !r.cls)} data-cid={r.cid} data-mi={r.mi} data-mj={r.mj !== undefined && r.mj !== r.mi ? r.mj : undefined} data-cmk={r.cm} title={r.title}>{tk.t}</span>;
 }
 
 export function BlockView({ block, toks, selCid, className, extra }: { block: Block; toks: RTok[]; selCid?: number | null; className?: string; extra?: React.ReactNode }) {

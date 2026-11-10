@@ -18,6 +18,8 @@ export interface Piece {
   old?: Run;
   /** 内容因为决定而消失，只留一个锚点，用来挂批注 */
   anchor?: boolean;
+  /** 1.9.5：在 row.merged 里的序号、文字来自哪一侧（画批注点线用） */
+  mi?: number; src?: 'a' | 'b';
 }
 
 /** 根据接受/拒绝状态计算某一行在修订稿中的显示内容；返回 null 表示整行不显示 */
@@ -27,10 +29,12 @@ export function redlinePieces(r: Row, dec: (cid?: number) => Decision, finalMode
   // 当前显示的是哪一侧的段落：用那一侧的段落编号给每个片段归段（删除的词跟随它前面的新段落）
   let side: 'a' | 'b' = 'b';
   let cur = 0;
-  const track = (m: any) => { const t = m[side]; if (t) cur = t.blk || 0; };
+  let curMi = -1, curM: any = null;
+  const idx = new Map<any, number>(r.merged.map((m, i) => [m, i]));
+  const track = (m: any) => { const t = m[side]; if (t) cur = t.blk || 0; curMi = idx.get(m) ?? -1; curM = m; };
   const push = (t: any, mark?: Piece['mark'], m?: any) => {
     if (!t || t.psep) return;
-    if (!t.sep) pieces.push({ t: t.t, st: t.st, mark, cell: t.c, cid: m?.cid, fmt: m?.fmt, old: m?.fmt ? m.a?.st : undefined, blk: cur });
+    if (!t.sep) pieces.push({ t: t.t, st: t.st, mark, cell: t.c, cid: m?.cid, fmt: m?.fmt, old: m?.fmt ? m.a?.st : undefined, blk: cur, mi: curMi >= 0 ? curMi : undefined, src: curM && t === curM.a ? 'a' : 'b' });
     else pieces.push({ t: '', st: {} as Run, cell: t.c, sep: true, blk: cur });
   };
   const anchor = (m: any) => { const tk = m.a || m.b; if (m.cid !== undefined && tk) pieces.push({ t: '', st: {} as Run, cell: tk.c, cid: m.cid, blk: cur, anchor: true }); };
@@ -89,6 +93,8 @@ export interface ExportOpts {
   risks: Map<number, Risk>;
   changes: Change[];
   title: string;
+  /** 1.9.5：审阅记录存档带上文档里已有的批注（含回复），挂在所在段落上 */
+  docComments?: { row?: number; author: string; initials: string; date?: string; lines: string[] }[];
 }
 
 const VERDICT_LABEL: Record<Verdict, string> = { a: '接受', r: '拒绝', h: '待议' };
@@ -179,8 +185,20 @@ export async function buildDocx(rows: Row[], blocksA: Block[], blocksB: Block[],
     }
   };
 
-  for (const r of rows) {
+  // 文档里已有的批注（只在审阅记录存档里）：按行挂到这一行的第一个段落开头
+  const docCm = new Map<number, number[]>();
+  const docCmLoose: number[] = [];
+  for (const c of o.mode === 'final' ? o.docComments || [] : []) {
+    const id = comments.length;
+    comments.push({ id, author: c.author || t('（没有署名）'), initials: c.initials || (c.author || '?').slice(0, 2), date: c.date && !isNaN(Date.parse(c.date)) ? new Date(c.date) : new Date(), children: c.lines.map((l) => new Paragraph({ children: [new TextRun({ text: l })] })) });
+    if (c.row === undefined) docCmLoose.push(id); else (docCm.get(c.row) || docCm.set(c.row, []).get(c.row)!).push(id);
+  }
+  const docMarks = (ids: number[]) => ids.flatMap((id) => [new CommentRangeStart(id), new CommentRangeEnd(id), new TextRun({ children: [new CommentReference(id)] })]);
+  for (let ri = 0; ri < rows.length; ri++) {
+    const r = rows[ri];
     const sec: Sec = r.sec || 'body';
+    const here = docCm.get(ri);
+    if (here) docCm.delete(ri);
     const rp = redlinePieces(r, effDec, false);
     if (sec === 'header' || sec === 'footer') for (const c of r.cids) if (needsComment(c) && !outOfBody.some((x) => x.cid === c)) outOfBody.push({ cid: c, sec });
     if (!rp) {
@@ -199,6 +217,7 @@ export async function buildDocx(rows: Row[], blocksA: Block[], blocksB: Block[],
         const n = Math.max(1, blk.cells?.length || 1);
         const cells: ParaSpec[][] = Array.from({ length: n }, () => [{ children: [] }]);
         if (pendingAnchors.length) { cells[0][0].children.push(...pendingAnchors.map((c) => ({ __anchor: c }))); pendingAnchors = []; }
+        if (k === 0 && here) cells[0][0].children.push(...docMarks(here));
         for (let ci = 0; ci < n; ci++) emitPieces(cells[ci][0].children, pieces.filter((p) => Math.min(n - 1, p.cell) === ci), sec);
         (table ||= []).push(cells);
         continue;
@@ -206,6 +225,7 @@ export async function buildDocx(rows: Row[], blocksA: Block[], blocksB: Block[],
       if (!dest) flushTable(body);
       const spec: ParaSpec = { children: [] };
       if (pendingAnchors.length && !dest) { spec.children.push(...pendingAnchors.map((c) => ({ __anchor: c }))); pendingAnchors = []; }
+      if (k === 0 && here && !dest) spec.children.push(...docMarks(here));
       if (blk.kind === 'li') spec.children.push(new TextRun({ text: `${blk.marker ?? '•'}\t` }));
       else if (blk.kind === 'h' && blk.marker) spec.children.push(new TextRun({ text: `${blk.marker} ` }));
       if (blk.kind === 'tr') {
@@ -233,6 +253,9 @@ export async function buildDocx(rows: Row[], blocksA: Block[], blocksB: Block[],
     const id = ensureComment(cid, t(sec === 'header' ? '页眉' : '页脚'));
     if (id !== undefined) bodyFirst().children.unshift(new CommentRangeStart(id), new CommentRangeEnd(id), new TextRun({ children: [new CommentReference(id)] }));
   }
+  // 没能挂上的已有批注（所在的行不显示，或不在正文里）：挂到正文开头
+  const leftover = [...docCmLoose, ...[...docCm.values()].flat()];
+  if (leftover.length) bodyFirst().children.unshift(...docMarks(leftover));
   // 脚注：列在文末（DocDiff 不知道正文里每条脚注的引用位置）
   if (notes.length) {
     body.push({ children: [new TextRun({ text: t('脚注'), bold: true })], heading: HeadingLevel.HEADING_3 });

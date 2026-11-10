@@ -7,7 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const out = path.join(root, '.cache', 'draft-lifecycle.test.mjs');
-await esbuild.build({ stdin: { contents: "export { DraftSync, flushDrafts, pendingDrafts } from './renderer/src/lib/draft/client';", resolveDir: root, loader: 'ts' }, bundle: true, format: 'esm', platform: 'node', target: 'node20', outfile: out, logLevel: 'warning' });
+await esbuild.build({ stdin: { contents: "export { DraftSync, flushDrafts, pendingDrafts, mutePending } from './renderer/src/lib/draft/client';", resolveDir: root, loader: 'ts' }, bundle: true, format: 'esm', platform: 'node', target: 'node20', outfile: out, logLevel: 'warning' });
 
 // 假的主进程：一个文件系统（路径 → {mtime,size}），draftSave 按真实规则校验 expect；可以让写盘挂起
 const disk = new Map(); let clock = 1; const records = {}; let hold = null;
@@ -22,7 +22,7 @@ const draftSave = async ({ path: p, data, expect }) => {
 const settingsStore = {};
 globalThis.window = { api: { settingsGet: () => settingsStore, settingsSet: async (k, v) => { settingsStore[k] = v; return { ok: true }; }, reviewGet: (k) => records[k] || null, reviewIndex: () => ({}), reviewSave: (k, v) => { records[k] = v; return Promise.resolve({ ok: true }); }, exists: async (p) => disk.has(p), draftSave, draftStat: async (p) => ({ stat: disk.get(p) || null, locked: false }) } };
 globalThis.localStorage = { getItem: () => null, setItem() {}, removeItem() {} };
-const { DraftSync, flushDrafts, pendingDrafts } = await import('file://' + out);
+const { DraftSync, flushDrafts, pendingDrafts, mutePending } = await import('file://' + out);
 const deferred = () => { let r; const p = new Promise((x) => (r = x)); return { p, r }; };
 const ctx = (pk) => ({ pk, bPath: '/w/合同.docx', bName: '合同.docx', bData: new Uint8Array([1]), plan: {}, reviewer: 'T', initials: 'T', theirs: 'O', theirsDate: 0, pattern: '{name}-我方意见' });
 const built = (n = 3) => ({ bytes: new Uint8Array(n), unwritten: [], priorRevisions: 0, ms: {} });
@@ -154,4 +154,40 @@ test('1.9.2 cannot write on quit: reported and recorded; reopening recovers', as
   await wait(100);
   assert.equal(r.state.s, 'saved'); assert.deepEqual(pendingDrafts(), {}, 'pending cleared after recovery');
   r.dispose();
+});
+
+// 1.9.5：启动提示勾了“不再提示”后，只在没写进去的决定数不变时保持安静；数字变多就重新提示
+test('mute holds only while the unwritten count does not grow (1.9.5)', async () => {
+  disk.clear(); const pk = 'mute-195';
+  const s = new DraftSync(ctx(pk)); s.build = async () => built();
+  await s.start();
+  const save0 = window.api.draftSave;
+  window.api.draftSave = async () => ({ ok: false, code: 'locked' });
+  try {
+    s.update({ 1: { v: 'a' } });
+    await flushDrafts(300);
+    assert.equal(pendingDrafts()[pk]?.behind, 1);
+    mutePending([pk]);
+    assert.equal(pendingDrafts()[pk]?.muted, true);
+    await flushDrafts(300);
+    assert.equal(pendingDrafts()[pk]?.muted, true, 'same count: stays quiet');
+    s.update({ 1: { v: 'a' }, 2: { v: 'r' } });
+    await flushDrafts(300);
+    assert.equal(pendingDrafts()[pk]?.behind, 2);
+    assert.ok(!pendingDrafts()[pk]?.muted, 'count grew: prompts again');
+  } finally { window.api.draftSave = save0; s.dispose(); }
+});
+
+// 1.9.5：回复 / 不带入的批注变了也算没写进去，写进去后清掉
+test('comment replies count as unwritten until written (1.9.5)', async () => {
+  disk.clear(); const s = new DraftSync(ctx('cm-195')); let seen = null; s.build = async () => { seen = s.cm; return built(); };
+  s.setComments({ replies: [], drop: [] });
+  await s.start();
+  assert.equal(s.behindCount(), 0);
+  s.setComments({ replies: [{ parent: '10', text: '好', at: 1 }], drop: [] });
+  assert.equal(s.behindCount(), 1);
+  await s.flush();
+  assert.equal(s.behindCount(), 0);
+  assert.equal(seen.replies[0].text, '好');
+  s.dispose();
 });

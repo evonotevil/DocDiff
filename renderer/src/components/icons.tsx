@@ -149,3 +149,5 @@ export const GlyphRedline = G(<><path d="M3 13.5h4" /><path d="M9.5 3.5l3 3-6 6H
 export const GlyphImage = G(<><rect x="2.5" y="3.5" width="11" height="9" rx="2" /><path d="M2.5 11l3.5-3 3 2.5 2-1.5 2.5 2" /></>);
 export const GlyphOcr = G(<><path d="M2.5 5.5v-1a2 2 0 0 1 2-2h1M10.5 2.5h1a2 2 0 0 1 2 2v1M13.5 10.5v1a2 2 0 0 1-2 2h-1M5.5 13.5h-1a2 2 0 0 1-2-2v-1" /><path d="M5.5 7h5M5.5 9.5h3" /></>);
 export const GlyphDetails = G(<><circle cx="8" cy="8" r="5.5" /><path d="M8 7.5v3.5M8 5h.01" /></>);
+/** 1.9.5：批注（纸边批注标、检查器、审阅栏提示） */
+export const IconComment = ({ size }: { size?: number }) => <S size={size} d={<><path d="M2.5 3.6c0-.6.5-1.1 1.1-1.1h8.8c.6 0 1.1.5 1.1 1.1v6.3c0 .6-.5 1.1-1.1 1.1H7.2l-3 2.4V11h-.6c-.6 0-1.1-.5-1.1-1.1Z" /><path d="M5.3 5.9h5.4M5.3 8.2h3.3" /></>} />;

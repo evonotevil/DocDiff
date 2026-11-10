@@ -80,20 +80,26 @@ let bgListener: ((e: DraftBehind) => void) | null = null;
 export function onDraftBackground(f: ((e: DraftBehind) => void) | null) { bgListener = f; }
 
 /** “待补写”登记（设置里的 draft-pending）：重启后提示，打开这一对文件时自动补写 */
-type PendingRec = { path?: string; name: string; behind: number; at: number; s: DraftKind; /** 1.9.4：用户勾了“以后启动时不再提示”。记录还在，再打开时照样补写 */ muted?: boolean };
+type PendingRec = { path?: string; name: string; behind: number; at: number; s: DraftKind; /** 1.9.4：用户勾了“以后启动时不再提示”。记录还在，再打开时照样补写 */ muted?: boolean;
+  /** 1.9.5：静音时没写进去的决定数。再次登记时只有数字没变多才保持安静 */ mutedBehind?: number };
 const PENDING = 'draft-pending';
 export function pendingDrafts(): Record<string, PendingRec> { const v = getSetting<Record<string, PendingRec>>(PENDING); return v && typeof v === 'object' ? { ...v } : {}; }
 /** 1.9.4：启动时的提示里勾了“以后启动时不再提示”：这几条以后启动时不再弹 */
 export function mutePending(pks: string[]) {
   const all = pendingDrafts();
   let n = 0;
-  for (const pk of pks) if (all[pk] && !all[pk].muted) { all[pk] = { ...all[pk], muted: true }; n++; }
+  for (const pk of pks) if (all[pk] && (!all[pk].muted || all[pk].mutedBehind !== all[pk].behind)) { all[pk] = { ...all[pk], muted: true, mutedBehind: all[pk].behind }; n++; }
   if (n) setSetting(PENDING, all);
 }
 function markPending(pk: string, rec: PendingRec | null) {
   const all = pendingDrafts();
-  // 同一份审阅稿再次登记时，保留“不再提示”（用户已经知道这份没写完；换了审阅稿才重新提示）
-  if (rec) all[pk] = all[pk]?.muted && all[pk].path === rec.path ? { ...rec, muted: true } : rec; else { if (!(pk in all)) return; delete all[pk]; }
+  // 同一份审阅稿再次登记时，保留“不再提示”——但只在没写进去的决定数没有变多时（1.9.5）：
+  // 数字变多说明又有新的决定没写进去，当作新情况，启动时重新提示。换了审阅稿也重新提示。
+  if (rec) {
+    const old = all[pk];
+    const quiet = !!old?.muted && old.path === rec.path && rec.behind <= (old.mutedBehind ?? old.behind);
+    all[pk] = quiet ? { ...rec, muted: true, mutedBehind: old!.mutedBehind ?? old!.behind } : rec;
+  } else { if (!(pk in all)) return; delete all[pk]; }
   setSetting(PENDING, all);
 }
 
@@ -167,6 +173,10 @@ export class DraftSync {
   private busy = false;
   private again = false;
   private decisions: Record<number, Decision> = {};
+  /** 1.9.5：对方批注的回复、不带入的内部批注；变了也要重写审阅稿 */
+  private cm: { replies: { parent: string; text: string; at: number }[]; drop: string[] } = { replies: [], drop: [] };
+  private cmSig = '';
+  private cmDirty = false;
   private subs = new Set<(s: DraftState) => void>();
   private disposed = false;
   /**
@@ -190,8 +200,21 @@ export class DraftSync {
     if (this.meta) { this.set({ s: this.recover ? 'saving' : 'saved', path: this.meta.path, at: this.meta.at, recovering: this.recover || undefined, behind: this.recover ? pend!.behind : 0 }); this.check(); }
   }
   /** 还没写进审阅稿的决定数（没开始审阅稿时不算） */
-  behindCount() { return this.started ? this.changed.size + (this.recover ? 1 : 0) : 0; }
-  report(): DraftBehind { return { pk: this.ctx.pk, path: this.meta?.path || this.state.path, name: this.meta?.path ? baseOf(this.meta.path) : draftName(this.ctx.pattern, this.ctx.bName, '', this.vars()), behind: this.changed.size || (this.recover ? this.state.behind || 1 : 0), s: this.state.s, error: this.state.error }; }
+  behindCount() { return this.started ? this.changed.size + (this.recover ? 1 : 0) + (this.cmDirty ? 1 : 0) : 0; }
+  /** 1.9.5：回复 / 不带入的批注变了。第一次设置（打开时）不算变化 */
+  setComments(c: { replies: { parent: string; text: string; at: number }[]; drop: string[] }) {
+    if (this.detached) return;
+    const sig = JSON.stringify(c);
+    if (sig === this.cmSig) return;
+    const first = !this.cmSig && !this.cmDirty;
+    this.cm = c; this.cmSig = sig;
+    if (first || !this.started) return;
+    this.cmDirty = true;
+    if (this.state.s === 'saved') this.set({ s: 'saving', behind: this.changed.size + 1 });
+    if (this.state.s === 'modified' || this.state.s === 'gone' || this.state.s === 'nowrite') return;
+    this.schedule(hooks().debounceMs ?? 250);
+  }
+  report(): DraftBehind { return { pk: this.ctx.pk, path: this.meta?.path || this.state.path, name: this.meta?.path ? baseOf(this.meta.path) : draftName(this.ctx.pattern, this.ctx.bName, '', this.vars()), behind: (this.changed.size + (this.cmDirty ? 1 : 0)) || (this.recover ? this.state.behind || 1 : 0), s: this.state.s, error: this.state.error }; }
   get isStarted() { return this.started; }
   /** 旧实例（已离开界面）把没写完的交过来：用这个实例的决定（更新）再写一次 */
   takeOver() {
@@ -312,6 +335,7 @@ export class DraftSync {
       key: c.pk + ':' + c.bData.byteLength,
       base: c.bData, plan: c.plan, decisions, mode, pending: o.pending, keepComments: o.keepComments,
       reviewer: c.reviewer, reviewerInitials: c.initials, theirs: c.theirs, theirsDate: c.theirsDate, now: Date.now(), openLabel: isEn() ? 'Open for discussion' : undefined,
+      replies: mode === 'draft' ? this.cm.replies : undefined, dropComments: mode === 'draft' ? this.cm.drop : undefined,
     });
     if (r.kind === 'err') throw new Error(r.error);
     return r.out;
@@ -338,6 +362,7 @@ export class DraftSync {
         if (newer) { this.changed.clear(); this.recover = false; newer.takeOver(); return; }
       }
       const snap = this.decisions;
+      const cmSnap = this.cmSig;
       const recovering = this.recover;
       await hooks().beforeBuild?.(pk);
       const out = await this.build('draft', {}, snap);
@@ -352,13 +377,14 @@ export class DraftSync {
           this.meta = { ...(this.meta || {}), path, stat: res.stat, at: Date.now() };
           setDraftMeta(pk, this.meta);
           for (const id of [...this.changed]) if (sameDec(snap[id], this.decisions[id])) this.changed.delete(id);
+          if (cmSnap === this.cmSig) this.cmDirty = false;
           if (recovering) this.recover = false;
-          if (!this.changed.size && !this.recover) markPending(pk, null);
+          if (!this.changed.size && !this.recover && !this.cmDirty) markPending(pk, null);
           if (this.detached) return;
           clearInterval(this.poll); this.poll = null;
           const regen = this.regenerating; this.regenerating = false;
           const fresh = this.fresh; this.fresh = false;
-          this.set({ s: 'saved', wordOpen: false, regenerated: regen, fresh, recovering: undefined, behind: this.changed.size, path, at: this.meta.at, unwritten: out.unwritten, prior: out.priorRevisions, ms: Math.round(performance.now() - t0), parts: { worker: Math.round(tBuilt - t0), ...out.ms }, error: undefined });
+          this.set({ s: 'saved', wordOpen: false, regenerated: regen, fresh, recovering: undefined, behind: this.changed.size + (this.cmDirty ? 1 : 0), path, at: this.meta.at, unwritten: out.unwritten, prior: out.priorRevisions, ms: Math.round(performance.now() - t0), parts: { worker: Math.round(tBuilt - t0), ...out.ms }, error: undefined });
           return;
         }
         const code = res?.code || 'error';

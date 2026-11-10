@@ -16,6 +16,10 @@ const RELS_NS = 'http://schemas.openxmlformats.org/package/2006/relationships';
 const CT_NS = 'http://schemas.openxmlformats.org/package/2006/content-types';
 const REL_COMMENTS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments';
 const CT_COMMENTS = 'application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml';
+const W14 = 'http://schemas.microsoft.com/office/word/2010/wordml';
+const W15 = 'http://schemas.microsoft.com/office/word/2012/wordml';
+const REL_CMEX = 'http://schemas.microsoft.com/office/2011/relationships/commentsExtended';
+const CT_CMEX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.commentsExtended+xml';
 
 export type Verdict = 'a' | 'r' | 'h';
 export interface Decision { v?: Verdict; note?: string; by?: string; at?: number }
@@ -38,6 +42,10 @@ export interface WriteInput {
   io: XmlIO;
   /** 待议批注的开头（对方看得到）：中文“待议”，英文 “Open for discussion”（1.9） */
   openLabel?: string;
+  /** 1.9.5：对对方批注的回复（parent = 对方文件里那条批注的编号），写成 Word 里同一条批注下的回复 */
+  replies?: { parent: string; text: string; at: number }[];
+  /** 1.9.5：不带入审阅稿的批注编号（对方稿里混着的我方内部批注；回复由调用方一起列出） */
+  dropComments?: string[];
 }
 export type Reason = 'section' | 'mismatch' | 'field' | 'textbox' | 'image' | 'cell' | 'place' | 'range';
 export interface WriteOutput {
@@ -681,11 +689,107 @@ export async function writeReview(inp: WriteInput & { prepared?: Prepared }): Pr
   };
   const cids = [...new Set(plan.ops.map((o) => o.cid))];
   const toComment = mode === 'draft' ? cids.filter((c) => wantComment(c)) : [];
-  if (toComment.length) {
+  const replies = mode === 'draft' && cmFile ? (inp.replies || []).filter((r) => r.text.trim()) : [];
+  const drops = mode === 'draft' && cmFile ? new Set(inp.dropComments || []) : new Set<string>();
+  let cmId = 0;
+  let cmexXml: Document | null = null;
+  if (toComment.length || replies.length || drops.size) {
     commentsXml = cmFile ? io.parse(await cmFile.async('string')) : io.parse(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<w:comments xmlns:w="${W}"/>`);
-    let cmId = 0;
     for (const c of kids(commentsXml.documentElement, 'comment')) { const v = parseInt(wattr(c, 'id') || '', 10); if (v >= cmId) cmId = v + 1; }
     for (const e of descendants(doc.documentElement, 'commentRangeStart')) { const v = parseInt(wattr(e, 'id') || '', 10); if (v >= cmId) cmId = v + 1; }
+    for (const e of descendants(doc.documentElement, 'commentReference')) { const v = parseInt(wattr(e, 'id') || '', 10); if (v >= cmId) cmId = v + 1; }
+  }
+  if (commentsXml && (replies.length || drops.size)) {
+    const ef = zip.file('word/commentsExtended.xml');
+    if (ef) cmexXml = io.parse(await ef.async('string'));
+    else if (replies.length) cmexXml = io.parse(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<w15:commentsEx xmlns:w15="${W15}"/>`);
+  }
+  // ---- 4a. 不带入的批注（1.9.5）：删掉批注本身、正文里的起止标记和引用、扩展部件里的对应项 ----
+  if (commentsXml && drops.size) {
+    const goneParas = new Set<string>();
+    for (const c of kids(commentsXml.documentElement, 'comment')) {
+      if (!drops.has(wattr(c, 'id') || '')) continue;
+      for (const p of kids(c, 'p')) { const pid = p.getAttributeNS(W14, 'paraId') || p.getAttribute('w14:paraId'); if (pid) goneParas.add(pid.toUpperCase()); }
+      remove(c);
+    }
+    for (const x of ['commentRangeStart', 'commentRangeEnd']) for (const e of descendants(doc.documentElement, x)) if (drops.has(wattr(e, 'id') || '')) remove(e);
+    for (const e of descendants(doc.documentElement, 'commentReference')) {
+      if (!drops.has(wattr(e, 'id') || '')) continue;
+      const r = e.parentNode as Element;
+      if (isW(r, 'r') && kids(r).every((c) => c === e || c.localName === 'rPr')) remove(r); else remove(e);
+    }
+    const dropByPara = async (path: string, local: string, attr: string) => {
+      const f = zip.file(path);
+      if (!f || !goneParas.size) return;
+      const x = path === 'word/commentsExtended.xml' && cmexXml ? cmexXml : io.parse(await f.async('string'));
+      for (const e of Array.from(x.getElementsByTagNameNS('*', local))) {
+        const v = e.getAttributeNS(e.namespaceURI, attr) ?? e.getAttribute(attr);
+        if (v && goneParas.has(v.toUpperCase())) remove(e);
+      }
+      if (x !== cmexXml) zip.file(path, io.serialize(x));
+    };
+    await dropByPara('word/commentsExtended.xml', 'commentEx', 'paraId');
+    await dropByPara('word/commentsIds.xml', 'commentId', 'paraId');
+  }
+  // ---- 4b. 回复（1.9.5）：新批注挂在被回复那条的同一位置，commentsExtended 里指向它（Word 2013 起的回复格式） ----
+  if (commentsXml && replies.length) {
+    const used = new Set<string>();
+    for (const c of kids(commentsXml.documentElement, 'comment')) for (const p of kids(c, 'p')) { const v = p.getAttributeNS(W14, 'paraId') || p.getAttribute('w14:paraId'); if (v) used.add(v.toUpperCase()); }
+    let seed = 0x1D0C0000;
+    const newPara = () => { let v: string; do { v = (seed++).toString(16).toUpperCase().padStart(8, '0'); } while (used.has(v)); used.add(v); return v; };
+    const exRoot = cmexXml!.documentElement;
+    const exOf = (pid: string) => Array.from(exRoot.getElementsByTagNameNS('*', 'commentEx')).find((e) => (e.getAttributeNS(e.namespaceURI, 'paraId') || e.getAttribute('w15:paraId') || '').toUpperCase() === pid);
+    const addEx = (pid: string, parent?: string) => {
+      const e = cmexXml!.createElementNS(W15, 'w15:commentEx');
+      e.setAttributeNS(W15, 'w15:paraId', pid);
+      if (parent) e.setAttributeNS(W15, 'w15:paraIdParent', parent);
+      e.setAttributeNS(W15, 'w15:done', '0');
+      exRoot.appendChild(e);
+    };
+    for (const rp of replies) {
+      if (drops.has(rp.parent)) continue;
+      const parent = kids(commentsXml.documentElement, 'comment').find((c) => wattr(c, 'id') === rp.parent);
+      const pref = descendants(doc.documentElement, 'commentReference').find((e) => wattr(e, 'id') === rp.parent);
+      if (!parent || !pref) continue;
+      // 被回复那条最后一段的 paraId（没有就补一个）
+      const pps = kids(parent, 'p');
+      let lastP = pps[pps.length - 1];
+      if (!lastP) { lastP = commentsXml.createElementNS(W, 'w:p'); parent.appendChild(lastP); }
+      let ppid = (lastP.getAttributeNS(W14, 'paraId') || lastP.getAttribute('w14:paraId') || '').toUpperCase();
+      if (!ppid) { ppid = newPara(); lastP.setAttributeNS(W14, 'w14:paraId', ppid); }
+      if (!exOf(ppid)) addEx(ppid);
+      const id = String(cmId++);
+      const ps = descendants(doc.documentElement, 'commentRangeStart').find((e) => wattr(e, 'id') === rp.parent);
+      const pe = descendants(doc.documentElement, 'commentRangeEnd').find((e) => wattr(e, 'id') === rp.parent);
+      const refRun = isW(pref.parentNode, 'r') ? (pref.parentNode as Element) : pref;
+      const start = w.el('commentRangeStart', { id }), end = w.el('commentRangeEnd', { id });
+      const ref = w.el('r', {}, w.el('commentReference', { id }));
+      if (ps && pe) { insertAfter(start, ps); insertAfter(end, pe); insertAfter(ref, refRun); }
+      else { refRun.parentNode!.insertBefore(start, refRun); insertAfter(end, start); insertAfter(ref, refRun); }
+      const cm = commentsXml.createElementNS(W, 'w:comment');
+      cm.setAttributeNS(W, 'w:id', id);
+      cm.setAttributeNS(W, 'w:author', inp.reviewer);
+      cm.setAttributeNS(W, 'w:date', iso(rp.at || inp.now));
+      cm.setAttributeNS(W, 'w:initials', inp.reviewerInitials || inp.reviewer.slice(0, 2));
+      const lines = rp.text.split('\n');
+      let lastPid = '';
+      lines.forEach((line) => {
+        const p = commentsXml!.createElementNS(W, 'w:p');
+        lastPid = newPara();
+        p.setAttributeNS(W14, 'w14:paraId', lastPid);
+        const r = commentsXml!.createElementNS(W, 'w:r');
+        const t = commentsXml!.createElementNS(W, 'w:t');
+        t.setAttributeNS(XML_NS, 'xml:space', 'preserve');
+        t.appendChild(commentsXml!.createTextNode(line));
+        r.appendChild(t); p.appendChild(r); cm.appendChild(p);
+      });
+      // 回复紧跟在被回复的那条（以及它已有的回复）后面
+      parent.parentNode!.appendChild(cm);
+      addEx(lastPid, ppid);
+    }
+  }
+  if (toComment.length && commentsXml) {
+    const commentsXml2 = commentsXml;
     for (const cid of toComment) {
       const id = String(cmId++);
       const d = decisions[cid];
@@ -706,21 +810,21 @@ export async function writeReview(inp: WriteInput & { prepared?: Prepared }): Pr
         else if (pa?.after || !nodes.length && pa) { para.appendChild(start); para.appendChild(end); para.appendChild(ref); }
         else { const pPr = kid(para, 'pPr'); if (pPr) { insertAfter(start, pPr); } else para.insertBefore(start, para.firstChild); insertAfter(end, start); insertAfter(ref, end); }
       }
-      const cm = commentsXml.createElementNS(W, 'w:comment');
+      const cm = commentsXml2.createElementNS(W, 'w:comment');
       cm.setAttributeNS(W, 'w:id', id);
       // 批注和修订一样署现在的审阅人（改名后重新生成，旧决定也用新名字）
       cm.setAttributeNS(W, 'w:author', inp.reviewer);
       cm.setAttributeNS(W, 'w:date', iso(d?.at || inp.now));
       cm.setAttributeNS(W, 'w:initials', inp.reviewerInitials || inp.reviewer.slice(0, 2));
       for (const line of wantComment(cid).split('\n')) {
-        const p = commentsXml.createElementNS(W, 'w:p');
-        const r = commentsXml.createElementNS(W, 'w:r');
-        const t = commentsXml.createElementNS(W, 'w:t');
+        const p = commentsXml2.createElementNS(W, 'w:p');
+        const r = commentsXml2.createElementNS(W, 'w:r');
+        const t = commentsXml2.createElementNS(W, 'w:t');
         t.setAttributeNS(XML_NS, 'xml:space', 'preserve');
-        t.appendChild(commentsXml.createTextNode(line));
+        t.appendChild(commentsXml2.createTextNode(line));
         r.appendChild(t); p.appendChild(r); cm.appendChild(p);
       }
-      commentsXml.documentElement.appendChild(cm);
+      commentsXml2.documentElement.appendChild(cm);
     }
   }
   // 定稿：去掉批注
@@ -750,6 +854,11 @@ export async function writeReview(inp: WriteInput & { prepared?: Prepared }): Pr
   if (commentsXml) {
     zip.file('word/comments.xml', io.serialize(commentsXml));
     if (!cmFile) await addCommentsPart(zip, io);
+  }
+  if (cmexXml && !dropComments) {
+    const had = !!zip.file('word/commentsExtended.xml');
+    zip.file('word/commentsExtended.xml', io.serialize(cmexXml));
+    if (!had) await addPart(zip, io, REL_CMEX, 'commentsExtended.xml', CT_CMEX);
   }
   if (dropComments) await dropCommentParts(zip, io);
   const bytes = await zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE', compressionOptions: { level: 1 } });
@@ -825,6 +934,31 @@ async function addCommentsPart(zip: JSZip, io: XmlIO) {
   if (!Array.from(ct.documentElement.getElementsByTagName('Override')).some((o) => o.getAttribute('PartName') === '/word/comments.xml')) {
     const o = ct.createElementNS(CT_NS, 'Override');
     o.setAttribute('PartName', '/word/comments.xml'); o.setAttribute('ContentType', CT_COMMENTS);
+    ct.documentElement.appendChild(o);
+    zip.file('[Content_Types].xml', io.serialize(ct));
+  }
+}
+
+/** 给 document.xml.rels 和 [Content_Types].xml 补上一个部件（已有就不动） */
+async function addPart(zip: JSZip, io: XmlIO, relType: string, target: string, ctype: string) {
+  const relsPath = 'word/_rels/document.xml.rels';
+  const rf = zip.file(relsPath);
+  const rels = rf ? io.parse(await rf.async('string')) : io.parse(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="${RELS_NS}"/>`);
+  const root = rels.documentElement;
+  const all = Array.from(root.getElementsByTagName('Relationship'));
+  if (!all.some((r) => r.getAttribute('Type') === relType)) {
+    const ids = new Set(all.map((r) => r.getAttribute('Id')));
+    let n = 1; while (ids.has(`rId${n}`)) n++;
+    const r = rels.createElementNS(RELS_NS, 'Relationship');
+    r.setAttribute('Id', `rId${n}`); r.setAttribute('Type', relType); r.setAttribute('Target', target);
+    root.appendChild(r);
+    zip.file(relsPath, io.serialize(rels));
+  }
+  const cf = zip.file('[Content_Types].xml')!;
+  const ct = io.parse(await cf.async('string'));
+  if (!Array.from(ct.documentElement.getElementsByTagName('Override')).some((o) => o.getAttribute('PartName') === '/word/' + target)) {
+    const o = ct.createElementNS(CT_NS, 'Override');
+    o.setAttribute('PartName', '/word/' + target); o.setAttribute('ContentType', ctype);
     ct.documentElement.appendChild(o);
     zip.file('[Content_Types].xml', io.serialize(ct));
   }
