@@ -17,11 +17,11 @@ DocDiff 的更新分两个阶段。1.5.0 实现了阶段 0，阶段 1 的前提�
 |---|---|
 | 环境变量 `DOCDIFF_UPDATE_FEED` | 调试、CI |
 | 用户数据目录里的 `update-feed.txt`（单行 URL） | 给个别用户临时改地址 |
-| `electron/main.cjs` 里的 `UPDATE_FEED` 默认值 | 正式发布。**目前是占位值 `https://docdiff.app/updates/latest.json`，发版前必须改成真实地址** |
+| `electron/main.cjs` 里的 `UPDATE_FEED` 默认值 | 正式发布，默认读取 GitHub Pages 上的 `https://evonotevil.github.io/DocDiff/updates/latest.json` |
 
 用户数据目录：macOS `~/Library/Application Support/DocDiff/`，Windows `%APPDATA%\DocDiff\`。
 
-**2. 把这个 JSON 传到静态托管上**（对象存储即可，OSS / COS / R2 / S3 都行）：
+**2. 发版时更新 `docs/updates/latest.json`。** 推送到 `main` 后，GitHub Pages 会发布该文件；官网的下载区也读取同一份数据。格式如下：
 
 ```json
 {

@@ -193,7 +193,7 @@ ipcMain.handle('chrome-info', () => ({ chrome: useOverlay ? 'overlay' : 'system'
 // electron-updater（配置方式见 docs/UPDATE.md）。
 const UPDATE_FEED = process.env.DOCDIFF_UPDATE_FEED
   || (() => { try { return fs.readFileSync(path.join(app.getPath('userData'), 'update-feed.txt'), 'utf8').trim(); } catch { return ''; } })()
-  || 'https://docdiff.app/updates/latest.json';
+  || 'https://evonotevil.github.io/DocDiff/updates/latest.json';
 
 /** 1.5.0 > 1.4.10：按段比较数字，不做字符串比较 */
 function cmpVer(a, b) {
