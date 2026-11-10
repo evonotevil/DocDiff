@@ -2,6 +2,7 @@ import JSZip from 'jszip';
 import type { Block, Run, DocModel, FileInfo, DocComment, DocPos } from './model';
 import { blockText, isPageNumberText } from './model';
 import { markAction, rowDeleted } from './trackedStructure';
+import { fromWordDate } from './wordDate';
 
 const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 const W14 = 'http://schemas.microsoft.com/office/word/2010/wordml';
@@ -470,6 +471,15 @@ async function readComments(blocks: Block[], cmDel: Map<string, string>, xml: (p
     const pid = a('paraId');
     if (pid) exByPara.set(pid.toUpperCase(), { parent: a('paraIdParent')?.toUpperCase() || undefined, done: a('done') === '1' || a('done') === 'true' });
   }
+  // 新版 Word：commentsIds（paraId → durableId）+ commentsExtensible（durableId → 真正的 UTC 时间）
+  const utcByPara = new Map<string, string>();
+  const ids = await xml('word/commentsIds.xml'), exs = await xml('word/commentsExtensible.xml');
+  if (ids && exs) {
+    const at = (e: Element, n: string) => e.getAttributeNS(e.namespaceURI, n) ?? e.getAttribute(n);
+    const utcByDurable = new Map<string, string>();
+    for (const e of Array.from(exs.getElementsByTagNameNS('*', 'commentExtensible'))) { const d = at(e, 'durableId'), u = at(e, 'dateUtc'); if (d && u) utcByDurable.set(d.toUpperCase(), u); }
+    for (const e of Array.from(ids.getElementsByTagNameNS('*', 'commentId'))) { const p = at(e, 'paraId'), d = at(e, 'durableId'); const u = d && utcByDurable.get(d.toUpperCase()); if (p && u) utcByPara.set(p.toUpperCase(), u); }
+  }
   const out: DocComment[] = [];
   const byPara = new Map<string, string>();
   const paraOf = new Map<string, string>();
@@ -490,7 +500,10 @@ async function readComments(blocks: Block[], cmDel: Map<string, string>, xml: (p
     if (!from && ref) from = ref;
     if (from && !to) to = ref && !lt(ref, from) ? ref : { ...from, o: cellText(from.b, from.c).length };
     if (from && to && lt(to, from)) to = from;
-    const c: DocComment = { id, author: wattr(cm, 'author') || '', initials: wattr(cm, 'initials') || undefined, date: wattr(cm, 'date') || undefined, text, quote: from && to ? slice(from, to) : '' };
+    // 1.9.6：w:date 是 Word 记下的本地钟点（带着 Z 但不是 UTC）；有 dateUtc 时用它
+    const utc = pid ? utcByPara.get(pid) : undefined;
+    const date = utc && !isNaN(Date.parse(utc)) ? new Date(utc).toISOString() : fromWordDate(wattr(cm, 'date'));
+    const c: DocComment = { id, author: wattr(cm, 'author') || '', initials: wattr(cm, 'initials') || undefined, date, text, quote: from && to ? slice(from, to) : '' };
     if (from && to) { c.from = from; c.to = to; }
     const d = cmDel.get(id);
     if (d) c.delText = d;

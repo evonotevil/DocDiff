@@ -7,6 +7,7 @@
 // 写完立刻按“接受全部修订”重新读一遍，文字必须和预期逐块一致，否则不交付。
 // 只依赖标准 DOM 接口（childNodes / getAttributeNS / createElementNS），在 Worker 里配 @xmldom/xmldom 使用。
 import JSZip from 'jszip';
+import { wordDate } from '../wordDate';
 import type { Plan, Op, PlanBlock, RunStyle } from './plan';
 import { markAction, rowDeleted } from '../trackedStructure';
 
@@ -82,7 +83,8 @@ const insertAfter = (n: Node, ref: Node) => { const p = ref.parentNode!; if (ref
 const unwrap = (el: Element) => { const p = el.parentNode!; while (el.firstChild) p.insertBefore(el.firstChild, el); p.removeChild(el); };
 const remove = (n: Node) => n.parentNode?.removeChild(n);
 const ancestor = (n: Node, local: string): Element | null => { for (let p = n.parentNode; p; p = p.parentNode) if (isW(p, local)) return p; return null; };
-const iso = (ms: number) => new Date(ms).toISOString().replace(/\.\d+Z$/, 'Z');
+// 1.9.6：Word 的 w:date 是本地钟点（见 wordDate.ts）
+const iso = wordDate;
 
 // ---------------- 已有修订按“接受”处理 ----------------
 const DROP = new Set(['del', 'moveFrom', 'cellDel', 'cellIns', 'cellMerge', 'rPrChange', 'pPrChange', 'sectPrChange', 'tblPrChange', 'tblPrExChange', 'tblGridChange', 'trPrChange', 'tcPrChange', 'numberingChange',

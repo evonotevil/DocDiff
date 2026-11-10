@@ -69,6 +69,8 @@ const readCm = async (p) => {
   await win.evaluate(() => document.querySelector('.cm-row[data-cm-row="b:20"]').click()); await sleep(900);
   const card1 = await win.evaluate(() => ({ open: !!document.querySelector('.cm-pop .cm-card[data-cm-card="b:20"]'), where: document.querySelector('.cm-pop .cm-where')?.textContent, pinOpen: !!document.querySelector('.cm-pin.open') }));
   ok('inspector: clicking a plain comment scrolls the paper and opens its card at the pin', card1.open && /第十二条/.test(card1.where || '') && card1.pinOpen, card1);
+  const when = await win.evaluate(() => document.querySelector('.cm-pop .cm-time')?.textContent);
+  ok('card time = the wall-clock time Word shows (w:date is local time)', when === '11月8日 14:20', when);
   await shot(win, '02-inspector-card');
   await win.keyboard.press('Escape'); await sleep(200);
 

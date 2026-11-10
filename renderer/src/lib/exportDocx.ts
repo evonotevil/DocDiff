@@ -6,6 +6,7 @@ import type { Block, Run, Sec } from './model';
 import type { Change, Row } from './engine';
 import type { DecMap, Verdict } from './review';
 import { initialsOf } from './review';
+import { wordDate, wordDateObj } from './wordDate';
 import type { Risk } from './insight';
 import { riskTag } from './describe';
 import { fmtText } from './describe';
@@ -104,7 +105,7 @@ interface ParaSpec { children: Child[]; heading?: any; alignment?: any; indent?:
 
 export async function buildDocx(rows: Row[], blocksA: Block[], blocksB: Block[], o: ExportOpts): Promise<Uint8Array> {
   let revId = 1;
-  const date = o.authorDate.toISOString();
+  const date = wordDate(o.authorDate.getTime()); // 1.9.6：Word 的时间是本地钟点
   const rev = () => ({ id: revId++, author: o.author, date });
   const verdictOf = (cid?: number) => (cid === undefined ? undefined : o.decisions[cid]?.v);
   // 导出时：接受 → 写成新文字；拒绝 → 恢复原文；待议 / 未处理 → 保持为修订
@@ -137,7 +138,7 @@ export async function buildDocx(rows: Row[], blocksA: Block[], blocksB: Block[],
     if (where && c) paras.push(new Paragraph({ children: [new TextRun({ text: c.kind === 'mod' ? `“${c.before}” → “${c.after}”` : c.kind === 'ins' ? `${t('新增')}${colon()}${c.after}` : c.kind === 'del' ? `${t('删除')}${colon()}${c.before}` : c.before, italics: true })] }));
     const id = comments.length;
     const by = o.reviewer.name;
-    comments.push({ id, author: by, initials: o.reviewer.initials, date: new Date(d.at || Date.now()), children: paras });
+    comments.push({ id, author: by, initials: o.reviewer.initials, date: wordDateObj(d.at || Date.now()), children: paras });
     commentOf.set(cid, id);
     return id;
   };
@@ -190,7 +191,7 @@ export async function buildDocx(rows: Row[], blocksA: Block[], blocksB: Block[],
   const docCmLoose: number[] = [];
   for (const c of o.mode === 'final' ? o.docComments || [] : []) {
     const id = comments.length;
-    comments.push({ id, author: c.author || t('（没有署名）'), initials: c.initials || (c.author || '?').slice(0, 2), date: c.date && !isNaN(Date.parse(c.date)) ? new Date(c.date) : new Date(), children: c.lines.map((l) => new Paragraph({ children: [new TextRun({ text: l })] })) });
+    comments.push({ id, author: c.author || t('（没有署名）'), initials: c.initials || (c.author || '?').slice(0, 2), date: wordDateObj(c.date && !isNaN(Date.parse(c.date)) ? Date.parse(c.date) : Date.now()), children: c.lines.map((l) => new Paragraph({ children: [new TextRun({ text: l })] })) });
     if (c.row === undefined) docCmLoose.push(id); else (docCm.get(c.row) || docCm.set(c.row, []).get(c.row)!).push(id);
   }
   const docMarks = (ids: number[]) => ids.flatMap((id) => [new CommentRangeStart(id), new CommentRangeEnd(id), new TextRun({ children: [new CommentReference(id)] })]);

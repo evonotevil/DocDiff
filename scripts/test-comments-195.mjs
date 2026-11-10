@@ -99,3 +99,19 @@ test('final: still drops every comment', async () => {
   const D = await load(f);
   assert.equal(D.comments, undefined);
 });
+// 1.9.6：Word 的 w:date 是本地钟点（带 Z 但不是 UTC）。读的时候按本地钟点理解，写的时候写本地钟点
+test('dates: w:date is local wall time when reading and writing (TZ=' + (process.env.TZ || 'local') + ')', async () => {
+  const c10 = B.comments.find((c) => c.id === '10');
+  const d = new Date(c10.date);
+  assert.deepEqual([d.getDate(), d.getHours(), d.getMinutes()], [8, 14, 20], 'shown as 14:20 local, like Word shows it');
+  const plan = X.buildPlan(res, RA.blocks, RB.blocks);
+  const at = new Date(2026, 10, 10, 9, 5, 0).getTime(); // 本地 9:05
+  const out = await X.writeReview({ base: B.file.data, plan, decisions: { 1: { v: 'h', note: '再议', at } }, mode: 'draft', reviewer: 'T', theirs: 'O', theirsDate: 0, now: at, io, replies: [{ parent: '10', text: '好', at }] });
+  const JSZip = (await import('jszip')).default;
+  const z = await JSZip.loadAsync(out.bytes);
+  const cx = await z.file('word/comments.xml').async('string');
+  const dx = await z.file('word/document.xml').async('string');
+  assert.match(cx, /w:author="T" w:date="2026-11-10T09:05:00Z"/, 'reply and note written as local wall time');
+  assert.ok(!/w:date="2026-11-10T0[01]:05:00Z"/.test(cx) || new Date().getTimezoneOffset() === 0);
+  assert.match(dx, /w:date="2026-11-10T09:05:00Z"|w:date="19(69|70)/, "revisions use the same convention");
+});
