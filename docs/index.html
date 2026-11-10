@@ -1,354 +1,171 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="canonical" href="https://evonotevil.github.io/DocDiff/">
-<title>DocDiff · 每一处不同，一眼看清</title>
-<script src="./vendor/react.js"></script>
-<script src="./vendor/react-dom.js"></script>
-<script src="./support.js"></script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#ffffff">
+  <title>DocDiff · 把每一处修改，处理清楚</title>
+  <meta name="description" content="DocDiff 是本地文档比较与审阅工具，支持 Word、PDF、TXT 比较、修订批注与往来版本管理。">
+  <link rel="canonical" href="https://evonotevil.github.io/DocDiff/">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://evonotevil.github.io/DocDiff/">
+  <meta property="og:title" content="DocDiff · 把每一处修改，处理清楚">
+  <meta property="og:description" content="本地比较文档，逐条审阅修改，让每一轮往来都有迹可循。">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="DocDiff · 把每一处修改，处理清楚">
+  <meta name="twitter:description" content="本地比较文档，逐条审阅修改，让每一轮往来都有迹可循。">
+  <link rel="icon" href="landing/assets/duidui-happy.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="landing/styles.css">
+  <script defer src="landing/app.js"></script>
+  <script defer src="landing/review-demo.js"></script>
 </head>
-<body>
-<x-dc>
-<helmet>
-<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&amp;family=Noto+Sans+SC:wght@400;500;700;900&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet">
-<style>
-body { margin: 0; font-family: Nunito, "Noto Sans SC", sans-serif; background: #FFFFFF; color: #10230A; -webkit-font-smoothing: antialiased; }
-* { box-sizing: border-box; }
-.page-shell { width: 100%; min-width: 0; }
-.site-header, .hero-content, .showcase, .stats, .demo-section, .feature-section, .privacy { padding-left: clamp(24px, 5.55vw, 80px) !important; padding-right: clamp(24px, 5.55vw, 80px) !important; }
-.hero-copy, .feature-copy { min-width: 0; }
-.hero-copy { flex: 1 1 0; }
-.feature-visual { width: min(44vw, 620px) !important; }
-.feature-visual .shot img { max-width: 100%; height: auto; }
-.showcase-media { width: 100%; max-width: 1280px; margin-inline: auto; }
-.showcase-titlebar { height: 40px; display: flex; align-items: center; gap: 8px; padding: 0 16px; background: #E9EFF2; }
-.showcase-titlebar span { width: 11px; height: 11px; border-radius: 50%; }
-.showcase-controls { display: flex; align-items: center; gap: 24px; padding: 12px 16px; background: #FFFFFF; }
-.showcase-tabs { display: flex; align-items: center; gap: 8px; min-width: 0; overflow-x: auto; scrollbar-width: thin; }
-.showcase-tabs button { flex: 0 0 auto; white-space: nowrap; }
-.showcase-tabs button:focus-visible { outline: 3px solid #10230A; outline-offset: -3px; }
-.shot-caption { flex: 0 1 360px; margin: 0; text-align: right; font-size: 15px; font-weight: 800; color: rgba(16,35,10,.6); }
-.showcase-media img { display: block; width: 100%; height: auto; }
-@media (max-width: 1250px) {
-  .hero-title { font-size: clamp(56px, 7vw, 108px) !important; }
-  .hero-mascot { width: clamp(150px, 20vw, 250px) !important; height: auto !important; }
-  .feature-section { gap: 32px !important; }
-  .feature-heading { font-size: clamp(32px, 3.2vw, 46px) !important; }
-}
-@media (max-width: 900px) {
-  .site-header { flex-wrap: wrap; height: auto !important; min-height: 80px; padding-top: 16px !important; padding-bottom: 16px !important; }
-  .site-nav { margin-left: auto; gap: 18px !important; }
-  .header-cta { margin-left: 0 !important; }
-  .hero-content { padding-top: 64px !important; }
-  .hero-description { font-size: 21px !important; }
-  .hero-actions, .download-actions { flex-wrap: wrap; }
-  .stats { gap: 14px !important; }
-  .stat-card { padding: 24px !important; }
-  .feature-section { flex-direction: column !important; align-items: stretch !important; }
-  .feature-section.reverse { flex-direction: column-reverse !important; }
-  .feature-visual { width: 100% !important; }
-}
-@media (max-width: 640px) {
-  .hero { border-radius: 0 0 36px 36px !important; padding-bottom: 150px !important; }
-  .site-header { gap: 12px !important; }
-  .site-nav { order: 3; width: 100%; justify-content: space-between; margin-left: 0; font-size: 15px !important; }
-  .header-cta { margin-left: auto !important; height: 44px !important; padding: 0 18px !important; font-size: 14px !important; }
-  .brand-name { font-size: 25px !important; }
-  .hero-content { display: block !important; padding-top: 48px !important; }
-  .hero-title { font-size: clamp(46px, 11vw, 68px) !important; }
-  .hero-description { margin-top: 24px !important; font-size: 18px !important; }
-  .hero-actions { gap: 12px !important; margin-top: 30px !important; }
-  .hero-actions a, .download-actions a { width: 100%; justify-content: center; min-height: 58px; height: auto !important; padding: 12px 18px !important; text-align: center; font-size: 17px !important; }
-  .hero-mascot { display: none; }
-  .showcase { margin-top: -95px !important; }
-  .showcase-controls { display: block; }
-  .showcase-tabs { gap: 8px; }
-  .shot-caption { margin-top: 8px; text-align: left; font-size: 14px; }
-  .showcase-tabs button { padding: 0 14px !important; font-size: 14px !important; }
-  .stats { grid-template-columns: 1fr !important; padding-top: 54px !important; }
-  .demo-section { padding-top: 54px !important; }
-  .demo-card { padding: 28px 22px !important; border-radius: 24px !important; }
-  .demo-heading { display: block !important; }
-  .demo-heading h2 { font-size: 30px !important; }
-  .demo-text { padding: 24px 20px !important; }
-  .demo-text p { font-size: 18px !important; line-height: 1.9 !important; }
-  .demo-actions, .demo-done { flex-wrap: wrap; }
-  .demo-actions span { margin-left: 0 !important; }
-  .feature-section { padding-top: 60px !important; }
-  .feature-heading { font-size: 32px !important; }
-  .feature-copy p { font-size: 18px !important; }
-  .privacy { margin-top: 64px !important; padding-top: 64px !important; padding-bottom: 48px !important; border-radius: 36px 36px 0 0 !important; }
-  .privacy-intro { display: block !important; }
-  .privacy-intro img { width: 120px !important; height: auto !important; margin-bottom: 22px; }
-  .privacy-intro h2 { font-size: 36px !important; }
-  .privacy-intro p { font-size: 18px !important; }
-  .download-actions span { margin-left: 0 !important; }
-  .site-footer { flex-wrap: wrap; }
-  .site-footer .copyright { width: 100%; }
-}
-a { color: #2F7D00; } a:hover { color: #1E5200; }
-/* —— 动效规范：全部 cubic-bezier(.2,.8,.2,1)，悬停 160ms，按下 90ms，入场 700ms —— */
-.press { transition: transform .16s cubic-bezier(.2,.8,.2,1), filter .16s ease; will-change: transform; }
-.press:hover { transform: translateY(-3px); filter: brightness(1.04); }
-.press:active { transform: translateY(4px); filter: brightness(.97); transition-duration: .09s; }
-.press:focus-visible { outline: 3px solid #10230A; outline-offset: 4px; }
-.navlink { position: relative; transition: opacity .16s ease; }
-.navlink::after { content: ""; position: absolute; left: 0; right: 0; bottom: -6px; height: 3px; border-radius: 2px; background: currentColor; transform: scaleX(0); transform-origin: left; transition: transform .22s cubic-bezier(.2,.8,.2,1); }
-.navlink:hover::after { transform: scaleX(1); }
-.lift { transition: transform .22s cubic-bezier(.2,.8,.2,1), box-shadow .22s ease, border-color .22s ease; }
-.lift:hover { transform: translateY(-6px); border-color: #C7E8A6; box-shadow: 0 18px 30px rgba(16,35,10,.10); }
-.shot { transition: transform .35s cubic-bezier(.2,.8,.2,1), box-shadow .35s ease; }
-.shot:hover { transform: translateY(-8px) scale(1.006); }
-.tab { transition: background .18s ease, color .18s ease, transform .18s cubic-bezier(.2,.8,.2,1); }
-.tab:hover { transform: translateY(-2px); }
-.bob { animation: bob 3.2s ease-in-out infinite; }
-@keyframes bob { 0%, 100% { transform: translateY(0) rotate(-1deg); } 50% { transform: translateY(-14px) rotate(2deg); } }
-.rise { animation: rise .7s cubic-bezier(.2,.8,.2,1) both; }
-.d1 { animation-delay: .06s; } .d2 { animation-delay: .14s; } .d3 { animation-delay: .22s; } .d4 { animation-delay: .3s; }
-@keyframes rise { from { opacity: 0; transform: translateY(26px); } to { opacity: 1; transform: none; } }
-.pop { animation: pop .45s cubic-bezier(.22,1,.36,1) both; }
-@keyframes pop { from { opacity: 0; transform: scale(.88); } to { opacity: 1; transform: none; } }
-.fadein { animation: fadein .22s ease both; }
-@keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .bob, .rise, .pop, .fadein { animation: none; } .press:hover, .lift:hover, .shot:hover { transform: none; } }
-</style>
-</helmet>
-<div class="page-shell" style="background: #FFFFFF;"><section class="hero" style="background: #58CC02; border-radius: 0 0 72px 72px; padding-bottom: 200px; position: relative; overflow: hidden;">
-<div style="position: absolute; inset: 0; background-image: radial-gradient(rgba(16,35,10,.09) 3px, transparent 3.5px); background-size: 56px 56px;"></div>
-<div style="position: relative;">
-<div class="site-header" style="display: flex; align-items: center; gap: 14px; padding: 0 80px; height: 96px;">
-<img src="./assets/520cf0d074915341b370ce3bc8b28a8e.svg" alt="" style="width: 40px; height: 41px;">
-<span class="brand-name" style="font-size: 30px; font-weight: 900; letter-spacing: .5px;">DocDiff</span>
-<span style="flex-grow: 1;"></span>
-<nav class="site-nav" style="display: flex; gap: 36px; font-size: 17px; font-weight: 800;">
-<a class="navlink" href="#modes" style="color: #10230A; text-decoration: none;">对比模式</a>
-<a class="navlink" href="#privacy" style="color: #10230A; text-decoration: none;">隐私</a>
-<a class="navlink" href="https://github.com/evonotevil/DocDiff" style="color: #10230A; text-decoration: none;">Github项目</a>
-</nav>
-<a class="press header-cta" href="#download" style="margin-left: 28px; display: inline-flex; align-items: center; height: 52px; padding: 0 28px; border-radius: 26px; background: #10230A; color: #ffffff; font-size: 17px; font-weight: 900; text-decoration: none; box-shadow: 0 5px 0 rgba(0,0,0,.25);">免费下载</a>
-</div>
-<div class="hero-content" style="padding: 90px 80px 0; display: flex; align-items: flex-start; gap: 48px;">
-<div class="hero-copy">
-<p style="margin: 0 0 22px; font-family: 'JetBrains Mono', monospace; font-size: 15px; font-weight: 500; letter-spacing: 3px; text-transform: uppercase; color: rgba(16,35,10,.6);">OFFLINE DOCUMENT DIFF</p>
-<h1 class="rise d1 hero-title" style="margin: 0; font-size: 108px; line-height: 1.08; font-weight: 900; letter-spacing: -1px;">每一处不同，<br>一眼看清</h1>
-<p class="rise d2 hero-description" style="margin: 34px 0 0; font-size: 25px; line-height: 1.6; font-weight: 700; color: rgba(16,35,10,.78); max-width: 640px;">Word、PDF、纯文本任意两种互相比较。所有处理都在这台电脑上完成，文件从不上传。</p>
-<div class="rise d3 hero-actions" style="margin-top: 44px; display: flex; align-items: center; gap: 16px;">
-<a class="press" href="https://github.com/evonotevil/DocDiff/releases/download/v1.9.5/DocDiff-1.9.5-mac-arm64.dmg" style="display: inline-flex; align-items: center; height: 68px; padding: 0 40px; border-radius: 34px; background: #10230A; color: #ffffff; font-size: 21px; font-weight: 900; text-decoration: none; box-shadow: 0 6px 0 rgba(0,0,0,.3);">下载 macOS 版</a>
-<a class="press" href="https://github.com/evonotevil/DocDiff/releases/download/v1.9.5/DocDiff-Setup-1.9.5.exe" style="display: inline-flex; align-items: center; height: 68px; padding: 0 40px; border-radius: 34px; background: #ffffff; color: #10230A; font-size: 21px; font-weight: 900; text-decoration: none; box-shadow: 0 6px 0 rgba(16,35,10,.22);">下载 Windows 版</a>
-</div>
-<p style="margin: 22px 0 0; font-size: 16px; font-weight: 700; color: rgba(16,35,10,.6);">版本 1.9.5 · macOS 11+ / Windows 10 · 中文 · English</p>
-</div>
-<img class="bob hero-mascot" src="./assets/28cd502a673f4fbf7cc0f557135e2d43.svg" alt="DocDiff 吉祥物" style="width: 250px; height: 250px; margin-top: 60px;">
-</div>
-</div>
-</section><section class="showcase" style="margin-top: -140px; padding: 0 80px; position: relative;">
-<div class="shot showcase-media" style="border-radius: 24px; overflow: hidden; background: #ffffff; box-shadow: 0 40px 90px rgba(16,35,10,.3);">
-<div class="showcase-titlebar" aria-hidden="true">
-<span style="background: #FF5F57;"></span>
-<span style="background: #FEBC2E;"></span>
-<span style="background: #28C840;"></span>
-</div>
-<div class="showcase-controls">
-<div class="showcase-tabs" aria-label="产品宣传图">
-<sc-for list="{{tabs}}" as="tab" hint-placeholder-count="5">
-<button class="tab" type="button" aria-pressed="{{ tab.selected }}" onClick="{{ tab.pick }}" style="{{ tab.style }}">{{ tab.label }}</button>
-</sc-for>
-</div>
-<p class="shot-caption" aria-live="polite">{{ shotCaption }}</p>
-</div>
-<img class="fadein" key="{{ shotSrc }}" src="{{ shotSrc }}" alt="{{ shotAlt }}">
-</div>
-</section><section class="stats" style="padding: 72px 80px 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px;">
-<div class="lift stat-card" style="border: 4px solid #E6EBE3; border-bottom-width: 8px; border-radius: 28px; padding: 32px 34px;">
-<div style="font-size: 52px; font-weight: 900; color: #2F7D00;">6 种</div>
-<div style="margin-top: 8px; font-size: 19px; font-weight: 800;">对比模式</div>
-<div style="margin-top: 6px; font-size: 16px; font-weight: 700; color: rgba(16,35,10,.6);">富文本 · 纯文本 · 修订 · 图像 · OCR · 文件详情</div>
-</div>
-<div class="lift stat-card" style="border: 4px solid #E6EBE3; border-bottom-width: 8px; border-radius: 28px; padding: 32px 34px;">
-<div style="font-size: 52px; font-weight: 900; color: #2F7D00;">3 种</div>
-<div style="margin-top: 8px; font-size: 19px; font-weight: 800;">格式随意组合</div>
-<div style="margin-top: 6px; font-size: 16px; font-weight: 700; color: rgba(16,35,10,.6);">DOCX · PDF · TXT，可以互相比</div>
-</div>
-<div class="lift stat-card" style="border: 4px solid #E6EBE3; border-bottom-width: 8px; border-radius: 28px; padding: 32px 34px;">
-<div style="font-size: 52px; font-weight: 900; color: #2F7D00;">100%</div>
-<div style="margin-top: 8px; font-size: 19px; font-weight: 800;">本地完成</div>
-<div style="margin-top: 6px; font-size: 16px; font-weight: 700; color: rgba(16,35,10,.6);">不联网、不上传、不留痕</div>
-</div>
-</section><section class="demo-section" style="padding: 96px 80px 0;">
-<div class="demo-card" style="border-radius: 36px; background: #F4FAEE; border: 4px solid #E1F1D2; padding: 52px 56px 56px;">
-<div class="demo-heading" style="display: flex; align-items: flex-end; gap: 24px;">
-<div style="flex-grow: 1;">
-<span style="display: inline-block; padding: 8px 20px; border-radius: 999px; background: #58CC02; color: #10230A; font-size: 15px; font-weight: 900;">试一下</span>
-<h2 style="margin: 18px 0 0; font-size: 44px; font-weight: 900; line-height: 1.25;">这段合同改了两处，你同意吗？</h2>
-</div>
-<span style="font-size: 18px; font-weight: 800; color: rgba(16,35,10,.6); padding-bottom: 8px;">{{ progress }}</span>
-</div>
-<div class="demo-text" style="margin-top: 32px; background: #FFFFFF; border-radius: 22px; padding: 34px 38px; box-shadow: 0 10px 24px rgba(16,35,10,.07);">
-<p style="margin: 0; font-size: 24px; line-height: 2; font-weight: 700;">乙方向甲方提供数据分析平台的部署、运维及技术支持服务，服务期限为<sc-if value="{{ s1.pending }}" hint-placeholder-val="{{ true }}"><span style="background: #FFDFE0; color: #A32222; text-decoration: line-through; padding: 2px 6px; border-radius: 6px;">十二</span><span style="background: #DCF5DF; color: #1B6B2C; padding: 2px 6px; border-radius: 6px; margin-left: 4px;">二十四</span></sc-if><sc-if value="{{ s1.accepted }}" hint-placeholder-val="{{ false }}"><span class="pop" style="background: #DCF5DF; color: #1B6B2C; padding: 2px 6px; border-radius: 6px;">二十四</span></sc-if><sc-if value="{{ s1.rejected }}" hint-placeholder-val="{{ false }}"><span class="pop" style="padding: 2px 6px;">十二</span></sc-if>个月，甲方应在合同签订后<sc-if value="{{ s2.pending }}" hint-placeholder-val="{{ true }}"><span style="background: #FFDFE0; color: #A32222; text-decoration: line-through; padding: 2px 6px; border-radius: 6px;">30</span><span style="background: #DCF5DF; color: #1B6B2C; padding: 2px 6px; border-radius: 6px; margin-left: 4px;">15</span></sc-if><sc-if value="{{ s2.accepted }}" hint-placeholder-val="{{ false }}"><span class="pop" style="background: #DCF5DF; color: #1B6B2C; padding: 2px 6px; border-radius: 6px;">15</span></sc-if><sc-if value="{{ s2.rejected }}" hint-placeholder-val="{{ false }}"><span class="pop" style="padding: 2px 6px;">30</span></sc-if>日内支付首期款项。</p>
-</div>
-<sc-if value="{{ reviewing }}" hint-placeholder-val="{{ true }}">
-<div class="demo-actions" style="margin-top: 28px; display: flex; align-items: center; gap: 14px;">
-<button class="press" type="button" onClick="{{ reject }}" style="display: inline-flex; align-items: center; height: 62px; padding: 0 34px; border: 0; border-radius: 31px; background: #FF4B4B; color: #FFFFFF; font-family: inherit; font-size: 19px; font-weight: 900; cursor: pointer; box-shadow: 0 5px 0 #C93434;">拒绝</button>
-<button class="press" type="button" onClick="{{ accept }}" style="display: inline-flex; align-items: center; height: 62px; padding: 0 34px; border: 0; border-radius: 31px; background: #58CC02; color: #10230A; font-family: inherit; font-size: 19px; font-weight: 900; cursor: pointer; box-shadow: 0 5px 0 #3E8F00;">接受</button>
-<span style="margin-left: 8px; font-size: 17px; font-weight: 700; color: rgba(16,35,10,.6);">在应用里，这两个动作就是键盘上的 R 和 A</span>
-</div>
-</sc-if>
-<sc-if value="{{ done }}" hint-placeholder-val="{{ false }}">
-<div class="pop demo-done" style="margin-top: 28px; display: flex; align-items: center; gap: 22px; background: #FFFFFF; border: 4px solid #58CC02; border-radius: 24px; padding: 24px 30px;">
-<img src="./assets/28cd502a673f4fbf7cc0f557135e2d43.svg" alt="" style="width: 78px; height: 78px;">
-<div style="flex-grow: 1;">
-<div style="font-size: 26px; font-weight: 900;">审阅完成！</div>
-<div style="margin-top: 4px; font-size: 17px; font-weight: 700; color: rgba(16,35,10,.65);">{{ summary }}　在应用里这一步可以直接导出 Word 最终稿。</div>
-</div>
-<button class="press" type="button" onClick="{{ reset }}" style="height: 54px; padding: 0 26px; border: 3px solid rgba(16,35,10,.2); border-radius: 27px; background: #FFFFFF; color: #10230A; font-family: inherit; font-size: 17px; font-weight: 900; cursor: pointer;">再来一次</button>
-</div>
-</sc-if>
-</div>
-</section><section id="modes" class="feature-section" style="padding: 88px 80px 0; display: flex; align-items: center; gap: 56px;"><div class="feature-copy" style="flex-grow: 1;">
-<span style="display: inline-block; padding: 8px 20px; border-radius: 999px; background: #D7F7B0; color: #10230A; font-size: 15px; font-weight: 900; letter-spacing: .5px;">点击对齐</span>
-<h2 class="feature-heading" style="margin: 20px 0 0; font-size: 46px; line-height: 1.25; font-weight: 900;">Word 与 PDF 互比，一点就对齐</h2>
-<p style="margin: 18px 0 0; font-size: 20px; line-height: 1.7; font-weight: 700; color: rgba(16,35,10,.68);">鼠标悬停会框出这一行和另一侧对应的行，点一下两侧自动对齐；段落被拆开或合并也能认出来。</p>
-</div><div class="feature-visual" style="width: 620px; flex-shrink: 0;"><div class="shot" style="border-radius: 18px; overflow: hidden; background: #ffffff; box-shadow: 0 26px 50px rgba(16,35,10,.18); ">
-<div style="height: 40px; display: flex; align-items: center; gap: 8px; padding: 0 16px; background: #E9EFF2;">
-<span style="width: 11px; height: 11px; border-radius: 50%; background: #FF5F57;"></span>
-<span style="width: 11px; height: 11px; border-radius: 50%; background: #FEBC2E;"></span>
-<span style="width: 11px; height: 11px; border-radius: 50%; background: #28C840;"></span>
-</div>
-<img src="./assets/a4e55313518c672b46a48b97ce3281b3.jpg" alt="DocDiff 界面截图" style="display: block; width: 100%;">
-</div></div></section><section id="review" class="feature-section reverse" style="padding: 88px 80px 0; display: flex; align-items: center; gap: 56px;"><div class="feature-visual" style="width: 620px; flex-shrink: 0;"><div class="shot" style="border-radius: 18px; overflow: hidden; background: #ffffff; box-shadow: 0 26px 50px rgba(16,35,10,.18); ">
-<div style="height: 40px; display: flex; align-items: center; gap: 8px; padding: 0 16px; background: #E9EFF2;">
-<span style="width: 11px; height: 11px; border-radius: 50%; background: #FF5F57;"></span>
-<span style="width: 11px; height: 11px; border-radius: 50%; background: #FEBC2E;"></span>
-<span style="width: 11px; height: 11px; border-radius: 50%; background: #28C840;"></span>
-</div>
-<img src="./assets/76a32724cc58364801de818014df91aa.jpg" alt="DocDiff 界面截图" style="display: block; width: 100%;">
-</div></div><div class="feature-copy" style="flex-grow: 1;">
-<span style="display: inline-block; padding: 8px 20px; border-radius: 999px; background: #FFEFAF; color: #10230A; font-size: 15px; font-weight: 900; letter-spacing: .5px;">修订审阅</span>
-<h2 class="feature-heading" style="margin: 20px 0 0; font-size: 46px; line-height: 1.25; font-weight: 900;">像做题一样逐条审阅</h2>
-<p style="margin: 18px 0 0; font-size: 20px; line-height: 1.7; font-weight: 700; color: rgba(16,35,10,.68);">接受、拒绝、跳过，键盘 A · R · U 一路处理到底，全部处理完导出 Word 最终稿或修订稿。</p>
-</div></section><section id="ocr" class="feature-section" style="padding: 88px 80px 0; display: flex; align-items: center; gap: 56px;"><div class="feature-copy" style="flex-grow: 1;">
-<span style="display: inline-block; padding: 8px 20px; border-radius: 999px; background: #EBD9FF; color: #10230A; font-size: 15px; font-weight: 900; letter-spacing: .5px;">图像 · OCR</span>
-<h2 class="feature-heading" style="margin: 20px 0 0; font-size: 46px; line-height: 1.25; font-weight: 900;">版面和扫描件，也能比</h2>
-<p style="margin: 18px 0 0; font-size: 20px; line-height: 1.7; font-weight: 700; color: rgba(16,35,10,.68);">逐页像素比对找出排版变化；扫描件先离线识别中英文，再按文字比较。</p>
-</div><div class="feature-visual" style="width: 620px; flex-shrink: 0;"><div class="shot" style="border-radius: 18px; overflow: hidden; background: #ffffff; box-shadow: 0 26px 50px rgba(16,35,10,.18); ">
-<div style="height: 40px; display: flex; align-items: center; gap: 8px; padding: 0 16px; background: #E9EFF2;">
-<span style="width: 11px; height: 11px; border-radius: 50%; background: #FF5F57;"></span>
-<span style="width: 11px; height: 11px; border-radius: 50%; background: #FEBC2E;"></span>
-<span style="width: 11px; height: 11px; border-radius: 50%; background: #28C840;"></span>
-</div>
-<img src="./assets/46434d7c0a786c5d53e144dd4e44373e.jpg" alt="DocDiff 界面截图" style="display: block; width: 100%;">
-</div></div></section><section id="privacy" class="privacy" style="margin-top: 104px; background: #131F24; border-radius: 72px 72px 0 0; padding: 96px 80px 90px; color: #F2F7F0; position: relative; overflow: hidden;">
-<div class="privacy-intro" style="display: flex; align-items: center; gap: 60px;">
-<img src="./assets/6474d61dd15ebf35bcf646227e4c89bb.svg" alt="" style="width: 190px; height: 190px;">
-<div style="flex-grow: 1;">
-<h2 style="margin: 0; font-size: 52px; font-weight: 900; line-height: 1.25;">文件不离开这台电脑</h2>
-<p style="margin: 18px 0 0; font-size: 21px; line-height: 1.7; font-weight: 700; color: rgba(242,247,240,.75); max-width: 760px;">没有账号，没有云端，没有后台上传。合同、标书、财报这类东西，比完就留在你自己的硬盘上。深色模式也随手可切。</p>
-</div>
-</div>
-<div id="download" style="margin-top: 72px;">
-<div style="display: inline-flex; padding: 6px; border-radius: 999px; background: rgba(242,247,240,.12); gap: 4px;">
-<sc-for list="{{platforms}}" as="p" hint-placeholder-count="2">
-<button class="tab" type="button" onClick="{{ p.pick }}" style="{{ p.style }}">{{ p.label }}</button>
-</sc-for>
-</div>
-<div class="download-actions" style="margin-top: 26px; display: flex; align-items: center; gap: 18px;">
-<a class="press" href="{{ dlPrimaryUrl }}" style="display: inline-flex; align-items: center; height: 72px; padding: 0 44px; border-radius: 36px; background: #58CC02; color: #10230A; font-size: 22px; font-weight: 900; text-decoration: none; box-shadow: 0 6px 0 #3E8F00;">{{ dlPrimary }}</a>
-<a class="press" href="{{ dlSecondaryUrl }}" style="display: inline-flex; align-items: center; height: 72px; padding: 0 44px; border-radius: 36px; background: transparent; color: #F2F7F0; font-size: 22px; font-weight: 900; text-decoration: none; border: 3px solid rgba(242,247,240,.4);">{{ dlSecondary }}</a>
-<span style="margin-left: 10px; font-size: 16px; font-weight: 700; color: rgba(242,247,240,.6);">{{ dlNote }}</span>
-</div>
-</div>
-<div class="site-footer" style="margin-top: 76px; padding-top: 30px; border-top: 2px solid rgba(242,247,240,.16); display: flex; align-items: center; gap: 12px; font-size: 15px; font-weight: 700; color: rgba(242,247,240,.55);">
-<img src="./assets/520cf0d074915341b370ce3bc8b28a8e.svg" alt="" style="width: 26px; height: 27px;">
-<span>DocDiff 1.9.5</span>
-<a href="https://github.com/evonotevil/DocDiff" style="color: inherit; text-decoration: underline;">GitHub</a>
-<a href="https://github.com/evonotevil/DocDiff/releases" style="color: inherit; text-decoration: underline;">历史版本</a>
-<span style="flex-grow: 1;"></span><span class="copyright">© 2026 DocDiff · 完全离线</span>
-</div>
-</section></div>
-</x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":4240}}'>
-class Component extends DCLogic {
-  constructor(props) {
-    super(props);
-    this.state = { shot: 'overview', plat: 'mac', d1: null, d2: null };
-    var REL = 'https://github.com/evonotevil/DocDiff/releases/download/v1.9.5/';
-    this.dlUrls = {
-      macArm: REL + 'DocDiff-1.9.5-mac-arm64.dmg',
-      macIntel: REL + 'DocDiff-1.9.5-mac-x64.dmg',
-      winSetup: REL + 'DocDiff-Setup-1.9.5.exe',
-      releasePage: 'https://github.com/evonotevil/DocDiff/releases/tag/v1.9.5'
-    };
-  }
-  tabStyle(on) {
-    var base = 'height: 46px; padding: 0 22px; border: 0; border-radius: 23px; font-family: inherit; font-size: 17px; font-weight: 900; cursor: pointer; ';
-    return base + (on
-      ? 'background: #10230A; color: #FFFFFF;'
-      : 'background: rgba(16,35,10,.10); color: #10230A;');
-  }
-  platStyle(on) {
-    var base = 'height: 46px; padding: 0 26px; border: 0; border-radius: 23px; font-family: inherit; font-size: 17px; font-weight: 900; cursor: pointer; ';
-    return base + (on
-      ? 'background: #F2F7F0; color: #10230A;'
-      : 'background: transparent; color: rgba(242,247,240,.8);');
-  }
-  decide(which) {
-    var s = this.state;
-    if (s.d1 === null) this.setState({ d1: which });
-    else if (s.d2 === null) this.setState({ d2: which });
-  }
-  renderVals() {
-    var self = this;
-    var s = this.state;
-    var shots = {
-      overview: { src: './assets/hero-overview.jpg', cap: '删除、新增、修改，打开文档就能看到变化', alt: 'DocDiff 差异总览界面：并排展示两份合同和变更列表' },
-      alignment: { src: './assets/hero-align.jpg', cap: 'Word 与 PDF 也能逐行对齐比较', alt: 'DocDiff 跨格式对齐界面：Word 与 PDF 的对应内容并排显示' },
-      review: { src: './assets/hero-review.jpg', cap: '逐条接受或拒绝，完成后导出文档', alt: 'DocDiff 修订审阅界面：逐条处理修改并查看进度' },
-      visual: { src: './assets/hero-image.jpg', cap: '逐页找出版面和扫描件的变化', alt: 'DocDiff 图像对比界面：标出两份文档的版面差异' },
-      offline: { src: './assets/hero-bilingual.jpg', cap: '文件留在本机，中英文界面随手切换', alt: 'DocDiff 英文界面：在本机比较两份文档' }
-    };
-    var tabs = [
-      { id: 'overview', label: '差异总览' },
-      { id: 'alignment', label: '跨格式对齐' },
-      { id: 'review', label: '修订审阅' },
-      { id: 'visual', label: '图像对比' },
-      { id: 'offline', label: '离线与双语' }
-    ].map(function (t) {
-      return { label: t.label, selected: s.shot === t.id, style: self.tabStyle(s.shot === t.id), pick: function () { self.setState({ shot: t.id }); } };
-    });
-    var plats = [
-      { id: 'mac', label: 'macOS' },
-      { id: 'win', label: 'Windows' }
-    ].map(function (p) {
-      return { label: p.label, style: self.platStyle(s.plat === p.id), pick: function () { self.setState({ plat: p.id }); } };
-    });
-    var handled = (s.d1 !== null ? 1 : 0) + (s.d2 !== null ? 1 : 0);
-    var acc = (s.d1 === 'a' ? 1 : 0) + (s.d2 === 'a' ? 1 : 0);
-    var mac = s.plat === 'mac';
-    return {
-      tabs: tabs,
-      shotSrc: shots[s.shot].src,
-      shotCaption: shots[s.shot].cap,
-      shotAlt: shots[s.shot].alt,
-      platforms: plats,
-      dlPrimary: mac ? '下载 macOS 版（Apple 芯片）' : '下载 Windows 安装包',
-      dlSecondary: mac ? 'Intel 芯片版' : '查看发布说明',
-      dlPrimaryUrl: mac ? this.dlUrls.macArm : this.dlUrls.winSetup,
-      dlSecondaryUrl: mac ? this.dlUrls.macIntel : this.dlUrls.releasePage,
-      dlNote: mac ? '121 MB · macOS 11 及以上' : '110 MB · Windows 10 / 11',
-      progress: handled >= 2 ? '2 / 2 处' : '第 ' + (handled + 1) + ' / 2 处',
-      s1: { pending: s.d1 === null, accepted: s.d1 === 'a', rejected: s.d1 === 'r' },
-      s2: { pending: s.d2 === null, accepted: s.d2 === 'a', rejected: s.d2 === 'r' },
-      reviewing: handled < 2,
-      done: handled >= 2,
-      summary: '接受 ' + acc + ' 处，拒绝 ' + (2 - acc) + ' 处。',
-      accept: function () { self.decide('a'); },
-      reject: function () { self.decide('r'); },
-      reset: function () { self.setState({ d1: null, d2: null }); }
-    };
-  }
-}
-</script>
+<body id="top">
+<a class="skip-link" href="#main">跳到主要内容</a>
+<header class="site-header">
+  <div class="shell nav-wrap">
+    <a class="brand" href="#top" aria-label="DocDiff 首页"><img src="landing/assets/wordmark.svg" alt="DocDiff" width="147" height="44"></a>
+    <nav class="nav-links" aria-label="主导航"><a href="#compare">比较方式</a><a href="#review-demo">修订审阅</a><a href="#library">模板与关键词</a><a href="#privacy">隐私</a></nav>
+    <details class="mobile-nav"><summary>菜单 <span aria-hidden="true">☰</span></summary><nav aria-label="移动端导航"><a href="#compare">比较方式</a><a href="#review-demo">修订审阅</a><a href="#versions">往来稿</a><a href="#library">模板与关键词</a><a href="#privacy">隐私</a></nav></details>
+    <a class="button button--green nav-cta" href="#download">免费下载 <span aria-hidden="true">↗</span></a>
+  </div>
+</header>
+<main id="main">
+  <section class="hero shell">
+    <div class="hero-copy">
+      <span class="eyebrow eyebrow--green"><span class="eyebrow-dot"></span> 本地文档比对与审阅</span>
+      <h1>每一处修改，<br>都看清，也处理好<span class="hero-period">。</span></h1>
+      <p class="hero-lead">比较 Word、PDF、TXT，逐条审阅修改，生成审阅稿，接着处理下一轮。</p>
+      <div class="hero-actions"><a class="button button--green button--large" href="#download">选择下载版本 <span aria-hidden="true">↓</span></a><a class="button button--outline button--large" href="#review-demo">试试审阅 <span aria-hidden="true">↗</span></a></div>
+      <p class="hero-meta">macOS / Windows <span>·</span> 中文 / English</p>
+      <p class="hero-note"><span class="status-dot"></span> 文档不上传 <span>·</span> 审阅记录保存在本机</p>
+    </div>
+    <div class="hero-visual" aria-label="DocDiff 功能示意">
+      <div class="visual-caption"><span>一眼看见变化</span><span>可点击切换 · 示例合同</span></div>
+      <div class="app-window">
+        <div class="app-topbar"><img src="landing/assets/wordmark.svg" alt="" width="82" height="25"><span class="app-file">服务合同 v3.docx <span>→</span> v4.docx</span><span class="app-top-action">导出</span></div>
+        <div class="app-body">
+          <div class="app-sidebar" role="tablist" aria-label="切换产品视图" data-tab-group="hero">
+            <button type="button" role="tab" id="hero-tab-rich" aria-controls="hero-panel-rich" aria-selected="true" data-tab="rich"><img src="landing/assets/mode-rich.svg" alt="">富文本</button>
+            <button type="button" role="tab" id="hero-tab-plain" aria-controls="hero-panel-plain" aria-selected="false" tabindex="-1" data-tab="plain"><img src="landing/assets/mode-plain.svg" alt="">纯文本</button>
+            <button type="button" role="tab" id="hero-tab-review" aria-controls="hero-panel-review" aria-selected="false" tabindex="-1" data-tab="review"><img src="landing/assets/mode-redline.svg" alt="">修订审阅</button>
+          </div>
+          <div class="app-canvas">
+            <div class="app-panel" role="tabpanel" id="hero-panel-rich" aria-labelledby="hero-tab-rich" data-panel-group="hero" data-panel="rich">
+              <div class="app-canvas-label"><span>富文本 · 左右对照</span><span>示例合同</span></div>
+              <div class="hero-doc-pair"><article class="paper paper--hero hero-doc"><span class="hero-doc-label">原始文档</span><h3>第三条 费用与支付</h3><p>服务总费用为人民币 <del>120,000</del> 元，分两期支付。</p><h3>第四条 数据安全</h3><p>双方应履行保密义务。</p></article><article class="paper paper--hero hero-doc"><span class="hero-doc-label">修改后文档</span><h3>第三条 费用与支付</h3><p>服务总费用为人民币 <ins>198,000</ins> 元，一次性支付。</p><h3>第四条 数据安全</h3><p>双方应履行保密义务。</p></article></div>
+            </div>
+            <div class="app-panel" role="tabpanel" id="hero-panel-plain" aria-labelledby="hero-tab-plain" data-panel-group="hero" data-panel="plain" hidden>
+              <div class="app-canvas-label"><span>纯文本 · 左右对照</span><span>按行查看变化</span></div>
+              <div class="hero-doc-pair"><div class="code-paper hero-code"><span class="hero-doc-label">原始文档</span><p><span>12</span> 第三条 费用与支付</p><p class="code-del"><span>13</span> − 服务费 120,000 元</p><p><span>14</span> 第四条 数据安全</p></div><div class="code-paper hero-code"><span class="hero-doc-label">修改后文档</span><p><span>12</span> 第三条 费用与支付</p><p class="code-ins"><span>13</span> + 服务费 198,000 元</p><p><span>14</span> 第四条 数据安全</p></div></div>
+            </div>
+            <div class="app-panel" role="tabpanel" id="hero-panel-review" aria-labelledby="hero-tab-review" data-panel-group="hero" data-panel="review" hidden>
+              <div class="app-canvas-label"><span>修订审阅</span><span>第 2 / 19 处</span></div>
+              <article class="paper paper--hero"><h3>第三条 费用与支付</h3><p>服务总费用为人民币 <del>120,000</del> <ins>198,000</ins> 元。</p><div class="mini-note"><b>我方备注</b><br>请确认调整后的费用明细。</div><div class="mini-actions"><span>拒绝</span><span>待议</span><span>接受</span></div></article>
+            </div>
+          </div>
+          <aside class="app-inspector"><b>差异 <small>19</small></b><div class="inspector-pills"><span>全部 19</span><span>新增 6</span></div><p>第三条 费用与支付</p><ul><li><i class="dot dot--red"></i>120,000 → 198,000</li><li><i class="dot dot--green"></i>付款方式</li><li><i class="dot dot--blue"></i>收到发票后</li></ul><p>第四条 数据安全</p><ul><li><i class="dot dot--green"></i>新增保密义务</li></ul></aside>
+        </div>
+      </div>
+      <div class="visual-foot"><span class="status-dot"></span><span>金额、期限与条款变化，清楚标出</span><span class="visual-hint">点左侧切换视图 ↑</span></div>
+    </div>
+  </section>
+  <section class="workflow section-muted" id="how">
+    <div class="shell section-inner reveal"><div class="section-intro"><span class="kicker">从差异到下一轮</span><h2>一份文档，三步走完。</h2><p>从比较到发回，再到新一轮修改，每一步都有清楚的下一步。</p></div>
+      <div class="step-grid"><a class="step-card" href="#compare"><span class="step-number">01 · 比较</span><h3>看见具体改了什么</h3><p>Word、PDF、TXT 可以互相比较，文字和格式变化清楚标出。</p><span class="step-link">看看比较方式 <span aria-hidden="true">↗</span></span></a><a class="step-card" href="#review-demo"><span class="step-number">02 · 审阅</span><h3>给每处修改一个结论</h3><p>接受、拒绝或标为待议；需要交代的内容，随手写成备注。</p><span class="step-link">试试逐条审阅 <span aria-hidden="true">↗</span></span></a><a class="step-card" href="#versions"><span class="step-number">03 · 往来</span><h3>下一轮接着上次看</h3><p>保存版本链，回看上轮结论和条款历史，不用从头找。</p><span class="step-link">看看往来稿 <span aria-hidden="true">↗</span></span></a></div>
+    </div>
+  </section>
+  <section class="section-inner shell reveal" id="compare">
+    <div class="section-intro" id="modes"><span class="kicker">看见差异</span><h2>按你的方式，看清每一处变化。</h2><p>保留文字格式和结构，或只看文字、快速扫读。</p></div>
+    <div class="compare-layout">
+      <div class="compare-tabs" role="tablist" aria-label="比较方式" data-tab-group="compare">
+        <button class="compare-choice" type="button" role="tab" id="compare-tab-rich" aria-controls="compare-panel-rich" aria-selected="true" data-tab="rich"><img src="landing/assets/mode-rich.svg" alt=""><span><b>富文本比较</b><small>保留标题、列表、表格与文字格式。</small></span><span class="choice-arrow" aria-hidden="true">↗</span></button>
+        <button class="compare-choice" type="button" role="tab" id="compare-tab-plain" aria-controls="compare-panel-plain" aria-selected="false" tabindex="-1" data-tab="plain"><img src="landing/assets/mode-plain.svg" alt=""><span><b>纯文本比较</b><small>按行对齐，专注查看文字变化。</small></span><span class="choice-arrow" aria-hidden="true">↗</span></button>
+      </div>
+      <div class="compare-display">
+        <div role="tabpanel" id="compare-panel-rich" aria-labelledby="compare-tab-rich" data-panel-group="compare" data-panel="rich">
+          <div class="display-top"><span>富文本 · 左右对照</span><span>保留文档结构</span></div>
+          <div class="document-pair">
+            <article class="compare-paper document-side"><div class="document-label"><span>原始文档</span><small>合同 V1</small></div><h3>第六条 付款期限</h3><p>甲方应在合同签订后 <del>三十日</del> 内支付首期款项。</p></article>
+            <article class="compare-paper document-side"><div class="document-label"><span>修改后文档</span><small>合同 V2</small></div><h3>第六条 付款期限</h3><p>甲方应在合同签订后 <ins>十五日</ins> 内支付首期款项。</p></article>
+          </div>
+          <p class="display-foot">两边各自保留标题、段落和格式，对照查看变化。</p>
+        </div>
+        <div role="tabpanel" id="compare-panel-plain" aria-labelledby="compare-tab-plain" data-panel-group="compare" data-panel="plain" hidden>
+          <div class="display-top"><span>纯文本 · 示例</span><span>同一处变化，不同查看方式</span></div>
+          <div class="layout-switch" role="tablist" aria-label="纯文本查看方式" data-tab-group="plain-layout"><button type="button" role="tab" id="plain-tab-split" aria-controls="plain-panel-split" aria-selected="true" data-tab="split">左右对照</button><button type="button" role="tab" id="plain-tab-unified" aria-controls="plain-panel-unified" aria-selected="false" tabindex="-1" data-tab="unified">合并查看</button></div>
+          <div class="document-pair plain-document-pair" role="tabpanel" id="plain-panel-split" aria-labelledby="plain-tab-split" data-panel-group="plain-layout" data-panel="split">
+            <div class="code-paper code-paper--large"><div class="document-label"><span>原始文档</span><small>合同 V1</small></div><p><span>11</span> 第六条 付款期限</p><p class="code-del"><span>12</span> − 三十日内付款</p></div>
+            <div class="code-paper code-paper--large"><div class="document-label"><span>修改后文档</span><small>合同 V2</small></div><p><span>11</span> 第六条 付款期限</p><p class="code-ins"><span>12</span> + 十五日内付款</p></div>
+          </div>
+          <div role="tabpanel" id="plain-panel-unified" aria-labelledby="plain-tab-unified" data-panel-group="plain-layout" data-panel="unified" hidden><div class="code-paper code-paper--large"><p><span>11</span> 第六条 付款期限</p><p class="code-del"><span>12</span> − 三十日内付款</p><p class="code-ins"><span>12</span> + 十五日内付款</p></div></div>
+          <p class="display-foot">左右各看一份，或把增删内容合并在一起。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+  <section class="section-muted" id="review-demo">
+    <div class="shell section-inner review-layout reveal">
+      <div class="review-copy" id="review"><span class="kicker">修订审阅 · 试一下</span><h2>每一处修改，<br>都有清楚的结论。</h2><p>在这份虚构合同里，试着接受、拒绝或标为待议，再留下一句备注。</p><ul class="benefit-list"><li><b>逐条作出决定</b><span>审阅进度和备注可以随时回看。</span></li><li><b>生成审阅稿</b><span>对方稿为本地 Word（.docx）时可生成。</span></li><li><b>备注写成批注</b><span>生成后持续同步；原文件保持不变。</span></li><li><b>查看并回复 Word 批注</b><span>集中查看原有批注、回复和解决状态；回复可写回审阅稿。</span></li><li><b>发送前检查内部批注</b><span>检查并移除不需要发给对方的内部讨论。</span></li></ul><p class="demo-disclaimer">以下是网页示例，不会读取、上传或生成文件。</p></div>
+      <div class="review-demo-card">
+        <div class="review-demo-header"><div><span class="demo-label">修订审阅 · 示例</span><h3 id="demo-context">第六条 · 付款期限</h3></div><span class="demo-index" id="demo-index">第 1 / 2 处</span></div>
+        <div class="demo-progress"><div id="demo-progress-fill" role="progressbar" aria-label="示例审阅进度" aria-valuemin="0" aria-valuemax="2" aria-valuenow="0"></div></div><p class="demo-progress-text" id="demo-progress-text">已审 0 / 2</p>
+        <div class="demo-paper"><div class="change-row"><span class="change-label">原文</span><del id="demo-before">三十日</del></div><div class="change-row"><span class="change-label">修改后</span><ins id="demo-after">十五日</ins></div></div>
+        <div class="decision-buttons" role="group" aria-label="为当前修改作决定"><button class="decision decision--reject" type="button" data-demo-verdict="reject" aria-pressed="false">拒绝 <kbd>R</kbd></button><button class="decision decision--hold" type="button" data-demo-verdict="hold" aria-pressed="false">待议 <kbd>H</kbd></button><button class="decision decision--accept" type="button" data-demo-verdict="accept" aria-pressed="false">接受 <kbd>A</kbd></button></div>
+        <label class="note-label" for="demo-note">我方备注 <span>可选</span></label><textarea id="demo-note" rows="2" placeholder="例如：请确认付款时间与交付节点。"></textarea>
+        <p id="demo-status" class="demo-status" aria-live="polite">选择一个结论，或先写下备注。</p>
+        <div class="review-controls"><div><button class="text-button" type="button" id="demo-prev">← 上一处</button><button class="text-button" type="button" id="demo-next">下一处 →</button></div><button class="text-button" type="button" id="demo-reset">重置示例</button></div>
+        <div class="draft-box"><div><b>审阅稿</b><span id="demo-draft-status">尚未生成 · 仅作示例</span></div><button type="button" class="button button--outline button--small" id="demo-preview-draft">模拟生成审阅稿</button></div><div id="demo-draft-preview" class="draft-preview" aria-live="polite" hidden></div>
+      </div>
+    </div>
+  </section>
+  <section class="shell section-inner version-layout reveal" id="versions">
+    <div class="version-demo">
+      <div class="version-head"><div><b>服务协议 · 往来稿</b><span>选两版，看看这一轮或累计修改</span></div><span class="version-tag">示例</span></div>
+      <div class="version-list" aria-label="往来版本">
+        <div class="version-entry" data-version-row="v1" data-included="true"><span class="version-dot"></span><b>V1</b><span>我方标准合同</span><small>标准稿</small></div>
+        <div class="version-entry" data-version-row="v2" data-included="true"><span class="version-dot"></span><b>V2</b><span>对方首次修改</span><small>已审 12 / 12</small></div>
+        <div class="version-entry" data-version-row="v3" data-included="false"><span class="version-dot"></span><b>V3</b><span>对方第二轮修改</span><small>待审 3 处</small></div>
+      </div>
+      <div class="pair-picker">
+        <div class="pair-picker-heading"><b>选择两版比较</b><span>可任意切换</span></div>
+        <div class="pair-picker-controls">
+          <label><span>原始版本</span><select id="version-from"><option value="v1" selected>V1 · 我方标准合同</option><option value="v2">V2 · 对方首次修改</option><option value="v3">V3 · 对方第二轮修改</option></select></label>
+          <span class="pair-direction" aria-hidden="true">→</span>
+          <label><span>修改后版本</span><select id="version-to"><option value="v1">V1 · 我方标准合同</option><option value="v2" selected>V2 · 对方首次修改</option><option value="v3">V3 · 对方第二轮修改</option></select></label>
+        </div>
+        <div class="pair-shortcuts" role="group" aria-label="选择往来稿版本组合"><button type="button" data-version-pair="v1-v2" aria-pressed="true">V1 → V2</button><button type="button" data-version-pair="v1-v3" aria-pressed="false">V1 → V3</button><button type="button" data-version-pair="v2-v3" aria-pressed="false">V2 → V3</button></div>
+      </div>
+      <div class="version-detail" aria-live="polite">
+        <div class="pair-result-head"><b id="version-summary">正在比较 V1 → V2</b><span>示例差异</span></div>
+        <div class="pair-difference"><span>付款期限</span><span class="diff-before" id="version-before-term">30 日</span><span aria-hidden="true">→</span><span class="diff-after" id="version-after-term">15 日</span></div>
+        <div class="pair-difference"><span id="version-amount-label">合同总额</span><span class="diff-before" id="version-before-amount">¥120,000</span><span aria-hidden="true">→</span><span class="diff-after" id="version-after-amount">¥198,000</span></div>
+        <small id="version-pair-note">从我方标准合同到对方首次修改。</small>
+      </div>
+    </div>
+    <div class="section-copy"><span class="kicker">往来稿</span><h2>来回几轮，<br>都接得上。</h2><p>新稿发来时，和上一版继续比较；之前的结论和条款历史，也可以随时回看。</p><div class="soft-note"><span class="status-dot"></span> 任意两版可比较 · 上轮结论可参考</div></div>
+  </section>
+  <section class="section-muted" id="library"><div class="shell section-inner reveal"><div class="section-intro"><span class="kicker">模板与关键词</span><h2>常用模板和关注词，都有照应。</h2><p>标准稿方便复用，重要条款的变化更容易找到。</p></div>
+    <div class="library-grid">
+      <div class="library-card">
+        <div class="library-card-head"><div><h3>模板设置</h3><p>把标准合同存成模板，对方来稿时选择匹配的模板版本。</p></div><img src="landing/assets/mode-rich.svg" alt=""></div>
+        <div class="template-window">
+          <div class="template-window-head"><b>标准供货框架协议</b><span>2 个模板版本</span></div>
+          <div class="template-recommendation"><span class="status-dot"></span><span>示例推荐 V2，也可手动选择</span></div>
+          <div class="template-versions" role="group" aria-label="选择模板版本"><button type="button" data-template-version="v1" aria-pressed="false">模板 V1</button><button type="button" data-template-version="v2" aria-pressed="true">模板 V2 <span>推荐</span></button></div>
+          <div class="template-pair" aria-live="polite">
+            <div><small>原始文档 · 模板</small><b id="template-baseline">标准供货框架协议 V2</b></div><span class="template-arrow" aria-hidden="true">→</span><div><small>修改后文档 · 来稿</small><b>对方供货协议.docx</b></div>
+          </div>
+          <div class="template-difference" aria-live="polite"><span>付款期限</span><del id="template-before-term">20 日</del><span aria-hidden="true">→</span><ins>15 日</ins></div>
+        </div>
+        <p class="tiny-note">匹配不明确时，可手动选择模板版本。以上是网页示例，不读取文件。</p>
+      </div>
+      <div class="library-card"><div class="library-card-head"><div><h3>关键词检测</h3><p>自定义关注词；变更命中时，和金额、日期变化一起集中提示。</p></div><img src="landing/assets/icon-warn.svg" alt=""></div><p class="field-label">关注的关键词 <span>点击标签可开关</span></p><div class="keyword-list" id="keyword-list" aria-label="示例关键词"><button type="button" data-keyword="违约" aria-pressed="true">违约 <span>✓</span></button><button type="button" data-keyword="赔偿" aria-pressed="true">赔偿 <span>✓</span></button><button type="button" data-keyword="责任上限" aria-pressed="true">责任上限 <span>✓</span></button></div><form class="keyword-form" id="keyword-form"><label class="sr-only" for="keyword-input">添加示例关键词</label><input id="keyword-input" maxlength="12" placeholder="添加一个关注词"><button class="button button--outline button--small" type="submit">添加</button></form><p class="keyword-feedback" id="keyword-feedback" aria-live="polite"></p><div class="keyword-hit" id="keyword-hit" aria-live="polite"><span aria-hidden="true">!</span><div><b>关键词：违约</b><small>第七条 · 违约责任的内容有变化</small></div></div><p class="tiny-note">检测变更及其上下文，辅助定位；仍需人工判断。</p></div>
+    </div>
+  </div></section>
+  <section class="shell section-inner reveal" id="more"><div class="section-intro"><span class="kicker">更多比较方式</span><h2>文字、版面、扫描件，都能仔细比。</h2><p>按手头的文件和问题，切换适合的视图。</p></div><div class="capability-grid"><div><img src="landing/assets/mode-rich.svg" alt=""><h3>跨格式比较</h3><p>DOCX、PDF、TXT 可以组合比较，文字和格式变化清楚标出。</p></div><div><img src="landing/assets/mode-image.svg" alt=""><h3>版面图像对比</h3><p>逐页找出版面、图片位置和分页的变化。</p></div><div><img src="landing/assets/mode-ocr.svg" alt=""><h3 id="ocr">离线 OCR</h3><p>扫描件或图片型 PDF，先识别中英文，再比较文字。</p></div></div></section>
+  <section class="privacy" id="privacy"><div class="shell privacy-layout"><div class="privacy-copy reveal"><span class="kicker kicker--light">本地处理，安心工作</span><h2>文件留在这台电脑。</h2><p>文档比较和 OCR 在本机完成，不上传文件。<br>审阅记录保存在本机，自动检查更新可在设置中关闭。</p><div class="mascot-line"><img src="landing/assets/duidui-happy.svg" alt="" width="78" height="78"><span>没有账号要求，打开就能比较。</span></div><details class="help-disclosure privacy-details"><summary>了解数据与更新检查</summary><p>比较、OCR 和审阅记录都在本机处理或保存。应用默认会尝试检查更新，请求版本地址时不发送文档内容、文件名或路径；可在设置中关闭。</p></details></div>
+    <div class="download-card reveal" id="download"><span class="download-eyebrow">DOC DIFF FOR DESKTOP</span><h2>开始使用 DocDiff</h2><p>选择适合你电脑的版本。</p><div class="platform-options" role="group" aria-label="选择下载版本"><button type="button" data-platform="macArm" aria-pressed="true">macOS · Apple 芯片</button><button type="button" data-platform="macIntel" aria-pressed="false">macOS · Intel 芯片</button><button type="button" data-platform="windows" aria-pressed="false">Windows 10 / 11</button></div><a class="button button--green download-main" id="download-link" href="https://github.com/evonotevil/DocDiff/releases/latest">前往最新版下载 <span aria-hidden="true">↗</span></a><p class="download-version" id="download-meta">前往最新版发布页下载</p><details class="help-disclosure"><summary>不知道该选哪个版本？</summary><p>Mac 点击左上角苹果菜单 →“关于本机”，查看芯片。如果显示 Apple M 系列，选 Apple 芯片；显示 Intel，选 Intel 芯片。Windows 选择 Windows 版。</p></details><details class="help-disclosure"><summary>首次安装和打开</summary><p>目前 macOS 和 Windows 安装包尚未签名。请从本项目的发布页下载，并可用 SHA-256 校验文件确认下载完整。</p><p>macOS：打开 DMG，将 DocDiff 拖入“应用程序”。若系统提示无法验证开发者，先确认文件来自官方发布页，再到“系统设置 → 隐私与安全性”查看打开选项。<a href="https://support.apple.com/zh-cn/102445" target="_blank" rel="noreferrer">Apple 官方说明 ↗</a></p><p>Windows：双击安装包。如出现 SmartScreen 提示，请先确认来源，再查看“更多信息”中的继续选项；若无法继续，可在 GitHub Issues 反馈。</p></details><div class="download-links"><a class="support-link" id="release-page-link" href="https://github.com/evonotevil/DocDiff/releases/latest" target="_blank" rel="noreferrer">所有下载与更新说明 ↗</a><a class="support-link" id="download-checksum" href="https://github.com/evonotevil/DocDiff/releases/latest/download/SHA256SUMS.txt" target="_blank" rel="noreferrer">SHA-256 校验文件 ↗</a></div></div>
+  </div><footer class="shell footer"><a href="#top" aria-label="返回顶部"><img src="landing/assets/wordmark-white.svg" alt="DocDiff" width="125" height="37"></a><div><a href="#compare">功能</a><a href="#how">如何使用</a><a href="https://github.com/evonotevil/DocDiff" target="_blank" rel="noreferrer">GitHub ↗</a></div><span>© 2026 DocDiff · 本地文档比对</span></footer></section>
+</main>
 </body>
 </html>
