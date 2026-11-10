@@ -1,11 +1,11 @@
 {
-  "version": "1.9.6",
-  "pubDate": "2026-11-10",
-  "notes": "· 修订审阅支持只有批注差异的 Word 文档，改善删段后的批注定位。\n· 批注卡片和检查器显示被引用的文字。\n· 切换到正式更新源，可检查后续版本。",
+  "version": "1.9.7",
+  "pubDate": "2026-11-11",
+  "notes": "· 修正 Word 批注、回复、修订及备注时间的时区偏移。\n· 优先读取新版 Word 记录的 UTC 时间。\n· 审阅记录存档和重新排版的修订稿也使用修正后的时间。",
   "downloads": {
-    "mac-arm64": "https://github.com/evonotevil/DocDiff/releases/download/v1.9.6/DocDiff-1.9.6-mac-arm64.dmg",
-    "mac-x64": "https://github.com/evonotevil/DocDiff/releases/download/v1.9.6/DocDiff-1.9.6-mac-x64.dmg",
-    "win-exe": "https://github.com/evonotevil/DocDiff/releases/download/v1.9.6/DocDiff-Setup-1.9.6.exe",
-    "page": "https://github.com/evonotevil/DocDiff/releases/tag/v1.9.6"
+    "mac-arm64": "https://github.com/evonotevil/DocDiff/releases/download/v1.9.7/DocDiff-1.9.7-mac-arm64.dmg",
+    "mac-x64": "https://github.com/evonotevil/DocDiff/releases/download/v1.9.7/DocDiff-1.9.7-mac-x64.dmg",
+    "win-exe": "https://github.com/evonotevil/DocDiff/releases/download/v1.9.7/DocDiff-Setup-1.9.7.exe",
+    "page": "https://github.com/evonotevil/DocDiff/releases/tag/v1.9.7"
   }
 }
