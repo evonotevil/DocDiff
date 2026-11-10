@@ -1,11 +1,11 @@
 {
-  "version": "1.9.5",
+  "version": "1.9.6",
   "pubDate": "2026-11-10",
-  "notes": "· 在富文本和修订审阅中查看 Word 批注和回复。\n· 可直接回复对方批注，并写回 Word 审阅稿。\n· 支持在发出审阅稿前检查和移除内部批注。",
+  "notes": "· 修订审阅支持只有批注差异的 Word 文档，改善删段后的批注定位。\n· 批注卡片和检查器显示被引用的文字。\n· 切换到正式更新源，可检查后续版本。",
   "downloads": {
-    "mac-arm64": "https://github.com/evonotevil/DocDiff/releases/download/v1.9.5/DocDiff-1.9.5-mac-arm64.dmg",
-    "mac-x64": "https://github.com/evonotevil/DocDiff/releases/download/v1.9.5/DocDiff-1.9.5-mac-x64.dmg",
-    "win-exe": "https://github.com/evonotevil/DocDiff/releases/download/v1.9.5/DocDiff-Setup-1.9.5.exe",
-    "page": "https://github.com/evonotevil/DocDiff/releases/tag/v1.9.5"
+    "mac-arm64": "https://github.com/evonotevil/DocDiff/releases/download/v1.9.6/DocDiff-1.9.6-mac-arm64.dmg",
+    "mac-x64": "https://github.com/evonotevil/DocDiff/releases/download/v1.9.6/DocDiff-1.9.6-mac-x64.dmg",
+    "win-exe": "https://github.com/evonotevil/DocDiff/releases/download/v1.9.6/DocDiff-Setup-1.9.6.exe",
+    "page": "https://github.com/evonotevil/DocDiff/releases/tag/v1.9.6"
   }
 }
