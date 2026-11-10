@@ -77,6 +77,10 @@ export const EN_195: Record<string, string> = {
   'Word 批注的作者是这些名字时算我方（审阅人自动算在内），其他人算对方。个别批注可以在批注卡片里改归属，只影响那一对文件。名单只在本机保存。': 'Word comments by these names count as ours (the reviewer always does); everyone else is the counterparty. You can change a single comment’s author in its card; that only affects that pair of files. The list stays on this computer.',
   'Word 批注的作者是这些名字时算我方（审阅人自动算在内）。只在本机保存。': 'Word comments by these names count as ours (the reviewer always does). Stays on this computer.',
   '已把「{n}」加进我方成员': 'Added “{n}” to our team',
+  '两份文件的文字一样，只有 {n} 条批注。': 'The text is the same in both files; there are {n} comments.',
+  '没有需要审阅的修订。纸边的批注标和点线标出了批注的位置，点开可以查看和回复。': 'No changes to review. The pins in the margin and the dotted lines show where the comments are; open one to read or reply.',
+  '其中 {n} 条对方已解决，在「批注」里收起。': '{n} of them are resolved by them and folded under Comments.',
+  '这一段按你的决定已去掉，批注还在。': 'This paragraph is gone per your decision; its comments are still here.',
   // 报告
   '作者': 'Author',
   '批注的文字': 'Commented text',

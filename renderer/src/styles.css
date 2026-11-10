@@ -1782,3 +1782,10 @@ h1, h2, h3 { color: var(--title); font-weight: 700; margin: 0; }
 .set-hint { margin: var(--space-1) 0 0; font-size: var(--fs-12); color: var(--text-2); line-height: 1.8; }
 .set-hint .link-btn { padding: 0; }
 .kw.fixed { padding-right: var(--space-2); background: var(--side); }
+/* 1.9.5 补：被批注的文字（卡片标题下、检查器行里）、按决定去掉的段落 */
+.cm-quote { display: flex; align-items: baseline; gap: var(--space-1-5); min-width: 0; }
+.cm-quote .lbl { flex: none; font-size: var(--fs-12); font-weight: 800; color: var(--text-2); }
+.cm-quote .q, .cm-q { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: var(--fs-13); font-weight: 400; color: var(--eel); border-bottom: 2px dotted var(--wolf); padding-bottom: 1px; }
+.cm-q { align-self: flex-start; max-width: 100%; font-size: var(--fs-12); }
+.cm-quote .q.del, .cm-q.del { text-decoration: line-through; text-decoration-color: var(--wolf); }
+.redline .cm-ghost { color: var(--paper-muted); font-size: var(--fs-13); font-style: italic; }

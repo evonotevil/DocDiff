@@ -134,3 +134,9 @@ build(os.path.join(OUT, 'cm-B.docx'), B_BODY, B_CM)
 import re
 build(os.path.join(OUT, 'cm-plain-B.docx'), re.sub(r'<w:commentRange(Start|End) w:id="\d+"/>|<w:r><w:commentReference w:id="\d+"/></w:r>', '', B_BODY), [])
 print('ok', OUT)
+
+# ---------- 1.9.5 补：整段新增 / 整段删除上的批注（按决定去掉后批注标还要在） ----------
+A2 = ''.join([p('第一条 总则', h=True), p('本合同由双方协商订立。'), p('第二条 期限', h=True), p(cs(1), '本合同有效期一年。', ce(1)), p('第三条 其他', h=True), p('未尽事宜另行协商。')])
+B2 = ''.join([p('第一条 总则', h=True), p('本合同由双方协商订立。'), p(cs(30), '双方确认已阅读全部条款。', ce(30)), p('第三条 其他', h=True), p('未尽事宜另行协商。')])
+build(os.path.join(OUT, 'cm2-A.docx'), A2, [('1', '王同事（示例）', 'WT', '2026-11-05T09:00:00Z', '期限我们希望两年。', '3000A001', None, False)])
+build(os.path.join(OUT, 'cm2-B.docx'), B2, [('30', '李律师（示例）', 'LL', D, '新增这一句，请确认。', '3000B030', None, False)])

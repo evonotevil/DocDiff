@@ -136,6 +136,69 @@ const readCm = async (p) => {
 
   ok('no page errors', errs.length === 0, errs);
   await app.close();
+
+  // ---------- 1.9.5.1：两份文字完全一样、只有批注：修订审阅照常显示纸面 ----------
+  const dir2 = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-195g-'));
+  const G = (n) => path.join(dir2, `Document ${n}.docx`);
+  fs.copyFileSync(path.join(FIX, 'cm-plain-B.docx'), G('A')); fs.copyFileSync(path.join(FIX, 'cm-B.docx'), G('B'));
+  ({ app, win, errs } = await launch(newCfg(), [G('A'), G('B')]));
+  await win.waitForFunction(() => document.querySelector('.fchip.cm'), null, { timeout: 60000 }); await sleep(600);
+  await win.evaluate(() => document.querySelectorAll('.nav-list .nav-item')[2].click()); await sleep(1000);
+  const only = await win.evaluate(() => ({ paper: !!document.querySelector('.redline'), pins: document.querySelectorAll('.redline .cm-pin').length, note: document.querySelector('.nt.cm-only b')?.textContent, empty: !!document.querySelector('.main .empty-state'), bar: !!document.querySelector('.review-bar') }));
+  ok('no changes, only comments: redline paper shown with pins and a one-line notice; no review bar', only.paper && only.pins >= 6 && /文字一样，只有 \d+ 条批注/.test(only.note || '') && !only.empty && !only.bar, only);
+  await win.evaluate(() => document.querySelector('.fchip.cm').click()); await sleep(300);
+  await win.evaluate(() => document.querySelector('.cm-row[data-cm-row="b:20"]').click()); await sleep(900);
+  const at = await win.evaluate(() => { const p = document.querySelector('.cm-pin.open'); const r = p?.getBoundingClientRect(); return { open: !!document.querySelector('.cm-pop .cm-card[data-cm-card="b:20"]'), pin: !!p, visible: !!r && r.top > 0 && r.bottom < innerHeight }; });
+  ok('no changes: clicking a comment scrolls the paper to its pin and opens the card there', at.open && at.pin && at.visible, at);
+  await shot(win, '08-comments-only');
+  ok('no page errors (comments only)', errs.length === 0, errs);
+  await app.close();
+
+  // ---------- 1.9.5 补：整段新增 / 删除按决定去掉后，批注标还在；拒绝后换回来的原文也有点线；卡片写出被批注的文字 ----------
+  const dir3 = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-195h-'));
+  const H = (n) => path.join(dir3, `Document ${n}.docx`);
+  fs.copyFileSync(path.join(FIX, 'cm2-A.docx'), H('A')); fs.copyFileSync(path.join(FIX, 'cm2-B.docx'), H('B'));
+  ({ app, win, errs } = await launch(newCfg({ ourMembers: ['王同事（示例）'] }), [H('A'), H('B')]));
+  await win.waitForFunction(() => document.querySelectorAll('.dlist .drow').length > 0, null, { timeout: 60000 }); await sleep(500);
+  await win.evaluate(() => document.querySelectorAll('.nav-list .nav-item')[2].click()); await sleep(900);
+  const n0 = await win.evaluate(() => document.querySelectorAll('.redline .cm-pin').length);
+  // 删除的那段：接受（段落消失）；新增的那段：拒绝（段落消失）
+  const drows = await win.evaluate(() => [...document.querySelectorAll('.dlist .drow')].map((x) => x.className));
+  for (let i = 0; i < drows.length; i++) {
+    const k = await win.evaluate((i) => document.querySelectorAll('.dlist .drow')[i].className, i);
+    await win.evaluate((i) => document.querySelectorAll('.dlist .drow')[i].click(), i); await sleep(200);
+    await win.keyboard.press(/k-del/.test(k) ? 'a' : 'r'); await sleep(300);
+  }
+  await sleep(500);
+  await win.evaluate(() => [...document.querySelectorAll('.done-card .btn')].find((b) => /回去再看看/.test(b.textContent))?.click()); await sleep(300);
+  const gone = await win.evaluate(() => ({ pins: document.querySelectorAll('.redline .cm-pin').length, ghost: [...document.querySelectorAll('.redline .cm-ghost')].map((x) => x.textContent) }));
+  ok('paragraphs removed by decisions keep their pins with a one-line note', n0 === 2 && gone.pins === 2 && gone.ghost.length === 2 && /按你的决定已去掉/.test(gone.ghost[0]), { n0, gone });
+  await win.evaluate(() => document.querySelector('.redline .cm-pin').click()); await sleep(400);
+  const q = await win.evaluate(() => document.querySelector('.cm-pop .cm-quote .q')?.textContent);
+  ok('card shows the commented text', /本合同有效期一年|双方确认已阅读全部条款/.test(q || ''), q);
+  await shot(win, '09-gone-paragraphs');
+  await app.close();
+
+  // 拒绝 “三十 → 十五” 后，换回来的“三十”也有点线（对方批注挂在“十五日内”上）
+  const dir4 = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-195i-'));
+  const K = (n) => path.join(dir4, `Document ${n}.docx`);
+  fs.copyFileSync(path.join(FIX, 'cm-A.docx'), K('A')); fs.copyFileSync(path.join(FIX, 'cm-B.docx'), K('B'));
+  ({ app, win, errs } = await launch(newCfg(), [K('A'), K('B')]));
+  await win.waitForFunction(() => document.querySelectorAll('.dlist .drow').length > 0, null, { timeout: 60000 }); await sleep(500);
+  await win.evaluate(() => document.querySelectorAll('.nav-list .nav-item')[2].click()); await sleep(900);
+  const delMark = await win.evaluate(() => [...document.querySelectorAll('.redline .r-del.cm-mark')].map((x) => x.textContent));
+  ok('text deleted under a comment gets the dotted line too (zero-width comment on a deleted sentence)', delMark.some((x) => /乙方可单方解除合同/.test(x)) && delMark.some((x) => /三十/.test(x)), delMark);
+  await win.evaluate(() => document.querySelector('.dlist .drow').click()); await sleep(200); await win.keyboard.press('r'); await sleep(500);
+  const rej = await win.evaluate(() => [...document.querySelectorAll('.redline .cm-mark')].map((x) => x.textContent).join('|'));
+  ok('after rejecting, the restored original text keeps the dotted line', /三十/.test(rej), rej);
+  const rowQ = await win.evaluate(() => { document.querySelector('.fchip.cm').click(); return null; }); await sleep(300);
+  const rq = await win.evaluate(() => [...document.querySelectorAll('.cm-list .cm-q')].map((x) => x.textContent));
+  ok('inspector rows show the commented text', rq.includes('十五日内') && rq.some((x) => /乙方可单方解除合同/.test(x)), rq);
+  const tip = await win.evaluate(() => [...document.querySelectorAll('.cm-row')].filter((x) => x.title).length);
+  ok('inspector rows have no duplicate tooltip for short comments', tip === 0, tip);
+  await shot(win, '10-inspector-quotes');
+  ok('no page errors (extra cases)', errs.length === 0, errs);
+  await app.close();
   console.log(fail ? `\n${fail} FAILED` : '\nall passed');
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); });

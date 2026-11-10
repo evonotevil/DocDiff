@@ -1771,7 +1771,7 @@ export default function App() {
   else if (tab === 0 && richRes && RA && RB) body = richRes.rows.length ? <RichView A={RA} B={RB} res={richRes} selCid={selCid} onSel={setSelCid} hideUnchanged={prefs.hideRich} cm={cmRich} cmOpen={cmOpen?.keys[0] ?? null} jumpTo={cmJump} />
     : <div className="empty-state"><Mascot mood="oops" size={96} /><h2>{t('没找到可以比较的文字')}</h2><div>{t((A.type === 'pdf' || B.type === 'pdf') ? '如果是扫描件，试试「OCR 文本」或「图像」模式。' : '两份文档好像都是空的。')}</div></div>;
   else if (tab === 1 && plainRes && plainBlocks) body = <PlainView A={plainBlocks[0]} B={plainBlocks[1]} res={plainRes} selCid={selCid} onSel={setSelCid} layout={prefs.layout} wrap={prefs.wrap} hideUnchanged={prefs.hidePlain} />;
-  else if (tab === 2 && richRes && RA && RB) body = changes.length ? <RedlineView A={RA} B={RB} res={richRes} selCid={selCid} onSel={setSelCid} decisions={decisions} innerRef={redlineRef} cm={cmRed} cmOpen={cmOpen?.keys[0] ?? null} jumpTo={cmJump} />
+  else if (tab === 2 && richRes && RA && RB) body = changes.length || threads.length ? <RedlineView A={RA} B={RB} res={richRes} selCid={selCid} onSel={setSelCid} decisions={decisions} innerRef={redlineRef} cm={cmRed} cmOpen={cmOpen?.keys[0] ?? null} jumpTo={cmJump} />
     : <div className="empty-state"><Mascot mood="cheer" size={96} act="jump" /><h2>{t(prefs.mascotWalk ? '一字不差' : '没有需要审阅的修订')}</h2>{sameText}</div>;
   else if (tab === 3 && needGate && counts) body = <PageRangeGate mode="image" pagesA={counts.a} pagesB={counts.b} initial={pageRanges[pairSha]} onConfirm={setPageRange} />;
   else if (tab === 3) body = <ImageView head={rangeHead} suspect={suspectPages} state={imgState} mode={prefs.imgMode} zoom={zoom} fade={fade} setFade={setFade} slider={slider} setSlider={setSlider} showBoxes={prefs.showBoxes} onlyDiff={onlyDiffPages} scrollRef={imgScroll} />;
@@ -2010,6 +2010,12 @@ export default function App() {
             </Notice>
           : <Notice tone="info" className="bar" title={t('这份 PDF 的段落读法更新了，上次的 {n} 个决定都已带回。', { n: pdfUpgrade.kept })} />)}
         {tab === 2 && draftSync && draftState.s !== 'none' && internalLeft.length > 0 && !cmSt.keep && !doneOpen && internalNotice('bar cm-int')}
+        {tab === 2 && richRes && !changes.length && threads.length > 0 && (
+          <Notice tone="info" className="bar cm-only" title={t('两份文件的文字一样，只有 {n} 条批注。', { n: threads.length })}>
+            {t('没有需要审阅的修订。纸边的批注标和点线标出了批注的位置，点开可以查看和回复。')}
+            {threads.length > cmCount ? ' ' + t('其中 {n} 条对方已解决，在「批注」里收起。', { n: threads.length - cmCount }) : ''}
+          </Notice>
+        )}
         {lostBanner && (
           <Notice tone="warn" className="bar" title={t('{n} 个决定对不上了。', { n: lostBanner.n })}
             action={<button className="btn sm" onClick={lostBanner.restore}>{t('改回原来的设置')}</button>} onClose={() => setLostBanner(null)}>

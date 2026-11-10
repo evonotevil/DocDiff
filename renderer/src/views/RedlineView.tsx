@@ -10,6 +10,7 @@ import type { CmRowView } from '../lib/comments';
 import { CommentPin } from '../components/Comments';
 import { useScrollToChange } from './RichView';
 import { fmtText } from '../lib/describe';
+import { t } from '../lib/i18n';
 import { useSections, SecHead } from './sections';
 
 const STEP = 60;
@@ -75,10 +76,14 @@ const RedlineRow = React.memo(function RedlineRow({ i, r, A, B, decisions, selCi
   // 界面上：接受 → 新文字，拒绝 → 原文；待议和未处理都还是修订（待议多一层黄色底线）
   const dec = (cid?: number): Decision => { const v = cid === undefined ? undefined : decisions[cid]?.v; return v === 'a' || v === 'r' ? v : undefined; };
   const rp = redlinePieces(r, dec, false);
-  if (!rp) return null;
+  // 1.9.5：整段按决定去掉了，但上面有批注：留一行说明，批注标照常挂着
+  const ghost = () => (cmv?.pins.length
+    ? <div data-row={i} className="has-cm cm-gone"><div className="blk cm-ghost">{t('这一段按你的决定已去掉，批注还在。')}</div><div className="cm-pins"><CommentPin threads={cmv.pins[0].threads} open={!!cmOpen} /></div></div>
+    : null);
+  if (!rp) return ghost();
   const list = rp.block === 'a' ? (r.aList || [r.ai!]) : (r.bList || [r.bi!]);
   const blocks = list.map((k) => (rp.block === 'a' ? A.blocks[k] : B.blocks[k])).filter(Boolean);
-  if (!blocks.length) return null;
+  if (!blocks.length) return ghost();
   const toks: RTok[] = rp.pieces.filter((p) => !p.anchor).map((p) => {
     let cls = p.mark ? CLS[p.mark] : undefined;
     if (!cls && p.fmt) cls = 'r-fmt';

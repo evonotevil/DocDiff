@@ -37,6 +37,8 @@ export function fmtWhen(iso?: string) {
   const day = isEn() ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : `${d.getMonth() + 1}月${d.getDate()}日`;
   return d.getHours() || d.getMinutes() ? `${day} ${p(d.getHours())}:${p(d.getMinutes())}` : day;
 }
+/** 被批注的文字（落在被删的字上时用被删的字），一行 */
+export const quoteOf = (th: CmThread) => (th.root.quote || th.root.delText || '').replace(/\s+/g, ' ').trim();
 const who = (c: DocComment) => (anonymous(c.author) ? t('（没有署名）') : c.author);
 
 export interface CardActs {
@@ -73,6 +75,7 @@ export function CommentCard({ th, acts, onClose, autoReply }: { th: CmThread; ac
         <I.IconComment size={16} /><span className="cm-where" title={where}>{where}</span>
         {onClose && <button type="button" className="ibtn sm" onClick={onClose} aria-label={t('关闭')} title={t('关闭')}><I.IconX /></button>}
       </div>
+      {quoteOf(th) && <div className="cm-quote"><span className="lbl">{t('批注的文字')}</span><span className={`q${th.onDeleted ? ' del' : ''}`} title={quoteOf(th).length > 30 ? quoteOf(th) : undefined}>{quoteOf(th)}</span></div>}
       {th.resolved && !open ? (
         <>
           <div className="cm-meta"><AuthorTag owner={th.owner} /><b>{who(th.root)}</b><span className="cm-done">{t('已解决')}</span></div>
@@ -161,8 +164,9 @@ export function CommentList({ threads, sel, onSel, acts }: { threads: CmThread[]
   };
   const row = (th: CmThread) => (
     <button key={th.key} type="button" data-cm-row={th.key} className={`cm-row${sel === th.key ? ' sel' : ''}`} aria-current={sel === th.key}
-      onClick={(e) => onSel(th, e.currentTarget)} title={th.root.text}>
+      onClick={(e) => onSel(th, e.currentTarget)} title={th.root.text.length > 60 ? th.root.text : undefined}>
       <span className="cm-meta"><AuthorTag owner={th.owner} internal={th.internal && !acts.dropped(th.root.id)} /><b className="grow">{who(th.root)}</b><span className="cm-st">{[th.clause, state(th)].filter(Boolean).join(' · ')}</span></span>
+      {quoteOf(th) && <span className={`cm-q${th.onDeleted ? ' del' : ''}`}>{quoteOf(th)}</span>}
       <span className="cm-text two">{th.root.text}</span>
     </button>
   );

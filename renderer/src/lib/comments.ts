@@ -37,6 +37,8 @@ export interface CmThread {
   marks: CmMark[];
   /** 我方稿的批注、文字没变：在修改后文档（b）上画的位置 */
   bMarks: CmMark[];
+  /** 修订审阅里：被批注的文字被修订换掉时，另一侧（换回来 / 被删掉）的那几个字也画点线 */
+  alt: CmMark[];
   clause: string | null;
   /** 已经有我方回复（文档里有，或在 DocDiff 里写了） */
   replied: boolean;
@@ -109,7 +111,7 @@ export function buildThreads(A: DocModel, B: DocModel, res: DiffResult, o: CmOpt
         key, side, root, replies: reps, owner,
         internal: side === 'b' && owner === 'ours' && normName(root.author) !== me,
         resolved: !!root.done, cids: [], plain: false, changedByThem: false, gone: false,
-        onDeleted: side === 'b' && !!root.delText && !root.quote, marks: [], bMarks: [], clause: null,
+        onDeleted: side === 'b' && !!root.delText && !root.quote, marks: [], bMarks: [], alt: [], clause: null,
         replied: reps.some((x) => isOurs(x.author)) || !!o.localReplies?.[key],
       };
       const cids = new Set<number>();
@@ -122,7 +124,8 @@ export function buildThreads(A: DocModel, B: DocModel, res: DiffResult, o: CmOpt
           if (th.row === undefined) th.row = hit.row;
           const so = offs(hit.row, side);
           const other: CmSide = side === 'a' ? 'b' : 'a';
-          const oo = side === 'a' ? offs(hit.row, other) : null;
+          const oo = offs(hit.row, other);
+          const local = new Set<number>();
           const zero = root.from.b === root.to.b && root.from.c === root.to.c && root.from.o === root.to.o;
           // 这一块里被批注的范围（按单元格）
           const inRange = (c: number, s: number, e: number) => {
@@ -146,14 +149,20 @@ export function buildThreads(A: DocModel, B: DocModel, res: DiffResult, o: CmOpt
               if (e > s) addMark(th.marks, { row: hit.row, side, k: p.k, c: p.c, s, e });
               if (m.op === 0 && !m.fmt) {
                 eq++;
-                if (oo && oo[mi] && e > s) { const q = oo[mi]!; addMark(th.bMarks, { row: hit.row, side: 'b', k: q.k, c: q.c, s: q.s + (s - p.s), e: q.s + (e - p.s) }); }
-              } else { changed++; if (m.cid !== undefined) cids.add(m.cid); }
+                if (side === 'a' && oo[mi] && e > s) { const q = oo[mi]!; addMark(th.bMarks, { row: hit.row, side: 'b', k: q.k, c: q.c, s: q.s + (s - p.s), e: q.s + (e - p.s) }); }
+              } else { changed++; if (m.cid !== undefined) { cids.add(m.cid); local.add(m.cid); } }
             } else if (zero && side === 'b') {
               // 批注落在被删掉的文字上：找同一位置上被删的 token（它们只在 a 侧）
               const prev = so.slice(0, mi).reverse().find((x) => x && x.k === hit.k);
               const at = prev ? prev.e : 0;
-              if (at === root.from!.o && (prev ? prev.c : 0) === root.from!.c && m.op === -1 && m.cid !== undefined) { cids.add(m.cid); changed++; }
+              if (at === root.from!.o && (prev ? prev.c : 0) === root.from!.c && m.op === -1 && m.cid !== undefined) { cids.add(m.cid); local.add(m.cid); changed++; }
             }
+          });
+          // 同一处修订在另一侧的字（拒绝后换回来的原文、被删掉的字）：修订审阅里也画点线
+          if (local.size) r.merged.forEach((m, mi) => {
+            if (m.cid === undefined || !local.has(m.cid) || m[side]) return;
+            const q = oo[mi];
+            if (q && q.e > q.s) addMark(th.alt, { row: hit.row, side: other, k: q.k, c: q.c, s: q.s, e: q.e });
           });
           if (r.blockCid !== undefined && zero && !cids.size) { /* 只有段落格式变化：不算挂在修订上 */ }
         }
@@ -237,7 +246,7 @@ export function cmView(res: DiffResult, threads: CmThread[], mode: 'rich' | 'red
     if (!p) { p = { side: pinSide, threads: [] }; v.pins.push(p); }
     p.threads.push(th);
     if (mode === 'rich') th.marks.forEach((m) => addM(m, th.key));
-    else { th.marks.forEach((m) => addM(m, th.key)); th.bMarks.forEach((m) => addM(m, th.key)); }
+    else { th.marks.forEach((m) => addM(m, th.key)); th.bMarks.forEach((m) => addM(m, th.key)); th.alt.forEach((m) => addM(m, th.key)); }
   }
   for (const [row, ms] of marksByRow) {
     const r = res.rows[row];
