@@ -75,8 +75,12 @@ try {
   assert.ok(update.url.startsWith('https://github.com/evonotevil/DocDiff/releases/'), JSON.stringify(update));
   await evaluate(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
   await delay(200);
-  assert.ok(await evaluate(`!!document.querySelector('.sample-btn')`), 'Sample contract entry missing');
-  await evaluate(`document.querySelector('.sample-btn').click()`);
+  assert.ok(await evaluate(`(() => {
+    const buttons = document.querySelector('#mod-new-h')?.parentElement.querySelectorAll('button') || [];
+    const sample = Array.from(buttons).find(b => /用示例合同试一下|sample contract/i.test(b.textContent));
+    sample?.click();
+    return !!sample;
+  })()`), 'Sample contract entry missing');
   let sampleCompared = false;
   for (let i = 0; i < 60; i++) {
     await evaluate(`(() => {
