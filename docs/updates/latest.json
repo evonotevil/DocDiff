@@ -1,11 +1,11 @@
 {
-  "version": "1.9.3",
-  "pubDate": "2026-11-09",
-  "notes": "· 首页改用统一卡片布局，模板与往来稿新增 30 秒演示。\n· 按 ? 打开快捷键速查，常用按钮的提示也会显示快捷键。\n· Word 格式变化过多时，可以一键只看文字修改。",
+  "version": "1.9.4",
+  "pubDate": "2026-11-10",
+  "notes": "· 统一下拉菜单、输入框、复选框和焦点样式。\n· 修复大行距 PDF 比较时成片报新增或删除的问题，改善跨页续段识别。\n· 带回能对应的 PDF 审阅决定，并提示无法对应的旧决定。",
   "downloads": {
-    "mac-arm64": "https://github.com/evonotevil/DocDiff/releases/download/v1.9.3/DocDiff-1.9.3-mac-arm64.dmg",
-    "mac-x64": "https://github.com/evonotevil/DocDiff/releases/download/v1.9.3/DocDiff-1.9.3-mac-x64.dmg",
-    "win-exe": "https://github.com/evonotevil/DocDiff/releases/download/v1.9.3/DocDiff-Setup-1.9.3.exe",
-    "page": "https://github.com/evonotevil/DocDiff/releases/tag/v1.9.3"
+    "mac-arm64": "https://github.com/evonotevil/DocDiff/releases/download/v1.9.4/DocDiff-1.9.4-mac-arm64.dmg",
+    "mac-x64": "https://github.com/evonotevil/DocDiff/releases/download/v1.9.4/DocDiff-1.9.4-mac-x64.dmg",
+    "win-exe": "https://github.com/evonotevil/DocDiff/releases/download/v1.9.4/DocDiff-Setup-1.9.4.exe",
+    "page": "https://github.com/evonotevil/DocDiff/releases/tag/v1.9.4"
   }
 }

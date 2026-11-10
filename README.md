@@ -31,15 +31,15 @@
 
 ## 下载与安装
 
-当前版本：**v1.9.3**。支持 macOS 11 及以上、Windows 10 / 11（64 位）。
+当前版本：**v1.9.4**。支持 macOS 11 及以上、Windows 10 / 11（64 位）。
 
 | 你的电脑 | 下载文件 | 安装方式 |
 |---|---|---|
-| Mac，Apple 芯片 | [mac-arm64.dmg](https://github.com/evonotevil/DocDiff/releases/download/v1.9.3/DocDiff-1.9.3-mac-arm64.dmg) | 打开 DMG，将 DocDiff 拖入“应用程序” |
-| Mac，Intel 芯片 | [mac-x64.dmg](https://github.com/evonotevil/DocDiff/releases/download/v1.9.3/DocDiff-1.9.3-mac-x64.dmg) | 同上 |
-| Windows 安装版 | [DocDiff-Setup-1.9.3.exe](https://github.com/evonotevil/DocDiff/releases/download/v1.9.3/DocDiff-Setup-1.9.3.exe) | 双击安装，可选择安装位置 |
+| Mac，Apple 芯片 | [mac-arm64.dmg](https://github.com/evonotevil/DocDiff/releases/download/v1.9.4/DocDiff-1.9.4-mac-arm64.dmg) | 打开 DMG，将 DocDiff 拖入“应用程序” |
+| Mac，Intel 芯片 | [mac-x64.dmg](https://github.com/evonotevil/DocDiff/releases/download/v1.9.4/DocDiff-1.9.4-mac-x64.dmg) | 同上 |
+| Windows 安装版 | [DocDiff-Setup-1.9.4.exe](https://github.com/evonotevil/DocDiff/releases/download/v1.9.4/DocDiff-Setup-1.9.4.exe) | 双击安装，可选择安装位置 |
 
-不确定 Mac 的芯片类型？点屏幕左上角苹果菜单，选择“关于本机”查看。下载文件无法打开或提示损坏时，先从 [Release 页面](https://github.com/evonotevil/DocDiff/releases/tag/v1.9.3)重新下载，并用该版本的 `SHA256SUMS.txt` 核对文件。
+不确定 Mac 的芯片类型？点屏幕左上角苹果菜单，选择“关于本机”查看。下载文件无法打开或提示损坏时，先从 [Release 页面](https://github.com/evonotevil/DocDiff/releases/tag/v1.9.4)重新下载，并用该版本的 `SHA256SUMS.txt` 核对文件。
 
 ## 三步开始比较
 
