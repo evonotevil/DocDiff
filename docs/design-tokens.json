@@ -398,6 +398,83 @@
         "name": "diff-move-glyph",
         "value": "#3d1a66",
         "usage": "移动亮面上的符号颜色（编号、＋、−）。"
+      },
+      {
+        "name": "notice-info-border",
+        "value": {
+          "light": "#1899d6",
+          "dark": "#1c6b91"
+        },
+        "usage": "信息提示条的边框（1.9.4，原来写死）。"
+      },
+      {
+        "name": "notice-warn-border",
+        "value": {
+          "light": "#ffc800",
+          "dark": "#6b5a1a"
+        },
+        "usage": "留意提示条的边框（1.9.4）。"
+      },
+      {
+        "name": "notice-err-border",
+        "value": {
+          "light": "#ffb2b2",
+          "dark": "#6b2a2e"
+        },
+        "usage": "出错提示条的边框（1.9.4）。"
+      },
+      {
+        "name": "notice-ok-border",
+        "value": {
+          "light": "#a5ed6e",
+          "dark": "#2b5a14"
+        },
+        "usage": "成功提示条的边框（1.9.4）。"
+      },
+      {
+        "name": "scrim",
+        "value": "#0000001f",
+        "usage": "抽屉后面的浅遮罩（1.9.4）。"
+      },
+      {
+        "name": "scrim-strong",
+        "value": "#0000006b",
+        "usage": "弹窗后面的深遮罩（1.9.4）。"
+      },
+      {
+        "name": "on-solid",
+        "value": "#ffffff",
+        "usage": "实心底上的字和图标：品牌例外里的按钮、编号圆、复选框的勾（1.9.4）。"
+      },
+      {
+        "name": "shade",
+        "value": "#0000001f",
+        "usage": "中性阴影：开关圆钮的投影、浮出小片的投影（1.9.4）。"
+      },
+      {
+        "name": "shade-lip",
+        "value": "#0000002e",
+        "usage": "实心彩色小块的内底边（编号圆、模式图标）（1.9.4）。"
+      },
+      {
+        "name": "shade-text",
+        "value": "#00000066",
+        "usage": "白字压在双色底上时的文字阴影（1.9.4）。"
+      },
+      {
+        "name": "glint",
+        "value": "#ffffff4d",
+        "usage": "进度条上沿的高光（1.9.4）。"
+      },
+      {
+        "name": "glint-weak",
+        "value": "#ffffff1f",
+        "usage": "深色提示条里按钮的悬停底（1.9.4）。"
+      },
+      {
+        "name": "glint-strong",
+        "value": "#ffffff80",
+        "usage": "文件名标签上 × 的悬停底（1.9.4）。"
       }
     ]
   },
@@ -535,12 +612,17 @@
     ]
   },
   "spacing": {
-    "note": "8pt 网格，最小单位 4。",
+    "note": "刻度 4 / 6 / 8 / 12 / 16 / 24 / 32 / 48（规范 4.1）；4px 以下的光学微调不算间距。",
     "tokens": [
       {
         "name": "space-1",
         "value": "4px",
         "usage": "图标与文字之间、计数胶囊内边距。"
+      },
+      {
+        "name": "space-1-5",
+        "value": "6px",
+        "usage": "图标和文字之间、紧挨着的一对小元素之间（1.9.4）。"
       },
       {
         "name": "space-2",
@@ -627,6 +709,21 @@
           "dark": "0 6px 16px rgba(0,0,0,0.5)"
         },
         "usage": "只给浮层（弹出层、审阅栏、弹窗）。其他平面一律无阴影。"
+      },
+      {
+        "name": "shadow-modal",
+        "value": "0 16px 50px #00000055",
+        "usage": "弹窗（1.9.4 收进变量）。"
+      },
+      {
+        "name": "shadow-toast",
+        "value": "0 6px 24px #00000033",
+        "usage": "底部提示条（1.9.4）。"
+      },
+      {
+        "name": "shadow-chip",
+        "value": "0 6px 18px #0000001f",
+        "usage": "画布上浮着的小片（对齐方式片）（1.9.4）。"
       }
     ]
   },

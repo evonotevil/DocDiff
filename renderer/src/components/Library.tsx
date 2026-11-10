@@ -67,7 +67,7 @@ function TemplateRow({ tpl, n, onUse, onAddVersion, onRename, onDelete, onDelete
       {edit === null && <button type="button" className="row-open" title={tpl.name} aria-label={t('用模板「{n}」比较', { n: tpl.name })} onClick={() => onUse(tpl)} />}
       <I.FileGlyph type={latest?.file.ext || 'docx'} size={22} />
       {edit !== null
-        ? <input className="lib-edit" autoFocus value={edit} onClick={(e) => e.stopPropagation()} onChange={(e) => setEdit(e.target.value)}
+        ? <input className="tin s lib-edit" autoFocus value={edit} onClick={(e) => e.stopPropagation()} onChange={(e) => setEdit(e.target.value)}
             onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter' && edit.trim()) { onRename(tpl, edit.trim()); setEdit(null); } if (e.key === 'Escape') setEdit(null); }}
             onBlur={() => { if (edit.trim() && edit.trim() !== tpl.name) onRename(tpl, edit.trim()); setEdit(null); }} aria-label={t('模板名称')} />
         : <span className="nm" title={tpl.name}>{tpl.name}</span>}

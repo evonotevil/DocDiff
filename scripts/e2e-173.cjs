@@ -184,9 +184,10 @@ async function testKeyboard() {
   let { app, win } = await openReview(cfg);
   await app.close();
   ({ app, win } = await launch(cfg, []));
-  await win.waitForSelector('.recent-item', { timeout: 20000 });
-  const vis = await win.evaluate(() => { const x = document.querySelector('.recent-item .x'); const cs = getComputedStyle(x); return { op: cs.opacity, vis: cs.visibility, pe: cs.pointerEvents }; });
-  ok(vis.op === '1' && vis.vis === 'visible', `删除按钮不悬停也可见（opacity ${vis.op}）`);
+  // 1.8 起首页是 RecentRow：删除在行尾“…”菜单里（1.9.4 更新选择器）
+  await win.waitForSelector('.recent-row', { timeout: 20000 });
+  const vis = await win.evaluate(() => { const x = document.querySelector('.recent-row .btn.icon[aria-label="更多"]'); const cs = getComputedStyle(x); return { op: cs.opacity, vis: cs.visibility, pe: cs.pointerEvents }; });
+  ok(vis.op === '1' && vis.vis === 'visible', `“…”（含删除）不悬停也可见（opacity ${vis.op}）`);
   let hidden = 0;
   for (let i = 0; i < 25; i++) {
     await win.keyboard.press('Tab');

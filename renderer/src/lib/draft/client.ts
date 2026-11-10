@@ -80,12 +80,20 @@ let bgListener: ((e: DraftBehind) => void) | null = null;
 export function onDraftBackground(f: ((e: DraftBehind) => void) | null) { bgListener = f; }
 
 /** “待补写”登记（设置里的 draft-pending）：重启后提示，打开这一对文件时自动补写 */
-type PendingRec = { path?: string; name: string; behind: number; at: number; s: DraftKind };
+type PendingRec = { path?: string; name: string; behind: number; at: number; s: DraftKind; /** 1.9.4：用户勾了“以后启动时不再提示”。记录还在，再打开时照样补写 */ muted?: boolean };
 const PENDING = 'draft-pending';
 export function pendingDrafts(): Record<string, PendingRec> { const v = getSetting<Record<string, PendingRec>>(PENDING); return v && typeof v === 'object' ? { ...v } : {}; }
+/** 1.9.4：启动时的提示里勾了“以后启动时不再提示”：这几条以后启动时不再弹 */
+export function mutePending(pks: string[]) {
+  const all = pendingDrafts();
+  let n = 0;
+  for (const pk of pks) if (all[pk] && !all[pk].muted) { all[pk] = { ...all[pk], muted: true }; n++; }
+  if (n) setSetting(PENDING, all);
+}
 function markPending(pk: string, rec: PendingRec | null) {
   const all = pendingDrafts();
-  if (rec) all[pk] = rec; else { if (!(pk in all)) return; delete all[pk]; }
+  // 同一份审阅稿再次登记时，保留“不再提示”（用户已经知道这份没写完；换了审阅稿才重新提示）
+  if (rec) all[pk] = all[pk]?.muted && all[pk].path === rec.path ? { ...rec, muted: true } : rec; else { if (!(pk in all)) return; delete all[pk]; }
   setSetting(PENDING, all);
 }
 

@@ -6,6 +6,7 @@ import { isPageNumberText } from './model';
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 
+import { gapBreaks, fullLines, type PLine } from './pdfPara';
 export class NeedPassword extends Error { constructor(public wrong: boolean) { super(wrong ? '密码错误' : '需要密码'); this.name = 'NeedPassword'; } }
 
 // pdf.js 的字符映射表（CMap）和标准字体数据（1.7.4）。
@@ -241,15 +242,18 @@ export async function parsePdf(file: FileInfo, password?: string): Promise<DocMo
     blocks.push(blk);
     cur = null;
   };
+  // 1.9.4：按页估计常见行距（大行距 PDF 不再每行一段），见 pdfPara.ts
+  const bigGap = gapBreaks(body as PLine[]);
+  const full = fullLines(body as PLine[]);
   for (let i = 0; i < body.length; i++) {
     const l = body[i];
     const prev = i > 0 ? body[i - 1] : null;
     if (!cur || !prev) { cur = { lines: [l] }; continue; }
-    const lh = Math.max(prev.size, l.size) * 1.2;
     const gap = prev.y - l.y;
     const newPara =
-      l.page !== prev.page ? !(prev.text.length > 40 && !/[.。!！?？:：;；]$/.test(prev.text.trim())) :
-      gap > lh * 1.55 || gap < -2 ||
+      // 跨页：上一页最后一行没以句末标点结尾，并且够长（> 40 字）或写满了一整行（1.9.4：窄栏、大字号时一行不到 40 字），就是同一段接着写
+      l.page !== prev.page ? !((prev.text.length > 40 || full[i - 1]) && !/[.。!！?？:：;；]$/.test(prev.text.trim())) :
+      bigGap[i] || gap < -2 ||
       Math.abs(l.size - prev.size) > median * 0.12 ||
       BULLET.test(l.text) || (l as any).cols || (prev as any).cols ||
       (prev.text.trim().length < 40 && /[.。!！?？:：]$/.test(prev.text.trim())) ||

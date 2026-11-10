@@ -3,6 +3,7 @@ import { t } from '../lib/i18n';
 import { Modal } from './Modal';
 import { Notice } from './Panel';
 import * as I from './icons';
+import { TextInput, Checkbox, OptionCard } from './Form';
 
 export type ExportKind = 'redline' | 'final' | 'report';
 
@@ -34,31 +35,22 @@ export function ExportDialog({ total, undecided, risks, author, setAuthor, revie
           {t('「{f}」在对方原文件上写好了你的修订和批注，格式不变，不用再导出。这里导出的是其他用途的文件。', { f: draft.name })}
         </Notice>
       )}
-      <div className="exp-opts" role="radiogroup" aria-label={t('导出类型')}>
-        {opts.map(([k, title, desc]) => (
-          <button key={k} type="button" role="radio" aria-checked={kind === k} className={`exp-opt ${kind === k ? 'on' : ''}`} onClick={() => setKind(k)}>
-            <span className="r" aria-hidden="true" />
-            <b>{title}</b>
-            <span className="d">{desc}</span>
-          </button>
-        ))}
+      <div className="opt-cards" role="radiogroup" aria-label={t('导出类型')}>
+        {opts.map(([k, title, desc]) => <OptionCard key={k} checked={kind === k} onSelect={() => setKind(k)} title={title}>{desc}</OptionCard>)}
       </div>
       {kind !== 'report' && (
         <>
           <div className="field-row">
             <div className="field grow">
               <label htmlFor="exp-author">{t('修订作者')}</label>
-              <input id="exp-author" value={author} onChange={(e) => setAuthor(e.target.value)} />
+              <TextInput size="l" id="exp-author" value={author} onChange={(e) => setAuthor(e.target.value)} />
             </div>
             <div className="field grow">
               <label htmlFor="exp-reviewer">{t('批注署名')}</label>
-              <input id="exp-reviewer" value={reviewer} onChange={(e) => setReviewer(e.target.value)} />
+              <TextInput size="l" id="exp-reviewer" value={reviewer} onChange={(e) => setReviewer(e.target.value)} />
             </div>
           </div>
-          <label className="check-line">
-            <input type="checkbox" checked={commentAccepted} onChange={(e) => setCommentAccepted(e.target.checked)} />
-            <span>{t('接受的修订也加批注')}</span>
-          </label>
+          <Checkbox className="exp-check" checked={commentAccepted} onChange={setCommentAccepted}>{t('接受的修订也加批注')}</Checkbox>
         </>
       )}
       {undecided > 0 && (

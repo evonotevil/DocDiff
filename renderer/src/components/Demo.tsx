@@ -130,7 +130,7 @@ function Stage({ kind, step, beat, still }: { kind: DemoKind; step: number; beat
         <div className="demo-scene" ref={scene} style={{ width: W, height: H }}>
           {kind === 'tpl' ? <TplScene step={step} s={beat.s} /> : <LibScene step={step} s={beat.s} />}
           {beat.drag && <div className="demo-ghost" style={{ left: cur.x - 30, top: cur.y - 18 }}><TypeTag type="docx" /><span>{t('服务协议-对方修改.docx')}</span></div>}
-          {!still && beat.target && <span className="demo-cursor" style={{ left: cur.x, top: cur.y }}><svg width="22" height="26" viewBox="0 0 22 26"><path d="M2 2l16.5 12.2-7.3.9 4.3 8.2-3.2 1.6-4.3-8.3L2 21.6z" fill="#3c3c3c" stroke="#fff" strokeWidth="2" strokeLinejoin="round" /></svg>{ripple > 0 && beat.click && <i key={ripple} className="demo-ripple" />}</span>}
+          {!still && beat.target && <span className="demo-cursor" style={{ left: cur.x, top: cur.y }}><svg width="22" height="26" viewBox="0 0 22 26"><path d="M2 2l16.5 12.2-7.3.9 4.3 8.2-3.2 1.6-4.3-8.3L2 21.6z" style={{ fill: 'var(--l-title)', stroke: 'var(--on-solid)' }} strokeWidth="2" strokeLinejoin="round" /></svg>{ripple > 0 && beat.click && <i key={ripple} className="demo-ripple" />}</span>}
         </div>
       </div>
     </div>

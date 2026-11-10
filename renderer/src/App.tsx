@@ -28,6 +28,7 @@ import { HomePeek, ReviewPeek, useReviewPeek, WaitMascot, useCare } from './comp
 import { markSeen, countCompare, gate as mascotGate } from './lib/mascot/store';
 import { Wordmark } from './components/Logo';
 import { Switch, Opt, Seg, Kbd, useMedia, splitName, MidName, TypeTag, Info } from './components/ui';
+import { Select, Slider, TextInput, Textarea, Checkbox } from './components/Form';
 import * as I from './components/icons';
 import { RichView } from './views/RichView';
 import { PlainView } from './views/PlainView';
@@ -38,7 +39,7 @@ import { noteText, riskTag } from './lib/describe';
 import { useDiff } from './lib/useDiff';
 import { useDrop } from './lib/drop';
 import { buildPlan } from './lib/draft/plan';
-import { DraftSync, cleanStem, type DraftState, type DraftBehind, flushDrafts, onDraftBackground, pendingDrafts } from './lib/draft/client';
+import { DraftSync, cleanStem, type DraftState, type DraftBehind, flushDrafts, onDraftBackground, pendingDrafts, mutePending } from './lib/draft/client';
 import { DraftChip, REASON } from './components/DraftChip';
 import { DemoDialog, type DemoKind } from './components/Demo';
 import { KeysModal } from './components/SettingsModal';
@@ -211,7 +212,7 @@ function PasswordModal({ name, wrong, onOk, onCancel }: { name: string; wrong: b
   return (
     <Modal title={t('这个 PDF 有密码')} mood="think" onClose={onCancel} footer={<><button className="btn plain" onClick={onCancel}>{t('取消')}</button><button className="btn primary" onClick={() => onOk(v)}>{t('打开')}</button></>}>
       <p>{t('「{f}」受密码保护。', { f: name })}{wrong && <b className="danger-text">{t('密码不对，再试一次。')}</b>}</p>
-      <input type="password" autoFocus value={v} onChange={(e) => setV(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && onOk(v)} placeholder={t('输入密码')} aria-label={t('输入密码')} />
+      <TextInput size="l" type="password" autoFocus value={v} onChange={(e) => setV(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && onOk(v)} placeholder={t('输入密码')} aria-label={t('输入密码')} />
     </Modal>
   );
 }
@@ -222,7 +223,7 @@ function PasteModal({ side, onOk, onCancel }: { side: Side; onOk: (t: string) =>
     <Modal title={t('粘贴{s}的文字', { s: sideLabel(side) })} onClose={onCancel} className="wide"
       footer={<><button className="btn plain" onClick={onCancel}>{t('取消')}</button><button className="btn primary" disabled={!v.trim()} onClick={() => onOk(v)}>{t('使用这段文字')}</button></>}>
       <p>{t('直接粘贴从网页、邮件、聊天软件里复制的内容。')}</p>
-      <textarea autoFocus value={v} onChange={(e) => setV(e.target.value)} placeholder={t('在这里粘贴…（{k}）', { k: kbd('mod+V') })} aria-label={t('粘贴文字')} />
+      <Textarea autoFocus value={v} onChange={(e) => setV(e.target.value)} placeholder={t('在这里粘贴…（{k}）', { k: kbd('mod+V') })} aria-label={t('粘贴文字')} />
     </Modal>
   );
 }
@@ -754,6 +755,11 @@ export default function App() {
 
   // ---------- 解读：条款、风险、比较范围 ----------
   const clauses = useMemo(() => (richRes && RA && RB ? clauseMap(richRes, RA.blocks, RB.blocks) : new Map<number, string | null>()), [richRes, RA, RB]);
+  /** 1.9.4：认回决定时核对所在条款；PDF 记下段落读法版本 */
+  const decOpt = { clauses, pdf: A?.type === 'pdf' || B?.type === 'pdf' };
+  const [pdfUpgrade, setPdfUpgrade] = useState<{ kept: number; lost: number; pk: string } | null>(null);
+  // 全部认回时只是信息提示，停一会儿自动收起
+  useEffect(() => { if (pdfUpgrade && !pdfUpgrade.lost) { const id = setTimeout(() => setPdfUpgrade(null), 3200); return () => clearTimeout(id); } }, [pdfUpgrade]);
   const risks: Risk[] = useMemo(() => (richRes ? detectRisks(richRes, clauses, { money: prefs.riskMoney, date: prefs.riskDate, keywords: prefs.keywords }) : []), [richRes, clauses, prefs.riskMoney, prefs.riskDate, prefs.keywords]);
   const riskById = useMemo(() => new Map(risks.map((r) => [r.cid, r])), [risks]);
   const scope = useMemo(() => (A && B ? scopeInfo(A, B, opts, richRes) : null), [A, B, optKey, richRes, lang]);
@@ -794,9 +800,12 @@ export default function App() {
   const optSnap = { ignoreCase: prefs.ignoreCase, ignoreWs: prefs.ignoreWs, precision: prefs.precision, detectMoves: prefs.detectMoves, normPunct: prefs.normPunct, normQuotes: prefs.normQuotes, formatting };
   useEffect(() => {
     if (!richRes) return;
-    let { map, lost } = loadDecisions(pk, richRes.changes);
+    const lo = loadDecisions(pk, richRes.changes, decOpt);
+    let { map, lost } = lo;
+    // 1.9.4：PDF 段落读法更新后第一次打开这对文件：对不上的明确提示一次（Figma G7）
+    setPdfUpgrade(lo.upgrade ? { ...lo.upgrade, pk } : null);
     if (!Object.keys(map).length && carryFrom.current && carryFrom.current !== pk) {
-      map = loadDecisions(carryFrom.current, richRes.changes).map;
+      map = loadDecisions(carryFrom.current, richRes.changes, decOpt).map;
       if (Object.keys(map).length) flash(t('文件更新了，已带回上一版里还对得上的 {n} 个决定', { n: Object.values(map).filter((d) => d.v).length }));
     }
     carryFrom.current = '';
@@ -817,7 +826,7 @@ export default function App() {
     } else setLostBanner(null);
     lastLoaded.current = { pk, snap, opts: optSnap };
   }, [richRes]);
-  useEffect(() => { if (richRes && decFor.current === richRes) { saveDecisions(pk, richRes.changes, decisions); draftSync?.update(decisions); } }, [decisions]);
+  useEffect(() => { if (richRes && decFor.current === richRes) { saveDecisions(pk, richRes.changes, decisions, decOpt); draftSync?.update(decisions); } }, [decisions]);
 
   // ---------- 审阅稿（1.8）：修改后文档是 Word 时，决定自动写进它旁边的一份拷贝 ----------
   const [draftSync, setDraftSync] = useState<DraftSync | null>(null);
@@ -900,10 +909,12 @@ export default function App() {
   }, [decisions, thread, richRes]);
   // 审阅稿离开界面后在后台没能写完、或上次退出时没写完：明确告诉用户哪些决定还没写进去、怎么补
   const [behindDlg, setBehindDlg] = useState<{ mode: 'bg' | 'start' | 'quit'; items: DraftBehind[] } | null>(null);
+  /** 1.9.4：启动时的提示里“以后启动时不再提示” */
+  const [behindMute, setBehindMute] = useState(false);
   useEffect(() => {
     onDraftBackground((e) => setBehindDlg((d) => ({ mode: 'bg', items: [...(d && d.mode !== 'quit' ? d.items.filter((x) => x.pk !== e.pk) : []), e] })));
     const p = pendingDrafts();
-    const items = Object.entries(p).map(([pk, r]) => ({ pk, path: r.path, name: r.name, behind: r.behind, s: r.s }));
+    const items = Object.entries(p).filter(([, r]) => !r.muted).map(([pk, r]) => ({ pk, path: r.path, name: r.name, behind: r.behind, s: r.s }));
     if (items.length) setBehindDlg({ mode: 'start', items });
     return () => onDraftBackground(null);
   }, []);
@@ -1307,10 +1318,10 @@ export default function App() {
       {behindDlg && (() => {
         const why = (x: DraftBehind) => x.s === 'locked' ? t('Word 正在使用这份审阅稿') : x.s === 'modified' ? t('审阅稿在 DocDiff 之外被改过，为了不覆盖已暂停') : x.s === 'gone' ? t('审阅稿被移走或删除了') : x.s === 'nowrite' ? t('文件夹写不进去') : x.s === 'error' ? t('写入出错{e}', { e: x.error ? colon() + x.error : '' }) : t('还没来得及写完');
         const quit = behindDlg.mode === 'quit';
-        const close = () => { if (quit) api.closeReply?.(false); setBehindDlg(null); };
+        const close = () => { if (quit) api.closeReply?.(false); if (behindDlg.mode === 'start' && behindMute) mutePending(behindDlg.items.map((x) => x.pk)); setBehindMute(false); setBehindDlg(null); };
         return (
           <Modal title={quit ? t('还有决定没写进审阅稿') : behindDlg.mode === 'start' ? t('上次有决定没写进审阅稿') : t('有决定没写进审阅稿')} mood="think" onClose={close} className="behind-dlg"
-            footer={quit ? <><button className="btn" onClick={() => { setBehindDlg(null); api.closeReply?.(true); }}>{t('仍然退出')}</button><button className="btn primary" onClick={close}>{t('先不退出')}</button></> : <button className="btn primary" onClick={close}>{t('知道了')}</button>}>
+            footer={quit ? <><button className="btn" onClick={() => { setBehindDlg(null); api.closeReply?.(true); }}>{t('仍然退出')}</button><button className="btn primary" onClick={close}>{t('先不退出')}</button></> : <>{behindDlg.mode === 'start' && <Checkbox className="behind-mute" checked={behindMute} onChange={setBehindMute}>{t('以后启动时不再提示')}</Checkbox>}<button className="btn primary" onClick={close}>{t('知道了')}</button></>}>
             <ul className="behind-list">
               {behindDlg.items.map((x) => (
                 <li key={x.pk}><div className="file-row"><TypeTag type="docx" /><MidName name={x.name} /></div><p className="cap">{t('{n} 个决定没写进去', { n: x.behind })} · {why(x)}</p></li>
@@ -1621,16 +1632,14 @@ export default function App() {
   </>);
   else if (tab === 3) canvasTools = (<>
     <Seg value={prefs.imgMode} options={[['split', t('并排')], ['diff', t('差异')], ['fade', t('淡化')], ['slider', t('滑块')]]} onChange={set('imgMode')} label={t('对比方式')} />
-    {prefs.imgMode === 'fade' && <input type="range" className="range" style={{ width: 140 }} min={0} max={100} value={fade} onChange={(e) => setFade(Number(e.target.value))} aria-label={t('淡化程度')} title={t('左边是原始，右边是修改后')} />}
-    <select className="sel" value={zoom} onChange={(e) => setZoom(Number(e.target.value))} title={t('缩放')} aria-label={t('缩放')}>
-      {[0.5, 0.75, 1, 1.25, 1.5, 2].map((z) => <option key={z} value={z}>{z * 100}%</option>)}
-    </select>
+    {prefs.imgMode === 'fade' && <span className="fade-ctl"><span className="cap">{t('原始')}</span><Slider value={fade} onChange={setFade} label={t('淡化程度')} valueText={t('淡化 {n}%', { n: fade })} width={140} /><span className="cap">{t('修改后')}</span></span>}
+    <Select size="s" label={t('缩放')} title={t('缩放')} value={zoom} onChange={setZoom} minWidth={120}
+      options={[0.5, 0.75, 1, 1.25, 1.5, 2].map((z) => ({ value: z, label: `${z * 100}%` }))} />
   </>);
   if (tab === 4) canvasTools = (<>
     {canvasTools}
-    <select className="sel" value={prefs.ocrLang} onChange={(e) => set('ocrLang')(e.target.value as OcrLang)} disabled={ocr.status === 'running'} aria-label={t('识别语言')}>
-      <option value="chi_sim+eng">{t('中文 + 英文')}</option><option value="chi_sim">{t('仅中文')}</option><option value="eng">{t('仅英文')}</option>
-    </select>
+    <Select size="s" label={t('识别语言')} value={prefs.ocrLang} onChange={(v) => set('ocrLang')(v as OcrLang)} disabled={ocr.status === 'running'}
+      options={[{ value: 'chi_sim+eng', label: t('中文 + 英文') }, { value: 'chi_sim', label: t('仅中文') }, { value: 'eng', label: t('仅英文') }]} />
     {ocr.status === 'running' ? <button className="btn sm" onClick={cancelOcr}>{t('取消识别')}</button>
       : ocrRes ? <button className="btn sm" onClick={() => runOcr()}>{t('重新识别')}</button> : null}
   </>);
@@ -1698,9 +1707,8 @@ export default function App() {
       <Opt label={t('标出差异区域')}><Switch on={prefs.showBoxes} onChange={set('showBoxes')} label={t('标出差异区域')} /></Opt>
       <Opt label={t('只看有差异的页')}><Switch on={onlyDiffPages} onChange={setOnlyDiffPages} label={t('只看有差异的页')} /></Opt>
       <Opt label={t('灵敏度')}>
-        <select className="sel" value={prefs.threshold} onChange={(e) => set('threshold')(Number(e.target.value))} aria-label={t('灵敏度')}>
-          <option value={0.03}>{t('很高')}</option><option value={0.1}>{t('标准')}</option><option value={0.2}>{t('较低')}</option><option value={0.35}>{t('低')}</option>
-        </select>
+        <Select size="s" label={t('灵敏度')} value={prefs.threshold} onChange={set('threshold')} minWidth={120}
+          options={[{ value: 0.03, label: t('很高') }, { value: 0.1, label: t('标准') }, { value: 0.2, label: t('较低') }, { value: 0.35, label: t('低') }]} />
       </Opt>
     </>
   ) : (
@@ -1888,6 +1896,12 @@ export default function App() {
           <Notice className="bar" title={t('「{f}」刚刚在磁盘上被修改了', { f: changedSides.map((s) => docs[s]?.file.name).join('」/「') })}
             action={<button className="btn sm" onClick={reloadChanged}>{t('重新比较')}</button>} onClose={() => setChangedSides([])} closeLabel={t('忽略')} />
         )}
+        {pdfUpgrade && pdfUpgrade.pk === pk && (pdfUpgrade.lost > 0
+          ? <Notice tone="warn" className="bar" title={t('这份 PDF 的段落读法更新了，上次的 {n} 个决定对不上。', { n: pdfUpgrade.lost })}
+              action={<button className="btn sm" onClick={() => setPdfUpgrade(null)}>{t('知道了')}</button>}>
+              {pdfUpgrade.kept > 0 ? t('对得上的 {n} 个已经带回。对不上的不会挪到别的条款，这几处请重新看一下。', { n: pdfUpgrade.kept }) : t('对不上的不会挪到别的条款，这几处请重新看一下。')}
+            </Notice>
+          : <Notice tone="info" className="bar" title={t('这份 PDF 的段落读法更新了，上次的 {n} 个决定都已带回。', { n: pdfUpgrade.kept })} />)}
         {lostBanner && (
           <Notice tone="warn" className="bar" title={t('{n} 个决定对不上了。', { n: lostBanner.n })}
             action={<button className="btn sm" onClick={lostBanner.restore}>{t('改回原来的设置')}</button>} onClose={() => setLostBanner(null)}>
@@ -1907,7 +1921,7 @@ export default function App() {
         )}
         {persist.review && (
           <Notice tone="warn" className="bar persist-warn" role="alert" title={t('审阅结论没能保存到本机。')}
-            action={<button className="btn sm" onClick={() => { if (richRes && decFor.current === richRes) saveDecisions(pk, richRes.changes, decisions); }}>{t('重试保存')}</button>}>
+            action={<button className="btn sm" onClick={() => { if (richRes && decFor.current === richRes) saveDecisions(pk, richRes.changes, decisions, decOpt); }}>{t('重试保存')}</button>}>
             {t('结论还在这个窗口里，没有丢；关闭窗口前可以先导出 Word 修订稿或比对报告。下一次保存成功后，这条提示会自动消失。')}<small className="persist-err">{persist.review}</small>
           </Notice>
         )}
@@ -1948,7 +1962,7 @@ export default function App() {
               </>
             ) : (
               <>
-                <input className="grow" autoFocus value={editName} onChange={(e) => setEditName(e.target.value)} aria-label={t('审阅人姓名')}
+                <TextInput size="s" className="grow" autoFocus value={editName} onChange={(e) => setEditName(e.target.value)} aria-label={t('审阅人姓名')}
                   onKeyDown={(e) => { if (e.key === 'Enter' && editName.trim()) { setPrefs((p) => ({ ...p, reviewerName: editName.trim(), reviewerInitials: initialsOf(editName.trim()), reviewerAsked: true })); setEditName(null); } if (e.key === 'Escape') setEditName(null); }} />
                 <button className="btn sm primary" disabled={!editName.trim()} onClick={() => { setPrefs((p) => ({ ...p, reviewerName: editName.trim(), reviewerInitials: initialsOf(editName.trim()), reviewerAsked: true })); setEditName(null); }}>{t('保存')}</button>
               </>

@@ -1,5 +1,6 @@
 // 大文件先确认（1.7.3）：图像 / OCR 比较超过 300 页时，先说清楚页数和预计时间，
 // 让用户选择比较全部，还是只比较一段页码。以前这里会静默截到前 300 页。
+import { NumberInput } from './Form';
 import React, { useState } from 'react';
 import { t } from '../lib/i18n';
 import type { PageRange } from '../lib/pages';
@@ -39,9 +40,9 @@ export function PageRangeGate({ mode, pagesA, pagesB, initial, onConfirm }: {
         <div className="gate-or">{t('或者')}</div>
         <form className="gate-range" onSubmit={(ev) => { ev.preventDefault(); if (valid) onConfirm({ from: f, to: e }); }}>
           <label>{t('只比较第')}</label>
-          <input className="inp num" type="number" min={1} max={total} value={from} onChange={(ev) => setFrom(ev.target.value)} aria-label={t('起始页')} />
+          <NumberInput value={from} onChange={setFrom} min={1} max={total} label={t('起始页')} error={!valid} />
           <label>{t('到')}</label>
-          <input className="inp num" type="number" min={1} max={total} value={to} onChange={(ev) => setTo(ev.target.value)} aria-label={t('结束页')} />
+          <NumberInput value={to} onChange={setTo} min={1} max={total} label={t('结束页')} error={!valid} />
           <label>{t('页')}</label>
           <button type="submit" className="btn" disabled={!valid}>{t('比较这些页')}</button>
         </form>

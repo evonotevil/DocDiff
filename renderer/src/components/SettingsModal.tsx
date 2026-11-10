@@ -9,6 +9,7 @@ import { Mascot, useMascotOn } from './Mascot';
 import { Dex, dexComplete } from './Dex';
 import { resetMascot, mascotData } from '../lib/mascot/store';
 import { Switch, Opt, Seg, Kbd, Info } from './ui';
+import { TextInput } from './Form';
 import { NameEditor } from './NameEditor';
 import * as I from './icons';
 
@@ -113,9 +114,9 @@ function KeywordEditor({ value, onChange }: { value: string[]; onChange: (v: str
         {!value.length && <span className="kw-empty">{t('还没有关键词')}</span>}
       </div>
       <div className="kw-add">
-        <input id="kw-input" value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } }} placeholder={t('输入关键词，回车添加')} aria-label={t('添加关键词')} />
-        <button className="btn sm" onClick={add} disabled={!draft.trim()}>{t('添加')}</button>
-        <button className="btn sm plain" onClick={() => onChange(defaultKeywords(isEn()))}>{t('恢复默认')}</button>
+        <TextInput size="m" id="kw-input" value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } }} placeholder={t('输入关键词，回车添加')} aria-label={t('添加关键词')} />
+        <button className="btn" onClick={add} disabled={!draft.trim()}>{t('添加')}</button>
+        <button className="btn plain" onClick={() => onChange(defaultKeywords(isEn()))}>{t('恢复默认')}</button>
       </div>
     </div>
   );
@@ -208,12 +209,12 @@ export function SettingsModal({ v, set, onClose, upd, initialTab = 'general', sa
               <section className="set-sec" aria-labelledby="rv-s1">
                 <SH id="rv-s1">{t('审阅人')}</SH>
                 <div className="field-row">
-                  <div className="field grow"><label htmlFor="rv-name">{t('姓名')}<Info label={t('姓名')}>{t('审阅稿里的修订和批注、导出的报告都署这个名字。改名后，已经做过的决定也会改用新名字。')}</Info></label><input id="rv-name" value={v.reviewerName} onChange={(e) => { set('reviewerName', e.target.value); if (!v.reviewerInitials || v.reviewerInitials === initialsOf(v.reviewerName)) set('reviewerInitials', initialsOf(e.target.value)); }} /></div>
-                  <div className="field narrow"><label htmlFor="rv-ini">{t('缩写')}</label><input id="rv-ini" value={v.reviewerInitials} maxLength={4} onChange={(e) => set('reviewerInitials', e.target.value)} /></div>
+                  <div className="field grow"><label htmlFor="rv-name">{t('姓名')}<Info label={t('姓名')}>{t('审阅稿里的修订和批注、导出的报告都署这个名字。改名后，已经做过的决定也会改用新名字。')}</Info></label><TextInput size="l" id="rv-name" value={v.reviewerName} onChange={(e) => { set('reviewerName', e.target.value); if (!v.reviewerInitials || v.reviewerInitials === initialsOf(v.reviewerName)) set('reviewerInitials', initialsOf(e.target.value)); }} /></div>
+                  <div className="field narrow"><label htmlFor="rv-ini">{t('缩写')}</label><TextInput size="l" id="rv-ini" value={v.reviewerInitials} maxLength={4} onChange={(e) => set('reviewerInitials', e.target.value)} /></div>
                 </div>
                 <div className="field">
                   <label htmlFor="rv-author">{t('修订作者的默认名称')}<Info label={t('修订作者的默认名称')}>{t('Word 里的修订记的是“谁改了文字”，也就是对方。导出时还可以按文件单独改。')}</Info></label>
-                  <input id="rv-author" value={v.authorName} placeholder={t('从对方文件读取，读不到时用“修改方”')} onChange={(e) => set('authorName', e.target.value)} />
+                  <TextInput size="l" id="rv-author" value={v.authorName} placeholder={t('从对方文件读取，读不到时用“修改方”')} onChange={(e) => set('authorName', e.target.value)} />
                 </div>
                 <Opt label={t('接受的修订也加批注')} hint={t('关掉后，只有拒绝和待议带批注')}><Switch on={v.commentAccepted} onChange={(x) => set('commentAccepted', x)} label={t('接受的修订也加批注')} /></Opt>
               </section>

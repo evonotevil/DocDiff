@@ -6,6 +6,7 @@ import { Popover, MenuItem } from './Popover';
 import { Modal } from './Modal';
 import { Notice } from './Panel';
 import { Seg, MidName, TypeTag, Info } from './ui';
+import { Select } from './Form';
 import { useDrop } from '../lib/drop';
 import type { FileInfo } from '../lib/model';
 import type { Thread, ThreadVersion, Side, Template } from '../lib/library';
@@ -44,7 +45,7 @@ function ThreadRow({ th, onOpen, onRename, onArchive, onDelete }: { th: Thread; 
       {edit === null && <button type="button" className="row-open" title={th.name} aria-label={t('打开往来稿「{n}」', { n: th.name })} onClick={() => onOpen(th)} />}
       <I.FileGlyph type={last?.file.ext || 'docx'} size={22} />
       {edit !== null
-        ? <input className="lib-edit" autoFocus value={edit} onClick={(e) => e.stopPropagation()} onChange={(e) => setEdit(e.target.value)} aria-label={t('往来稿名称')}
+        ? <input className="tin s lib-edit" autoFocus value={edit} onClick={(e) => e.stopPropagation()} onChange={(e) => setEdit(e.target.value)} aria-label={t('往来稿名称')}
             onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter' && edit.trim()) { onRename(th, edit.trim()); setEdit(null); } if (e.key === 'Escape') setEdit(null); }}
             onBlur={() => { if (edit.trim() && edit.trim() !== th.name) onRename(th, edit.trim()); setEdit(null); }} />
         : <span className="nm" title={th.name}>{th.name}</span>}
@@ -61,6 +62,11 @@ function ThreadRow({ th, onOpen, onRename, onArchive, onDelete }: { th: Thread; 
 
 /** 往来稿里的工具栏：合同名 + 正在比的两版，点开是版本链（代替两个文件片） */
 /** 版本的显示名：有名称时「V3 · 名称」（1.9.1） */
+/** 版本选项（1.9.4，和版本链同一写法）：V 编号（我方 Macaw、对方 Fox）+ 我方 / 对方 + 名称；名称放不下就省略，悬停看全名 */
+function VerOpt({ v }: { v: ThreadVersion }) {
+  const name = v.label || v.file.name;
+  return <><span className={`vopt-n ${v.side === 'ours' ? 'me' : 'them'}`}>V{v.n}</span><span className="vopt-s">{sideLabel(v.side)}</span><span className="vopt-l" title={name}>{name}</span></>;
+}
 export const verName = (v: ThreadVersion) => (v.label ? `V${v.n} · ${v.label}` : `V${v.n}`);
 
 export function VersionChip({ th, a, b, tpl, progress, onPick, onAdd, onRename, onDropFiles, onLabel, onDeleteVersion }: {
@@ -79,6 +85,8 @@ export function VersionChip({ th, a, b, tpl, progress, onPick, onAdd, onRename, 
   const tv = tpl && th.tpl ? tpl.versions.find((v) => v.id === th.tpl!.vid) : null;
   const nextN = Math.max(0, ...th.versions.map((v) => v.n)) + 1;
   const [pa, setPa] = useState(a), [pb, setPb] = useState(b);
+  /** 收起时名称放不下就省略，悬停提示写全名 */
+  const fullName = (id: string) => { const v = th.versions.find((x) => x.id === id); return v ? `V${v.n} · ${sideLabel(v.side)} · ${v.label || v.file.name}` : ''; };
   useEffect(() => { if (open) { setPa(a); setPb(b); } }, [open, a, b]);
   // 比较过的版本对（不只相邻的），最近的在前
   const pairs = [...th.rounds].sort((p, q) => q.updated - p.updated).slice(0, 6)
@@ -105,7 +113,7 @@ export function VersionChip({ th, a, b, tpl, progress, onPick, onAdd, onRename, 
       </button>
       <Popover anchor={ref} open={open} onClose={() => setOpen(false)} width={380} align="start" className={drop.over ? 'ver-dropping' : ''}
         title={edit !== null
-          ? <input className="lib-edit" autoFocus value={edit} onChange={(e) => setEdit(e.target.value)} aria-label={t('往来稿名称')}
+          ? <input className="tin s lib-edit" autoFocus value={edit} onChange={(e) => setEdit(e.target.value)} aria-label={t('往来稿名称')}
               onKeyDown={(e) => { if (e.key === 'Enter' && edit.trim()) { onRename(edit.trim()); setEdit(null); } if (e.key === 'Escape') setEdit(null); }}
               onBlur={() => { if (edit.trim()) onRename(edit.trim()); setEdit(null); }} />
           : <span className="ver-head"><span className="ver-name" title={th.name}>{th.name}</span><button type="button" className="link-btn" onClick={() => setEdit(th.name)}>{t('重命名')}</button></span>}>
@@ -171,15 +179,14 @@ export function VersionChip({ th, a, b, tpl, progress, onPick, onAdd, onRename, 
               ))}
             </div>
           )}
+          <div className="grp">{t('换个比较')}</div>
           <div className="ver-pick">
-            <span className="cap">{t('换个比较')}</span>
-            <select value={pa} onChange={(e) => { setPa(e.target.value); const na = th.versions.find((v) => v.id === e.target.value)!.n; if ((th.versions.find((v) => v.id === pb)?.n || 0) <= na) setPb(th.versions.find((v) => v.n > na)?.id || pb); }} aria-label={t('原始版本')}>
-              {th.versions.slice(0, -1).map((v) => <option key={v.id} value={v.id}>{verName(v)} · {sideLabel(v.side)}</option>)}
-            </select>
-            <span className="arr">→</span>
-            <select value={pb} onChange={(e) => setPb(e.target.value)} aria-label={t('修改后版本')}>
-              {th.versions.filter((v) => v.n > (th.versions.find((x) => x.id === pa)?.n || 0)).map((v) => <option key={v.id} value={v.id}>{verName(v)} · {sideLabel(v.side)}</option>)}
-            </select>
+            <Select size="s" className="vp" label={t('原始版本')} value={pa} minWidth={260} title={fullName(pa)}
+              onChange={(id) => { setPa(id); const na = th.versions.find((v) => v.id === id)!.n; if ((th.versions.find((v) => v.id === pb)?.n || 0) <= na) setPb(th.versions.find((v) => v.n > na)?.id || pb); }}
+              options={th.versions.slice(0, -1).map((v) => ({ value: v.id, label: <VerOpt v={v} />, text: `V${v.n}` }))} />
+            <span className="arr" aria-hidden="true">→</span>
+            <Select size="s" className="vp" label={t('修改后版本')} value={pb} minWidth={260} title={fullName(pb)} onChange={setPb}
+              options={th.versions.filter((v) => v.n > (th.versions.find((x) => x.id === pa)?.n || 0)).map((v) => ({ value: v.id, label: <VerOpt v={v} />, text: `V${v.n}` }))} />
             <button type="button" className="btn sm" disabled={pa === a && pb === b} onClick={() => { const x = th.versions.find((v) => v.id === pa), y = th.versions.find((v) => v.id === pb); if (x && y) { setOpen(false); onPick(x, y); } }}>{t('比较')}</button>
           </div>
           <p className="cap">{t('点一版就和它的上一版比较 · 也可以把新版本拖到这里')}</p>

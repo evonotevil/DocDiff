@@ -5,12 +5,21 @@ import { changeFingerprints } from './insight';
 import { setPersistStatus } from './persist';
 
 export type Verdict = 'a' | 'r' | 'h'; // 接受 / 拒绝 / 待议
-export interface Dec { v?: Verdict; by: string; at: number; note?: string }
+export interface Dec { v?: Verdict; by: string; at: number; note?: string;
+  /** 1.9.4：做决定时这处差异所在的条款（null = 开头部分）。认回时条款也要相同，同样的改动出现在别的条款里不会认错 */
+  cl?: string | null;
+  /** 1.9.4：PDF 段落读法更新后没能认回的旧决定：保留记录，但不再参与认回（以免以后挂到别的条款上） */
+  stale?: number }
 export type DecMap = Record<number, Dec>;
 
 /** 审阅稿（1.8）：写在哪、我们上次写完时的修改时间和大小（用来判断有没有被别人改过） */
 export interface DraftMeta { path: string; dir?: string; stat?: { mtime: number; size: number }; at: number }
-interface Stored { updated: number; total: number; decided: number; recs: Record<string, Dec>; draft?: DraftMeta }
+interface Stored { updated: number; total: number; decided: number; recs: Record<string, Dec>; draft?: DraftMeta; /** 1.9.4：保存时的 PDF 段落读法版本（只有 PDF 有） */ pv?: number }
+/** PDF 段落读法版本（和 pdf.ts 的 PDF_PARA_VER 一致；这里不引 pdf.ts，免得把 pdf.js 拉进来） */
+export const PDF_PARA_VER = 2;
+export interface LoadOpts { clauses?: Map<number, string | null>; pdf?: boolean }
+/** PDF 段落读法更新后第一次打开：认回了几个、几个对不上 */
+export interface Upgrade { kept: number; lost: number }
 const LEGACY_KEY = 'reviews-v1';
 const api = (window as any).api || {};
 
@@ -55,24 +64,44 @@ export function refreshReviewIndex() { indexCache = null; }
 export const pairKey = (a?: string, b?: string) => (a && b ? `${a}|${b}` : '');
 
 /** 读回这一对文件的决定，并按指纹对到当前的变更编号上；lost = 保存过、但这次的结果里找不到的决定数 */
-export function loadDecisions(pk: string, changes: Change[]): { map: DecMap; lost: number } {
+export function loadDecisions(pk: string, changes: Change[], opt: LoadOpts = {}): { map: DecMap; lost: number; upgrade?: Upgrade } {
   if (!pk) return { map: {}, lost: 0 };
   const st = readOne(pk);
   if (!st) return { map: {}, lost: 0 };
   const fps = changeFingerprints(changes);
+  const base = (fp: string) => fp.replace(/#\d+$/, '');
+  // PDF 段落读法变了（1.9.3 存的记录没有 pv）：旧记录要更严格地核对
+  const upgrading = !!opt.pdf && (st.pv || 1) < PDF_PARA_VER && Object.values(st.recs).some((d) => d.v && !d.stale);
+  const count = (xs: string[]) => { const m = new Map<string, number>(); for (const x of xs) m.set(x, (m.get(x) || 0) + 1); return m; };
+  const curBase = count([...fps.values()].map(base));
+  const recBase = count(Object.keys(st.recs).filter((k) => !st.recs[k].stale).map(base));
   const map: DecMap = {};
   const used = new Set<string>();
   for (const c of changes) {
     const fp = fps.get(c.id)!;
     const d = st.recs[fp];
-    if (d) { map[c.id] = d; used.add(fp); }
+    if (!d || d.stale) continue;
+    if (d.cl !== undefined && opt.clauses) {
+      // 1.9.4 起的记录：条款也要相同
+      if (d.cl !== (opt.clauses.get(c.id) ?? null)) continue;
+    } else if (upgrading) {
+      // 旧记录没有条款：只有这段改前 / 改后文字在新旧结果里都只出现一次时才认回，出现多次一律算对不上（宁可重看，不挂到别的条款）
+      const b = base(fp);
+      if (curBase.get(b) !== 1 || recBase.get(b) !== 1) continue;
+    }
+    map[c.id] = d; used.add(fp);
   }
-  const lost = Object.entries(st.recs).filter(([fp, d]) => d.v && !used.has(fp)).length;
-  return { map, lost };
+  const lost = Object.entries(st.recs).filter(([fp, d]) => d.v && !d.stale && !used.has(fp)).length;
+  if (!upgrading) return { map, lost };
+  // 记下这次的读法版本；没认回的旧决定标记为 stale（记录保留，但以后不再参与认回）
+  const recs: Record<string, Dec> = {};
+  for (const [fp, d] of Object.entries(st.recs)) recs[fp] = used.has(fp) || d.stale || !d.v ? d : { ...d, stale: PDF_PARA_VER };
+  writeOne(pk, { ...st, recs, pv: PDF_PARA_VER });
+  return { map, lost: 0, upgrade: { kept: Object.values(map).filter((d) => d.v).length, lost } };
 }
 
 /** 保存：当前结果里的决定覆盖同指纹的旧记录；当前结果里没有的旧记录原样保留（改回设置后还能认回来） */
-export function saveDecisions(pk: string, changes: Change[], map: DecMap) {
+export function saveDecisions(pk: string, changes: Change[], map: DecMap, opt: LoadOpts = {}) {
   if (!pk || !changes.length) return;
   const old = readOne(pk);
   const prev = old?.recs || {};
@@ -81,11 +110,18 @@ export function saveDecisions(pk: string, changes: Change[], map: DecMap) {
   for (const c of changes) {
     const fp = fps.get(c.id)!;
     const d = map[c.id];
-    if (d && (d.v || d.note)) recs[fp] = d; else delete recs[fp];
+    // 1.9.4：同时记下所在条款
+    if (d && (d.v || d.note)) { const { stale, ...rest } = d; recs[fp] = opt.clauses ? { ...rest, cl: opt.clauses.get(c.id) ?? null } : rest; }
+    else {
+      // 用户清掉了这一处的决定才删除；条款对不上（是别的条款的旧决定）或已标记 stale 的不动
+      const o = prev[fp];
+      if (o && !o.stale && (o.cl === undefined || !opt.clauses || o.cl === (opt.clauses.get(c.id) ?? null))) delete recs[fp];
+    }
   }
   const decided = changes.filter((c) => map[c.id]?.v).length;
   const draft = draftCache.has(pk) ? draftCache.get(pk) || undefined : old?.draft;
-  writeOne(pk, Object.keys(recs).length || draft ? { updated: Date.now(), total: changes.length, decided, recs, ...(draft ? { draft } : {}) } : null);
+  const pv = opt.pdf ? PDF_PARA_VER : old?.pv;
+  writeOne(pk, Object.keys(recs).length || draft ? { updated: Date.now(), total: changes.length, decided, recs, ...(draft ? { draft } : {}), ...(pv ? { pv } : {}) } : null);
 }
 
 const draftCache = new Map<string, DraftMeta | null>();
