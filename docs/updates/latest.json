@@ -1,11 +1,11 @@
 {
-  "version": "1.9.8",
+  "version": "1.9.9",
   "pubDate": "2026-11-12",
-  "notes": "· 统一审阅栏、设置和导出弹窗的样式。\n· 改善修订审阅中的批注定位和文件类型标签。\n· 统一中英文界面用词。",
+  "notes": "· 首页和侧栏的 DocDiff 字标位置更整齐。\n· 示例合同可以体验批注、图片、移动和格式变化。\n· 设置里的文件名规则可以拖动标签。",
   "downloads": {
-    "mac-arm64": "https://github.com/evonotevil/DocDiff/releases/download/v1.9.8/DocDiff-1.9.8-mac-arm64.dmg",
-    "mac-x64": "https://github.com/evonotevil/DocDiff/releases/download/v1.9.8/DocDiff-1.9.8-mac-x64.dmg",
-    "win-exe": "https://github.com/evonotevil/DocDiff/releases/download/v1.9.8/DocDiff-Setup-1.9.8.exe",
-    "page": "https://github.com/evonotevil/DocDiff/releases/tag/v1.9.8"
+    "mac-arm64": "https://github.com/evonotevil/DocDiff/releases/download/v1.9.9/DocDiff-1.9.9-mac-arm64.dmg",
+    "mac-x64": "https://github.com/evonotevil/DocDiff/releases/download/v1.9.9/DocDiff-1.9.9-mac-x64.dmg",
+    "win-exe": "https://github.com/evonotevil/DocDiff/releases/download/v1.9.9/DocDiff-Setup-1.9.9.exe",
+    "page": "https://github.com/evonotevil/DocDiff/releases/tag/v1.9.9"
   }
 }
