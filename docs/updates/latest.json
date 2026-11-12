@@ -1,11 +1,11 @@
 {
-  "version": "1.9.7",
-  "pubDate": "2026-11-11",
-  "notes": "· 修正 Word 批注、回复、修订及备注时间的时区偏移。\n· 优先读取新版 Word 记录的 UTC 时间。\n· 审阅记录存档和重新排版的修订稿也使用修正后的时间。",
+  "version": "1.9.8",
+  "pubDate": "2026-11-12",
+  "notes": "· 统一审阅栏、设置和导出弹窗的样式。\n· 改善修订审阅中的批注定位和文件类型标签。\n· 统一中英文界面用词。",
   "downloads": {
-    "mac-arm64": "https://github.com/evonotevil/DocDiff/releases/download/v1.9.7/DocDiff-1.9.7-mac-arm64.dmg",
-    "mac-x64": "https://github.com/evonotevil/DocDiff/releases/download/v1.9.7/DocDiff-1.9.7-mac-x64.dmg",
-    "win-exe": "https://github.com/evonotevil/DocDiff/releases/download/v1.9.7/DocDiff-Setup-1.9.7.exe",
-    "page": "https://github.com/evonotevil/DocDiff/releases/tag/v1.9.7"
+    "mac-arm64": "https://github.com/evonotevil/DocDiff/releases/download/v1.9.8/DocDiff-1.9.8-mac-arm64.dmg",
+    "mac-x64": "https://github.com/evonotevil/DocDiff/releases/download/v1.9.8/DocDiff-1.9.8-mac-x64.dmg",
+    "win-exe": "https://github.com/evonotevil/DocDiff/releases/download/v1.9.8/DocDiff-Setup-1.9.8.exe",
+    "page": "https://github.com/evonotevil/DocDiff/releases/tag/v1.9.8"
   }
 }
