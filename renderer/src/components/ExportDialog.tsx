@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { t } from '../lib/i18n';
 import { Modal } from './Modal';
 import { Notice } from './Panel';
+import { Info } from './ui';
 import * as I from './icons';
 import { TextInput, Checkbox, OptionCard } from './Form';
 
@@ -63,7 +64,7 @@ export function ExportDialog({ total, undecided, risks, author, setAuthor, revie
       <p className="caption">
         {kind === 'report'
           ? t('共 {n} 处差异{r}。', { n: total, r: risks ? t('，其中 {k} 处需要留意', { k: risks }) : '' })
-          : t('导出的 Word 是根据比较内容重新排版的：页面设置、部分编号样式和图片可能与原件不同。') + (hasSections ? ' ' + t('页眉页脚放回 Word 的页眉页脚，脚注列在文末。') : '')}
+          : <>{t('导出的 Word 是重新排版的，版式可能与原件不同。')}<Info label={t('导出说明')}>{t('导出的 Word 是根据比较内容重新排版的：页面设置、部分编号样式和图片可能与原件不同。')}{hasSections ? ' ' + t('页眉页脚放回 Word 的页眉页脚，脚注列在文末。') : ''}</Info></>}
       </p>
     </Modal>
   );

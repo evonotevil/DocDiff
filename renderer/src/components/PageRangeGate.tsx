@@ -48,7 +48,7 @@ export function PageRangeGate({ mode, pagesA, pagesB, initial, onConfirm }: {
         </form>
         {valid
           ? <small>{t('约 {d}', { d: fmtDuration(estimateSeconds(mode, e - f + 1)) })}</small>
-          : <small className="danger-text">{t('请输入 1 到 {n} 之间的页码，起始页不大于结束页', { n: total })}</small>}
+          : <small className="danger-text">{t('页码要在 1 到 {n} 之间，起始页不大于结束页', { n: total })}</small>}
       </div>
     </div>
   );

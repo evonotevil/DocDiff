@@ -78,7 +78,7 @@ const RedlineRow = React.memo(function RedlineRow({ i, r, A, B, decisions, selCi
   const rp = redlinePieces(r, dec, false);
   // 1.9.5：整段按决定去掉了，但上面有批注：留一行说明，批注标照常挂着
   const ghost = () => (cmv?.pins.length
-    ? <div data-row={i} className="has-cm cm-gone"><div className="blk cm-ghost">{t('这一段按你的决定已去掉，批注还在。')}</div><div className="cm-pins"><CommentPin threads={cmv.pins[0].threads} open={!!cmOpen} /></div></div>
+    ? <div data-row={i} className="has-cm cm-gone"><div className="blk cm-ghost" data-cmk={cmv.pins[0].threads.map(x => x.key).join(' ')}>{t('这一段按你的决定已去掉，批注还在。')}</div><div className="cm-pins"><CommentPin threads={cmv.pins[0].threads} open={!!cmOpen} /></div></div>
     : null);
   if (!rp) return ghost();
   const list = rp.block === 'a' ? (r.aList || [r.ai!]) : (r.bList || [r.bi!]);

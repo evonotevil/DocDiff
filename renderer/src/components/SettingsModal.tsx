@@ -207,8 +207,8 @@ export function SettingsModal({ v, set, onClose, upd, initialTab = 'general', sa
   const [tab, setTab] = useState<Tab>(initialTab);
   const [resetDone, setResetDone] = useState(false);
   const tabs: [Tab, string, React.ReactNode][] = [
-    ['general', t('通用'), <I.IconGear key="g" />], ['review', t('审阅'), <I.IconOk key="r" />], ['files', t('审阅稿与定稿'), <I.IconExport key="f" />], ['risk', t('风险'), <I.IconWarn key="w" />],
-    ['keys', t('快捷键'), <I.IconKeyboard key="k" />], ['storage', t('存储'), <I.IconCopy key="s" />], ['about', t('关于与更新'), <I.IconDownload key="a" />],
+    ['general', t('通用'), <I.IconGear key="g" />], ['review', t('审阅'), <I.IconOk key="r" />], ['files', isEn() ? 'Redlines' : t('审阅稿与定稿'), <I.IconExport key="f" />], ['risk', t('风险'), <I.IconWarn key="w" />],
+    ['keys', t('快捷键'), <I.IconKeyboard key="k" />], ['storage', t('存储'), <I.IconCopy key="s" />], ['about', isEn() ? 'About' : t('关于与更新'), <I.IconDownload key="a" />],
   ];
   return (
     <Modal title={t('设置')} onClose={onClose} className="settings-modal">
@@ -221,11 +221,13 @@ export function SettingsModal({ v, set, onClose, upd, initialTab = 'general', sa
         <div className="set-pane" role="tabpanel">
           {tab === 'general' && (
             <>
+              <SH id="gn-s1">{t('界面')}</SH>
               <Opt label={t('语言 / Language')}><Seg value={v.lang} options={[['zh', '中文'], ['en', 'English']]} onChange={(x) => set('lang', x as Lang)} /></Opt>
               <Opt label={t('外观')}><Seg value={v.theme} options={[['light', t('浅色')], ['dark', t('深色')]]} onChange={(x) => set('theme', x as 'light' | 'dark')} /></Opt>
               <Opt label={t('深色模式下的文档纸张')} hint={t('保持浅色时，和打印出来的合同一致，Word 与 PDF 两侧也一致')}>
                 <Seg value={v.paperFollowTheme ? 'dark' : 'light'} options={[['light', t('保持浅色')], ['dark', t('跟随主题')]]} onChange={(x) => set('paperFollowTheme', x === 'dark')} />
               </Opt>
+              <SH id="gn-s2">{t('提示与陪伴')}</SH>
               <Opt label={t('音效')} hint={t('审阅修订时的轻提示音')}><Switch on={v.sound} onChange={(x) => set('sound', x)} label={t('音效')} /></Opt>
               <Opt label={t('审阅完成时放彩纸')}><Switch on={v.celebrate} onChange={(x) => set('celebrate', x)} label={t('审阅完成时放彩纸')} /></Opt>
               {/* 1.9：说明只写一行，细节放进 ⓘ */}
@@ -279,7 +281,7 @@ export function SettingsModal({ v, set, onClose, upd, initialTab = 'general', sa
           </div>}
           {tab === 'risk' && (
             <>
-              <p className="set-intro">{t('比较完成后，命中下面规则的变化会放在右栏最上方的「需要留意」里。判断完全靠规则，离线完成。')}</p>
+              <SH id="rk-s1" info={t('比较完成后，命中下面规则的变化会放在右栏最上方的「需要留意」里。判断完全靠规则，离线完成。')}>{t('置顶到「需要留意」的变化')}</SH>
               <Opt label={t('金额与付款')} hint={t('价款、比例、付款节点的变化，并算出变化幅度')}><Switch on={v.riskMoney} onChange={(x) => set('riskMoney', x)} label={t('金额与付款')} /></Opt>
               <Opt label={t('日期与期限')} hint={t('签订日期、服务期限、付款天数等')}><Switch on={v.riskDate} onChange={(x) => set('riskDate', x)} label={t('日期与期限')} /></Opt>
               <div className="field">

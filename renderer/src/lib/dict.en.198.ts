@@ -1,0 +1,23 @@
+// 1.9.8 · 设计系统对齐：新增和改写的文案
+export const EN_198: Record<string, string> = {
+  '更改': 'Change',
+  '界面': 'Interface',
+  '提示与陪伴': 'Sounds and Diffy',
+  '置顶到「需要留意」的变化': 'Changes pinned to Needs attention',
+  '导出的 Word 是重新排版的，版式可能与原件不同。': 'The exported Word file is re-laid out, so it may look different from the original.',
+  '导出说明': 'About the export',
+  '相同段落分别是 {a} 和 {b}，差得太少，不替你选。确认一下它是哪一份的新版本。': 'Matching paragraphs are {a} and {b}, too close to call. Confirm which file it updates.',
+  '这个文件没有路径，用“选择文件”打开它': 'This file has no path. Open it with Choose file.',
+  '对得上的 {n} 个已经带回。对不上的不会挪到别的条款，这几处需要重新看一下。': '{n} that matched were brought back. The rest stay unplaced, so check these again.',
+  '对不上的不会挪到别的条款，这几处需要重新看一下。': 'Ones that don’t match stay unplaced, so check these again.',
+  '这些内容没有参与比较，“没有差异”不代表这些地方相同。可以在其他阅读器里打开原文件核对这几页。': 'These parts weren’t compared, so “no changes” doesn’t mean they match. Open the original in another reader to check these pages.',
+  '刚才的操作下次打开可能就没有了。检查一下磁盘空间和应用数据目录的写入权限。': 'What you just did may be gone next time. Check disk space and write access to the app data folder.',
+  '有两个版本都很像，选一个来比': 'Two versions look alike. Pick one to compare.',
+  '才不会把你自己的修改算成对方的。': 'so your own edits aren’t counted as theirs.',
+  '为了不覆盖那些修改，已暂停写入。你的决定都还在。': 'Writing is paused so those edits aren’t overwritten. Your decisions are kept.',
+  '定稿里仍是对方的写法，在 Word 里核对一下。': 'The clean copy still has their wording. Check it in Word.',
+  '接受的修订直接采用，拒绝的改回原文，没有修订标记和批注。': 'Accepted changes are applied, rejected ones revert, with no markup or comments.',
+  '保留对方的写法': 'Keep their changes',
+  '页码要在 1 到 {n} 之间，起始页不大于结束页': 'Pages must be 1 to {n}, with the start no later than the end',
+  '暂不支持旧版 .doc 格式。在 Word 里「另存为」.docx 后再试。': 'Old .doc files aren’t supported. Save as .docx in Word, then try again.',
+};

@@ -24,7 +24,7 @@ async function loadDocInner(file: FileInfo, password?: string): Promise<DocModel
   if (file.ext === 'docx') d = await parseDocx(file);
   else if (file.ext === 'pdf') d = await parsePdf(file, password);
   else if (['txt', 'md', 'text', 'log', 'csv'].includes(file.ext)) d = parseTxt(file);
-  else if (file.ext === 'doc') throw new Error(t('暂不支持旧版 .doc 格式。请在 Word 里「另存为」.docx 后再试。'));
+  else if (file.ext === 'doc') throw new Error(t('暂不支持旧版 .doc 格式。在 Word 里「另存为」.docx 后再试。'));
   else throw new Error(t('还不支持 .{e} 文件。目前支持 Word（.docx）、PDF 和文本（.txt）。', { e: file.ext }));
   d.sha256 = await sha256(file.data);
   return d;

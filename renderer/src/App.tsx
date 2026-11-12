@@ -204,7 +204,7 @@ function FilePill({ side, doc, onOpen, onFiles, changed, onSave }: { side: Side;
         <span className="name">{(() => { const [h, tl] = splitName(doc.file.name); return <><span className="fn-h">{h}</span><span className="fn-t">{tl}</span></>; })()}</span>
         {changed && <span className="chg-dot" title={t('已更新')} />}
       </button>
-      <Popover anchor={ref} open={menu} onClose={() => setMenu(false)} width={240} align="start" className="pop-menu filechip-menu" label={doc.file.name}>
+      <Popover anchor={ref} open={menu} onClose={() => setMenu(false)} width={260} align="start" className="pop-menu filechip-menu" label={doc.file.name}>
         <MenuItem icon={<I.IconUpload />} onClick={() => { setMenu(false); onOpen(); }}>{t('换一个文件…')}</MenuItem>
         {onSave && <MenuItem icon={<I.IconPlusDoc />} onClick={() => { setMenu(false); onSave(); }}>{t('存为往来稿')}</MenuItem>}
       </Popover>
@@ -1614,7 +1614,7 @@ export default function App() {
           <Notice tone="warn" className="lib-match" title={t('这份文件和两份往来稿都很像')}
             action={<>{[homeMatch, homeMatch.alt].map((m: any) => <button key={m.th.id} type="button" className="btn sm" onClick={() => addThreadVersion(m.th, B.file, 'theirs', m.th.versions[m.th.versions.length - 1].id, B)}>{t('加到「{n}」', { n: m.th.name.length > 14 ? m.th.name.slice(0, 13) + '…' : m.th.name })}</button>)}</>}
             onClose={() => setMatchOff(B?.sha256 || '')} closeLabel={t('不用')}>
-            {t('相同段落分别是 {a} 和 {b}，差得太少，不替你选。请确认是哪一份的新版本。', { a: `${Math.round(homeMatch.score * 100)}%`, b: `${Math.round(homeMatch.alt.score * 100)}%` })}
+            {t('相同段落分别是 {a} 和 {b}，差得太少，不替你选。确认一下它是哪一份的新版本。', { a: `${Math.round(homeMatch.score * 100)}%`, b: `${Math.round(homeMatch.alt.score * 100)}%` })}
           </Notice>
         )}
         {homeMatch?.th && !homeMatch.alt && B && (
@@ -1902,7 +1902,7 @@ export default function App() {
             <span className="k">{t('比较范围')}</span>
             <span className="v" title={scopeLine(scope)}>{scopeLine(scope)}</span>
             {scope.degraded && <span className="tag hold sm">{t('简化对齐')}</span>}
-            <button ref={scopeRef} type="button" className="link-btn" onClick={() => setPop(pop === 'scope' ? null : 'scope')} aria-expanded={pop === 'scope'}>{t('详情')}</button>
+            <button ref={scopeRef} type="button" className="link-btn" onClick={() => setPop(pop === 'scope' ? null : 'scope')} aria-expanded={pop === 'scope'}>{t('更改')}</button>
           </div>
         )}
       </>
@@ -1958,7 +1958,7 @@ export default function App() {
           <VersionChip th={activeTh} a={thread.a} b={thread.b} tpl={activeTh.tpl ? lib.templates.find((x) => x.id === activeTh.tpl!.tid) : null}
             progress={(v) => { const i = activeTh.versions.indexOf(v); const r = i > 0 ? roundOf(activeTh, activeTh.versions[i - 1].id, v.id) : null; return r ? (r.decided >= r.total ? t('已审完') : t('已审 {d} / {n}', { d: r.decided, n: r.total })) : t('未审'); }}
             onPick={(a, b) => openThread(activeTh, a, b)} onAdd={() => setAddVer({ id: activeTh.id, f: null })}
-            onDropFiles={(fs) => { if (fs[0]?.path) setAddVer({ id: activeTh.id, f: fs[0] }); else if (fs[0]) flash(t('这个文件没有路径，请用“选择”打开')); }}
+            onDropFiles={(fs) => { if (fs[0]?.path) setAddVer({ id: activeTh.id, f: fs[0] }); else if (fs[0]) flash(t('这个文件没有路径，用“选择文件”打开它')); }}
             onRename={(name) => updThread(activeTh.id, (x) => ({ ...x, name, updated: Date.now() }))}
             onLabel={(v, label) => labelThreadVersion(activeTh, v, label)} onDeleteVersion={(v) => deleteThreadVersion(activeTh, v)} />
         ) : (<>
@@ -2006,7 +2006,7 @@ export default function App() {
         {pdfUpgrade && pdfUpgrade.pk === pk && (pdfUpgrade.lost > 0
           ? <Notice tone="warn" className="bar" title={t('这份 PDF 的段落读法更新了，上次的 {n} 个决定对不上。', { n: pdfUpgrade.lost })}
               action={<button className="btn sm" onClick={() => setPdfUpgrade(null)}>{t('知道了')}</button>}>
-              {pdfUpgrade.kept > 0 ? t('对得上的 {n} 个已经带回。对不上的不会挪到别的条款，这几处请重新看一下。', { n: pdfUpgrade.kept }) : t('对不上的不会挪到别的条款，这几处请重新看一下。')}
+              {pdfUpgrade.kept > 0 ? t('对得上的 {n} 个已经带回。对不上的不会挪到别的条款，这几处需要重新看一下。', { n: pdfUpgrade.kept }) : t('对不上的不会挪到别的条款，这几处需要重新看一下。')}
             </Notice>
           : <Notice tone="info" className="bar" title={t('这份 PDF 的段落读法更新了，上次的 {n} 个决定都已带回。', { n: pdfUpgrade.kept })} />)}
         {tab === 2 && draftSync && draftState.s !== 'none' && internalLeft.length > 0 && !cmSt.keep && !doneOpen && internalNotice('bar cm-int')}
@@ -2030,7 +2030,7 @@ export default function App() {
             </>}
             onClose={() => setHideReadWarn(docSig)} closeLabel={t('知道了')}>
             {readIssueDocs.map(([i, d]) => t('{s}第 {p} 页有 {n} 段文字{why}，', { s: sideLabel(i as Side), p: pageList(d.readIssues!.pages), n: d.readIssues!.runs, why: d.readIssues!.kinds.includes('font') ? t('的字体无法解析') : t('没有字符映射') })).join('')}
-            {t('这些内容没有参与比较，“没有差异”不代表这些地方相同。请在其他阅读器里打开原文件核对这几页。')}
+            {t('这些内容没有参与比较，“没有差异”不代表这些地方相同。可以在其他阅读器里打开原文件核对这几页。')}
           </Notice>
         )}
         {persist.review && (
@@ -2041,7 +2041,7 @@ export default function App() {
         )}
         {(persist.settings || persist.recent) && hideSetWarn !== (persist.settings || persist.recent) && (
           <Notice tone="warn" className="bar persist-warn" title={t(persist.settings ? '设置没能保存到本机。' : '“最近比较”没能保存到本机。')} onClose={() => setHideSetWarn(persist.settings || persist.recent || '')}>
-            {t('这次的改动下次打开可能就没有了。请检查磁盘空间和应用数据目录的写入权限。')}<small className="persist-err">{persist.settings || persist.recent}</small>
+            {t('刚才的操作下次打开可能就没有了。检查一下磁盘空间和应用数据目录的写入权限。')}<small className="persist-err">{persist.settings || persist.recent}</small>
           </Notice>
         )}
         {crossFormat && (
@@ -2174,7 +2174,7 @@ export default function App() {
         </Modal>
       )}
       {addVer && (() => { const th = lib.threads.find((x) => x.id === addVer.id); return th ? (
-        <AddVersionDialog th={th} file={addVer.f} busy={libBusy} onClose={() => setAddVer(null)} onDropFiles={(fs) => { if (fs[0]?.path) setAddVer({ id: th.id, f: fs[0] }); else if (fs[0]) flash(t('这个文件没有路径，请用“选择”打开')); }}
+        <AddVersionDialog th={th} file={addVer.f} busy={libBusy} onClose={() => setAddVer(null)} onDropFiles={(fs) => { if (fs[0]?.path) setAddVer({ id: th.id, f: fs[0] }); else if (fs[0]) flash(t('这个文件没有路径，用“选择文件”打开它')); }}
           onPick={async () => { const f: FileInfo | null = await api.openDialog(); if (f) setAddVer({ id: th.id, f }); }}
           onDone={(side, against) => { const f = addVer.f!; setAddVer(null); addThreadVersion(th, f, side, against); }} />) : null; })()}
       {cmOpen && <CommentPop key={cmOpen.n} anchor={cmAnchor} threads={cmOpen.keys.map((k) => threads.find((x) => x.key === k)).filter(Boolean) as CmThread[]} acts={cmActs} onClose={() => setCmOpen(null)} autoReply={cmOpen.reply} />}

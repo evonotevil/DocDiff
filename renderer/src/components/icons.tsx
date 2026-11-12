@@ -25,9 +25,6 @@ export const IconFile = () => <S size={22} d={<><path d="M4 1.8h5.2L12.5 5v8.2c0
 export const IconFormat = () => <S d={<path d="M4 13l4-10 4 10M5.6 9h4.8" />} />;
 export const IconMove = () => <S d={<path d="M8 2v12M5 5l3-3 3 3M5 11l3 3 3-3" />} />;
 export const IconEdit = () => <S d={<path d="M10.5 2.5l3 3L6 13H3v-3z" />} />;
-export const Logo = () => (
-  <svg width="22" height="22" viewBox="0 0 22 22"><rect x="1" y="1" width="20" height="20" rx="5" fill="#12a594" /><path d="M6.5 7h5M6.5 10.5h9M6.5 14h6.5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" /><circle cx="15.5" cy="7" r="1.6" fill="#ffd2c7" /></svg>
-);
 
 // ---------- 彩色模式图标（Duolingo 风格） ----------
 const C = ({ children }: { children: React.ReactNode }) => <svg width="30" height="30" viewBox="0 0 32 32" aria-hidden>{children}</svg>;

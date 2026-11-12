@@ -176,7 +176,7 @@ function TplScene({ step, s }: { step: number; s: string }) {
           <div className="demo-empty"><I.IlloNew size={48} /><span>{t('比较过的文件会出现在这里')}</span></div></div>
         <div className="mod-card demo-mod" data-t="tpl-card"><div className="mod-h"><span className="mod-illo"><I.IlloTpl /></span><h2>{t('模板')}</h2><span className="grow" /><button type="button" className="btn sm" data-t="new-tpl"><I.IconPlusDoc />{t('新建模板')}</button></div>
           {hasTpl
-            ? <div className="lib-row demo-lr" data-t="tpl-row"><I.FileGlyph type="docx" size={20} /><span className="nm">{t('标准服务协议')}</span><span className="meta">{t('1 个版本 · 最新 2026-10 版')}</span></div>
+            ? <div className="lib-row demo-lr" data-t="tpl-row"><TypeTag type="docx" /><span className="nm">{t('标准服务协议')}</span><span className="meta">{t('1 个版本 · 最新 2026-10 版')}</span></div>
             : <div className="demo-empty"><I.IlloTpl size={48} /><span>{t('把标准合同存成模板')}</span></div>}
         </div>
       </div>

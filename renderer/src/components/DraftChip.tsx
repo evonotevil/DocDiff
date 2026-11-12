@@ -112,7 +112,7 @@ export function DraftChip({ state, sync, bPath, narrow, decided, pending, held =
           {state.s === 'saved' && state.prior > 0 && <p className="cap">{t('对方文件里原有的 {n} 处修订已按“接受”处理。', { n: state.prior })}</p>}
           {state.s === 'saved' && state.wordOpen && !un.length && <Notice tone="info" title={t('Word 正在打开这份审阅稿')}>{t('所有决定都已写进去。之后再做决定，要先在 Word 里关掉它，DocDiff 才能接着写。')}</Notice>}
           {state.s === 'locked' && <Notice tone="warn" title={t('Word 正在打开这份审阅稿')}>{t('决定先记在 DocDiff 里，关掉 Word 后自动补写，不会丢。')}</Notice>}
-          {state.s === 'modified' && <Notice tone="err" title={t('审阅稿在 DocDiff 之外被改过')}>{t('为了不覆盖那些改动，已暂停写入。你的决定都还在。')}</Notice>}
+          {state.s === 'modified' && <Notice tone="err" title={t('审阅稿在 DocDiff 之外被改过')}>{t('为了不覆盖那些修改，已暂停写入。你的决定都还在。')}</Notice>}
           {state.s === 'gone' && <Notice tone="err" title={t('审阅稿被移走或删除了')}>{t('你的决定都还在，可以重新生成一份。')}</Notice>}
           {state.s === 'nowrite' && (sync.ctx.noDir
             ? <Notice tone="warn" title={t('对方的原文件找不到了')}>{t('它可能被挪走或改了名。选一个文件夹放审阅稿，之后都写到那里。')}</Notice>
@@ -159,7 +159,7 @@ function FinalDialog({ sync, bPath, pending, held, pattern, onClose, flash, onJu
     onClose();
     // 回到完成页时那里已经写了“定稿已生成”，不再重复弹提示（有没落实的处时照常提醒）
     const shown = onFinal?.(p);
-    if (!shown || r.missed.length) flash(r.missed.length ? t('已生成定稿：{f}。有 {n} 处没能改回原文，定稿里仍是对方的写法，请在 Word 里核对。', { f: baseOf(p), n: r.missed.length }) : t('已生成定稿：{f}', { f: baseOf(p) }));
+    if (!shown || r.missed.length) flash(r.missed.length ? t('已生成定稿：{f}。有 {n} 处没能改回原文，定稿里仍是对方的写法，在 Word 里核对一下。', { f: baseOf(p), n: r.missed.length }) : t('已生成定稿：{f}', { f: baseOf(p) }));
     if (!onFinal) api.reveal?.(p);
   };
   const go = async () => {
@@ -177,8 +177,8 @@ function FinalDialog({ sync, bPath, pending, held, pattern, onClose, flash, onJu
   return (
     <Modal title={t('生成定稿')} mood={held > 0 || pending > held ? 'think' : 'cheer'} onClose={onClose} className="final-dlg spec"
       footer={<><button type="button" className="btn big" onClick={onClose}>{t('取消')}</button><button type="button" className={`btn big ${missed?.length ? 'red' : 'primary'}`} disabled={busy} onClick={go}>{busy ? t('正在生成…') : missed?.length ? t('仍然生成定稿') : t('生成定稿')}</button></>}>
-      <p>{hasDraft ? t('定稿是双方谈完后的干净版：接受的改动直接采用，拒绝的改回原文，没有修订标记和批注。审阅稿不受影响。')
-        : t('定稿是双方谈完后的干净版：接受的改动直接采用，拒绝的改回原文，没有修订标记和批注。')}</p>
+      <p>{hasDraft ? t('定稿是双方谈完后的干净版：接受的修订直接采用，拒绝的改回原文，没有修订标记和批注。审阅稿不受影响。')
+        : t('定稿是双方谈完后的干净版：接受的修订直接采用，拒绝的改回原文，没有修订标记和批注。')}</p>
       {cmGone && cmGone.theirs + cmGone.ours > 0 && (
         <Notice tone="info" title={t('定稿会去掉全部 {n} 条批注（对方 {a}、我方 {b}）。', { n: cmGone.theirs + cmGone.ours, a: cmGone.theirs, b: cmGone.ours })}>
           {t('包括你的回复。需要留底的话，先导出审阅记录存档。')}
@@ -194,7 +194,7 @@ function FinalDialog({ sync, bPath, pending, held, pattern, onClose, flash, onJu
         <div className="dlg-field">
           <div className="lbl">{held && pending - held ? t('这 {n} 处（待议 {h} 处、还没决定 {u} 处）在定稿里：', { n: pending, h: held, u: pending - held })
             : held ? t('这 {n} 处待议在定稿里：', { n: pending }) : t('还有 {n} 处没有决定，在定稿里：', { n: pending })}</div>
-          <Seg full value={pend} onChange={setPend} label={t('没有决定的处')} options={[['b', t('保留对方的改动')], ['a', t('恢复原始文档')]]} />
+          <Seg full value={pend} onChange={setPend} label={t('没有决定的处')} options={[['b', t('保留对方的写法')], ['a', t('恢复原始文档')]]} />
           <div className="dlg-hint">{pend === 'a'
             ? t('这些处恢复成原始文档{o}的写法，不采纳对方的修改。', { o: origLabel ? t('（{x}）', { x: origLabel }) : '' })
             : t('这些处采用对方的写法。想逐处决定，可以先回去审阅，定稿随时可以再生成。')}</div>

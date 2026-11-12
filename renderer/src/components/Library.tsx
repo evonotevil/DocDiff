@@ -65,7 +65,7 @@ function TemplateRow({ tpl, n, onUse, onAddVersion, onRename, onDelete, onDelete
     // 1.8.1：行本身不是按钮（里面还有“…”），“打开”由铺满整行的透明按钮承担，避免嵌套交互
     <div className="lib-row">
       {edit === null && <button type="button" className="row-open" title={tpl.name} aria-label={t('用模板「{n}」比较', { n: tpl.name })} onClick={() => onUse(tpl)} />}
-      <I.FileGlyph type={latest?.file.ext || 'docx'} size={22} />
+      <TypeTag type={latest?.file.ext || 'docx'} />
       {edit !== null
         ? <input className="tin s lib-edit" autoFocus value={edit} onClick={(e) => e.stopPropagation()} onChange={(e) => setEdit(e.target.value)}
             onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter' && edit.trim()) { onRename(tpl, edit.trim()); setEdit(null); } if (e.key === 'Escape') setEdit(null); }}
@@ -111,19 +111,19 @@ export function TemplateCompareDialog({ tpl, B, bBusy, onPickB, onDropB, onStart
       footer={<><button type="button" className="btn big" onClick={onClose}>{t('取消')}</button>
         <button type="button" className="btn big primary" disabled={!B || !chosen} onClick={() => onStart(tpl.versions.find((v) => v.id === chosen)!)}>{t('开始比较')}</button></>}>
       <div className="pair">
-        <div className="pair-row"><span className="role">{t('原始文档')}</span><I.FileGlyph type={tpl.versions[0]?.file.ext || 'docx'} size={22} /><span className="nm">{tpl.name}</span>
+        <div className="pair-row"><span className="role">{t('原始文档')}</span><TypeTag type={tpl.versions[0]?.file.ext || 'docx'} /><span className="nm">{tpl.name}</span>
           <span className="tag">{chosen ? tpl.versions.find((v) => v.id === chosen)?.label : t('待选版本')}</span></div>
         <button type="button" className={`pair-row pick ${drop.over ? 'over' : ''}`} onClick={onPickB} disabled={bBusy} {...drop.props}>
           <span className="role">{t('修改后文档')}</span>
-          {B ? <><I.FileGlyph type={B.type} size={22} /><span className="nm">{B.file.name}</span><span className="tag">{t('对方')}</span></>
+          {B ? <><TypeTag type={B.type} /><span className="nm">{B.file.name}</span><span className="tag">{t('对方')}</span></>
             : <span className="nm hint">{bBusy ? t('正在读取…') : t('拖入对方发来的文件，或点击选择')}</span>}
         </button>
       </div>
       {B && res && tpl.versions.length > 1 && (
         best
           ? (res.tie
-            ? <Notice tone="warn" title={t('有两个版本都很像，请选一个')}>{t('相同段落 {a} 和 {b}，差得太少，不替你选。', { a: pct(best.score), b: pct(others[0].score) })}</Notice>
-            : <Notice tone="info" title={t('自动选了 {v}', { v: best.item.label })}>{t('对方文件和它相同的段落最多（{a}）{rest}。模板发出后你可能又改过，用对方实际拿到的那一版来比，才不会把你自己的改动算成对方的。', { a: pct(best.score), rest: others.length ? t('，{v} 只有 {b}', { v: others[0].item.label, b: pct(others[0].score) }) : '' })}</Notice>)
+            ? <Notice tone="warn" title={t('有两个版本都很像，选一个来比')}>{t('相同段落 {a} 和 {b}，差得太少，不替你选。', { a: pct(best.score), b: pct(others[0].score) })}</Notice>
+            : <Notice tone="info" title={t('自动选了 {v}', { v: best.item.label })}>{t('对方文件和它相同的段落最多（{a}）{rest}。模板发出后你可能又改过，用对方实际拿到的那一版来比，才不会把你自己的修改算成对方的。', { a: pct(best.score), rest: others.length ? t('，{v} 只有 {b}', { v: others[0].item.label, b: pct(others[0].score) }) : '' })}</Notice>)
           : <Notice tone="warn" title={t('看不出对方是在哪一版上改的')}>{t('和每个版本相同的段落都不到一半。可能不是这份模板，也可以手动选一个版本。')}</Notice>
       )}
       {tpl.versions.length > 1 && (

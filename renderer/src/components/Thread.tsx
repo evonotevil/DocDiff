@@ -43,7 +43,7 @@ function ThreadRow({ th, onOpen, onRename, onArchive, onDelete }: { th: Thread; 
     // 1.8.1：行本身不是按钮，“打开”由铺满整行的透明按钮承担
     <div className="lib-row">
       {edit === null && <button type="button" className="row-open" title={th.name} aria-label={t('打开往来稿「{n}」', { n: th.name })} onClick={() => onOpen(th)} />}
-      <I.FileGlyph type={last?.file.ext || 'docx'} size={22} />
+      <TypeTag type={last?.file.ext || 'docx'} />
       {edit !== null
         ? <input className="tin s lib-edit" autoFocus value={edit} onClick={(e) => e.stopPropagation()} onChange={(e) => setEdit(e.target.value)} aria-label={t('往来稿名称')}
             onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter' && edit.trim()) { onRename(th, edit.trim()); setEdit(null); } if (e.key === 'Escape') setEdit(null); }}
@@ -161,7 +161,7 @@ export function VersionChip({ th, a, b, tpl, progress, onPick, onAdd, onRename, 
               if (!v) return null;
               const few = th.versions.length <= 2;
               return (
-                <Popover anchor={menuAnchor as React.RefObject<HTMLElement>} open onClose={() => setMenuFor(null)} width={220} className="pop-menu" label={t('V{n} 的更多操作', { n: v.n })}>
+                <Popover anchor={menuAnchor as React.RefObject<HTMLElement>} open onClose={() => setMenuFor(null)} width={260} className="pop-menu" label={t('V{n} 的更多操作', { n: v.n })}>
                   <MenuItem icon={<I.IconEdit />} onClick={() => { setMenuFor(null); setLabelEdit({ id: v.id, v: v.label || '' }); }}>{t('起名…')}</MenuItem>
                   <MenuItem icon={<I.IconX />} tone="danger" disabled={few} title={few ? t('至少要留两版才能比较。整份不要了，可以在首页删除往来稿。') : undefined}
                     onClick={() => { if (few) return; setMenuFor(null); onDeleteVersion(v); }}>{t('删除这一版')}</MenuItem>

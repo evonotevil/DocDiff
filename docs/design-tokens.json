@@ -475,6 +475,62 @@
         "name": "glint-strong",
         "value": "#ffffff80",
         "usage": "文件名标签上 × 的悬停底（1.9.4）。"
+      },
+      {
+        "name": "swan-strong",
+        "value": {
+          "light": "#cecece",
+          "dark": "#52656d"
+        },
+        "usage": "加深一级的边框：拖放区虚线框（1.9.8，原来写在兼容层）。"
+      },
+      {
+        "name": "doc-muted",
+        "value": {
+          "light": "#6f6f6f",
+          "dark": "#8fa3ad"
+        },
+        "usage": "纸上的次要文字：编号、区块开关、占位说明行（1.9.8）。"
+      },
+      {
+        "name": "doc-rule",
+        "value": {
+          "light": "#c9cfcc",
+          "dark": "#3a4b54"
+        },
+        "usage": "纸上的细线：表格线、区块分隔虚线、占位说明行的虚线框（1.9.8）。"
+      },
+      {
+        "name": "doc-ph",
+        "value": {
+          "light": "#fafafa",
+          "dark": "#152027"
+        },
+        "usage": "纸上占位格的底色（1.9.8）。"
+      },
+      {
+        "name": "doc-hatch",
+        "value": {
+          "light": "#0000000a",
+          "dark": "#ffffff0c"
+        },
+        "usage": "纸上占位格的斜纹（1.9.8）。"
+      },
+      {
+        "name": "img-chip-bg",
+        "value": {
+          "light": "#eef1f0",
+          "dark": "#26353c"
+        },
+        "usage": "纸上「图片」小标的底色（1.9.8）。"
+      },
+      {
+        "name": "img-chip-fg",
+        "value": {
+          "light": "#5f6563",
+          "dark": "#9fb2bb"
+        },
+        "usage": "纸上「图片」小标的文字（1.9.8）。"
       }
     ]
   },

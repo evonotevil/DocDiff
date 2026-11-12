@@ -187,9 +187,9 @@ export function reportHtml(x: Ctx, blocksA: Block[], blocksB: Block[]): string {
   table { width: 100%; border-collapse: collapse; font-size: 9.5pt; }
   table.fixed { table-layout: fixed; } table.fixed td { word-break: break-word; }
   th, td { text-align: left; vertical-align: top; padding: 5px 7px; border-bottom: 1px solid #dfe5dc; }
-  thead th { background: #f1f5ee; font-size: 8.5pt; color: #4c5a51; }
-  table.kv th { width: 22%; color: #4c5a51; font-weight: 600; }
-  .mono { font: 8.5pt ui-monospace, Menlo, Consolas, monospace; color: #4c5a51; word-break: break-all; }
+  thead th { background: #f1f5ee; font-size: 8.5pt; color: #6f6f6f; }
+  table.kv th { width: 22%; color: #6f6f6f; font-weight: 700; }
+  .mono { font: 8.5pt ui-monospace, Menlo, Consolas, monospace; color: #6f6f6f; word-break: break-all; }
   .muted { color: #6b776f; font-size: 8.5pt; }
   .num { width: 26px; color: #6b776f; }
   .tag, .kind { font-size: 8.5pt; font-weight: 700; padding: 0 5px; border-radius: 4px; background: #fff4cc; color: #8a6200; white-space: nowrap; }
