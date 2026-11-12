@@ -4,9 +4,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const out = path.join(root, '.cache', 'en-dict.mjs');
-await esbuild.build({ stdin: { contents: "export { EN_DICT } from './renderer/src/lib/dict.en'; export { EN_19 } from './renderer/src/lib/dict.en.19'; export { EN_191 } from './renderer/src/lib/dict.en.191'; export { EN_195 } from './renderer/src/lib/dict.en.195'; export { EN_198 } from './renderer/src/lib/dict.en.198';", resolveDir: root, loader: 'ts' }, bundle: true, format: 'esm', platform: 'node', outfile: out, logLevel: 'warning' });
-const { EN_DICT, EN_19, EN_191, EN_195, EN_198 } = await import('file://' + out);
-const EN = { ...EN_DICT, ...EN_19, ...EN_191, ...EN_195, ...EN_198 };
+await esbuild.build({ stdin: { contents: "export { EN_DICT } from './renderer/src/lib/dict.en'; export { EN_19 } from './renderer/src/lib/dict.en.19'; export { EN_191 } from './renderer/src/lib/dict.en.191'; export { EN_195 } from './renderer/src/lib/dict.en.195'; export { EN_198 } from './renderer/src/lib/dict.en.198'; export { EN_199 } from './renderer/src/lib/dict.en.199';", resolveDir: root, loader: 'ts' }, bundle: true, format: 'esm', platform: 'node', outfile: out, logLevel: 'warning' });
+const { EN_DICT, EN_19, EN_191, EN_195, EN_198, EN_199 } = await import('file://' + out);
+const EN = { ...EN_DICT, ...EN_19, ...EN_191, ...EN_195, ...EN_198, ...EN_199 };
 const rules = [
   ['old term', /\breview (copy|draft)\b|\bfinal (version|copy)\b|\breviewed final\b|\bon hold\b|\bas hold\b|\brich text\b|\bfile details\b|\brevision author\b|\bdifferences?\b/i],
   ['old term (case)', /\bHold\b|\bTheirs\b/],

@@ -115,6 +115,8 @@ function textFile(text: string, side: Side): FileInfo {
   const now = Date.now();
   return { path: '', name: t(side ? '粘贴的文字（修改后）.txt' : '粘贴的文字（原始）.txt'), ext: 'txt', size: data.length, mtime: now, birthtime: now, data };
 }
+/** 示例合同里我方批注的作者（scripts/make-samples.mjs 的 OURS） */
+const SAMPLE_OURS = '星河科技法务部';
 async function sampleFile(name: string): Promise<FileInfo> {
   const r = await fetch(`samples/${encodeURIComponent(name)}`);
   const data = new Uint8Array(await r.arrayBuffer());
@@ -781,7 +783,9 @@ export default function App() {
   const cmSt = useMemo<CmState>(() => loadCm(pk), [pk, cmVer]);
   useEffect(() => { setCmOpen(null); }, [pk]);
   const updCm = (f: (st: CmState) => CmState) => { saveCm(pk, f(loadCm(pk))); setCmVer((v) => v + 1); };
-  const ourMembers = prefs.ourMembers;
+  // 1.9.9：示例合同里“星河科技法务部”是我方（示例文件没有路径，名字固定）
+  const isSample = !!RA && !!RB && !RA.file.path && !RB.file.path && RA.file.name === '示例合同_v1.docx' && RB.file.name === '示例合同_v2.docx';
+  const ourMembers = useMemo(() => (isSample ? [...prefs.ourMembers, SAMPLE_OURS] : prefs.ourMembers), [isSample, prefs.ourMembers]);
   const threads = useMemo<CmThread[]>(() => (richRes && RA && RB && (RA.comments?.length || RB.comments?.length)
     ? buildThreads(RA, RB, richRes, { ours: ourMembers, reviewer, overrides: cmSt.own, localReplies: cmSt.replies, rowClause }) : []),
   [richRes, RA, RB, ourMembers, reviewer, cmSt.own, cmSt.replies, rowClause]);
@@ -1933,7 +1937,8 @@ export default function App() {
             <button type="button" className="ibtn" onClick={toggleNav} title={toggleTitle(true, '侧栏', navKey)} aria-label={t('收起侧栏')} aria-expanded={true}><I.IconPanelLeft /></button>
           </div>
         )}
-        <div className="sh"><span className="t">{t('比较模式')}</span></div>
+        {/* 1.9.9：Mac 第一行留给红绿灯，字标放第二行；两个平台都不再写「比较模式」小标题 */}
+        {navOpen && isMac && <div className="nav-brand drag"><Wordmark size={26} /></div>}
         <div className="nav-list">
           {MODES.map((m, i) => {
             const n = navCount(i);
