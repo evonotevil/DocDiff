@@ -22,8 +22,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
+      - name: Stage public website files
+        run: |
+          mkdir -p public-site/updates
+          cp docs/index.html public-site/
+          cp -R docs/landing public-site/
+          cp docs/updates/latest.json public-site/updates/
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: docs
+          path: public-site
       - id: deployment
         uses: actions/deploy-pages@v4
